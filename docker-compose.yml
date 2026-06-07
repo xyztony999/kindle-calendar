@@ -1,0 +1,17 @@
+services:
+  kindle-calendar:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    command: ["/app/start.sh"]
+    environment:
+      LOCATION_NAME: 北京
+      LATITUDE: "39.9042"
+      LONGITUDE: "116.4074"
+      TIMEZONE: Asia/Shanghai
+      SCREEN_WIDTH: "758"
+      SCREEN_HEIGHT: "1024"
+      FONT_PATH: /usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc
+    restart: unless-stopped

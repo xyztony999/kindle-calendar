@@ -1,0 +1,29 @@
+# 复制为 config.yaml 后修改
+
+# 城市名称（显示在界面上）
+location_name: "北京"
+
+# 经纬度 — 可在 https://open-meteo.com 查询
+latitude: 39.9042
+longitude: 116.4074
+
+# 时区
+timezone: "Asia/Shanghai"
+
+# Kindle 屏幕分辨率（越狱后 SSH 执行 eips -i 查看 xres/yres）
+# 常用预设:
+#   pw2:   758 x 1024
+#   pw3:   1072 x 1448
+#   pw5:   1236 x 1648
+#   k4:    600 x 800
+screen:
+  width: 1072
+  height: 1448
+
+# HTTP 服务
+server:
+  host: "0.0.0.0"
+  port: 8080
+
+# 字体路径（留空则自动查找系统中文字体）
+font_path: ""

@@ -1,0 +1,23 @@
+# 宝塔 Docker 编排专用
+# 用法：编排「项目路径」填 /www/wwwroot/kindle-calendar
+#       Compose 文件选本文件；或把 build.context 改成你实际放代码的目录
+
+services:
+  kindle-calendar:
+    build:
+      context: /www/wwwroot/kindle-calendar
+      dockerfile: Dockerfile
+    image: kindle-calendar:latest
+    container_name: kindle-calendar
+    ports:
+      - "8080:8080"
+    command: ["/app/start.sh"]
+    environment:
+      LOCATION_NAME: 北京
+      LATITUDE: "39.9042"
+      LONGITUDE: "116.4074"
+      TIMEZONE: Asia/Shanghai
+      SCREEN_WIDTH: "758"
+      SCREEN_HEIGHT: "1024"
+      FONT_PATH: /usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc
+    restart: unless-stopped

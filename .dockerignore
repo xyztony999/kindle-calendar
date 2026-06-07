@@ -1,0 +1,11 @@
+.git
+.venv
+__pycache__
+*.pyc
+preview.png
+config.yaml
+kindle/
+scripts/
+README.md
+render.yaml
+agent-tools/

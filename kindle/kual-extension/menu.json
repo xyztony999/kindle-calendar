@@ -1,0 +1,32 @@
+{
+  "items": [
+    {
+      "name": "启动天气台历",
+      "priority": 1,
+      "exitmenu": false,
+      "refresh": false,
+      "action": "./start.sh"
+    },
+    {
+      "name": "停止天气台历",
+      "priority": 2,
+      "exitmenu": false,
+      "refresh": false,
+      "action": "./stop.sh"
+    },
+    {
+      "name": "立即刷新一次",
+      "priority": 3,
+      "exitmenu": false,
+      "refresh": false,
+      "action": "./refresh-once.sh"
+    },
+    {
+      "name": "查看日志",
+      "priority": 4,
+      "exitmenu": false,
+      "refresh": false,
+      "action": "./log.sh"
+    }
+  ]
+}

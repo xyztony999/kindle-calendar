@@ -1,18 +1,20 @@
 #!/bin/sh
 # 作为「书」打开：图书馆里点书名 → 全屏台历
+# 默认保留 Kindle 系统界面，按 Home 键可返回书库
 # 复制到 Kindle 根目录 documents/天气台历.sh
-# 同时复制 kindle/lib/display.sh 到 /mnt/us/kindle-calendar/lib/display.sh
 
 DASH_DIR="/mnt/us/kindle-calendar"
 LIB="$DASH_DIR/lib/display.sh"
 CONFIG="$DASH_DIR/config.sh"
 DASH_PNG="$DASH_DIR/dashboard.png"
 LOG_FILE="$DASH_DIR/dash.log"
+PIDFILE="$DASH_DIR/book.pid"
 EIPS="/usr/sbin/eips"
 
 INTERVAL=900
 WIFI_WAIT=15
 WIFI_ON_DEMAND=false
+BOOK_FULLSCREEN=false
 SERVER_URL="https://kindle-calendar.tonyxyz.com/dashboard.png"
 
 if [ -f "$CONFIG" ]; then
@@ -22,15 +24,16 @@ fi
 if [ -f "$LIB" ]; then
     . "$LIB"
 else
-    init_kindle_display() {
-        /etc/init.d/framework stop >/dev/null 2>&1
-        initctl stop webreader >/dev/null 2>&1
-        lipc-set-prop com.lab126.powerd preventScreenSaver 1 2>/dev/null
+    FRAMEWORK_STOPPED=0
+    init_book_display() {
+        if [ "$BOOK_FULLSCREEN" = "true" ]; then
+            /etc/init.d/framework stop >/dev/null 2>&1
+            FRAMEWORK_STOPPED=1
+        fi
     }
     restore_kindle_ui() {
-        lipc-set-prop com.lab126.powerd preventScreenSaver 0 2>/dev/null
-        initctl start webreader >/dev/null 2>&1
-        /etc/init.d/framework start >/dev/null 2>&1
+        [ "$FRAMEWORK_STOPPED" = "1" ] && /etc/init.d/framework start >/dev/null 2>&1
+        FRAMEWORK_STOPPED=0
     }
     show_dashboard_png() {
         png="$1"
@@ -44,22 +47,35 @@ else
     }
     wifi_on() {
         lipc-set-prop com.lab126.cmd wirelessEnable 1 2>/dev/null
-        lipc-send-event com.lab126.wan autoConnectWan 2>/dev/null
         sleep "${WIFI_WAIT:-15}"
     }
     wifi_off() {
-        if [ "$WIFI_ON_DEMAND" = "true" ]; then
-            lipc-set-prop com.lab126.cmd wirelessEnable 0 2>/dev/null
-        fi
+        [ "$WIFI_ON_DEMAND" = "true" ] && lipc-set-prop com.lab126.cmd wirelessEnable 0 2>/dev/null
+    }
+    sleep_interval() {
+        s="$1"
+        i=0
+        while [ "$i" -lt "$s" ]; do sleep 1; i=$((i + 1)); done
     }
 fi
 
 mkdir -p "$DASH_DIR"
 
+# 防止重复打开多个实例
+if [ -f "$PIDFILE" ]; then
+    old_pid="$(cat "$PIDFILE" 2>/dev/null)"
+    if [ -n "$old_pid" ] && kill -0 "$old_pid" 2>/dev/null; then
+        kill "$old_pid" 2>/dev/null
+        sleep 1
+    fi
+fi
+echo $$ > "$PIDFILE"
+
 cleanup() {
+    rm -f "$PIDFILE"
     restore_kindle_ui
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT INT TERM HUP
 
 log() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') [book] $1" >> "$LOG_FILE"
@@ -89,8 +105,8 @@ refresh_once() {
     return $ok
 }
 
-log "打开天气台历"
-init_kindle_display
+log "打开天气台历 (BOOK_FULLSCREEN=${BOOK_FULLSCREEN:-false})"
+init_book_display
 
 if [ -f "$DASH_PNG" ]; then
     show_dashboard_png "$DASH_PNG" 1
@@ -100,7 +116,7 @@ refresh_once
 
 count=0
 while true; do
-    sleep "$INTERVAL"
+    sleep_interval "$INTERVAL"
     count=$((count + 1))
     wifi_on
     if fetch_png; then

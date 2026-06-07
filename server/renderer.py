@@ -15,6 +15,42 @@ from server.icons import draw_weather_icon
 from server.weather import WeatherData
 
 WEEKDAYS_ZH = ["一", "二", "三", "四", "五", "六", "日"]
+LUNAR_MONTHS = ["正月", "二月", "三月", "四月", "五月", "六月", "七月", "八月", "九月", "十月", "冬月", "腊月"]
+LUNAR_DAYS = [
+    "初一",
+    "初二",
+    "初三",
+    "初四",
+    "初五",
+    "初六",
+    "初七",
+    "初八",
+    "初九",
+    "初十",
+    "十一",
+    "十二",
+    "十三",
+    "十四",
+    "十五",
+    "十六",
+    "十七",
+    "十八",
+    "十九",
+    "二十",
+    "廿一",
+    "廿二",
+    "廿三",
+    "廿四",
+    "廿五",
+    "廿六",
+    "廿七",
+    "廿八",
+    "廿九",
+    "三十",
+]
+HEAVENLY_STEMS = ["甲", "乙", "丙", "丁", "戊", "己", "庚", "辛", "壬", "癸"]
+EARTHLY_BRANCHES = ["子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥"]
+ZODIAC = ["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"]
 
 
 def _find_font(size: int, font_path: str = "") -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
@@ -81,7 +117,14 @@ def _draw_rounded_rect(
 def _lunar_str(dt: datetime) -> str:
     naive = dt.replace(tzinfo=None)
     lunar = ZhDate.from_datetime(naive)
-    return lunar.chinese()[2:]
+    month_name = LUNAR_MONTHS[lunar.lunar_month - 1]
+    day_name = LUNAR_DAYS[lunar.lunar_day - 1]
+    leap_prefix = "闰" if lunar.leap_month else ""
+    stem = HEAVENLY_STEMS[(lunar.lunar_year - 4) % 10]
+    branch_index = (lunar.lunar_year - 4) % 12
+    branch = EARTHLY_BRANCHES[branch_index]
+    zodiac = ZODIAC[branch_index]
+    return f"{leap_prefix}{month_name}{day_name} {stem}{branch}年（{zodiac}年）"
 
 
 def render_dashboard(

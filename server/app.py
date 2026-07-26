@@ -75,51 +75,133 @@ def load_config() -> dict:
 
 
 class DashboardCache:
-    """缓存渲染结果，避免每次请求都拉取天气。"""
+    """缓存渲染结果，避免每次请求都拉取天气。
 
-    def __init__(self, refresh_seconds: int = 900) -> None:
+    策略：
+    - 刷新（网络 + 渲染）在锁外执行，避免阻塞其它请求
+    - 有旧图时采用 stale-while-revalidate，后台刷新并立刻返回旧图
+    - 刷新失败时保留旧图并短暂退避，避免雪崩式重试
+    """
+
+    def __init__(self, refresh_seconds: int = 900, error_backoff_seconds: int = 60) -> None:
         self.refresh_seconds = refresh_seconds
-        self._lock = threading.Lock()
+        self.error_backoff_seconds = error_backoff_seconds
+        self._cond = threading.Condition()
         self._png: bytes | None = None
         self._weather: WeatherData | None = None
         self._updated_at: float = 0
+        self._refreshing = False
+        self._last_error: str | None = None
+        self._last_error_at: float = 0
+
+    def health_info(self) -> dict:
+        with self._cond:
+            age = None if self._updated_at == 0 else round(time.time() - self._updated_at, 1)
+            return {
+                "has_image": self._png is not None,
+                "age_seconds": age,
+                "refreshing": self._refreshing,
+                "last_error": self._last_error,
+                "last_error_age_seconds": (
+                    None if self._last_error_at == 0 else round(time.time() - self._last_error_at, 1)
+                ),
+            }
 
     def get_png(self, config: dict) -> bytes:
-        with self._lock:
-            if self._png is None or time.time() - self._updated_at > self.refresh_seconds:
-                self._refresh(config)
-            assert self._png is not None
+        self._ensure_fresh(config)
+        with self._cond:
+            if self._png is None:
+                raise RuntimeError(self._last_error or "dashboard image unavailable")
             return self._png
 
     def get_weather(self, config: dict) -> WeatherData:
-        with self._lock:
-            if self._weather is None or time.time() - self._updated_at > self.refresh_seconds:
-                self._refresh(config)
-            assert self._weather is not None
+        self._ensure_fresh(config)
+        with self._cond:
+            if self._weather is None:
+                raise RuntimeError(self._last_error or "weather unavailable")
             return self._weather
+
+    def _ensure_fresh(self, config: dict) -> None:
+        with self._cond:
+            now = time.time()
+            fresh = self._png is not None and now - self._updated_at <= self.refresh_seconds
+            backing_off = (
+                self._png is not None
+                and self._last_error_at > 0
+                and now - self._last_error_at < self.error_backoff_seconds
+            )
+            if fresh or backing_off:
+                return
+
+            # 已有旧图：后台刷新，立刻返回（stale-while-revalidate）
+            if self._png is not None:
+                if not self._refreshing:
+                    self._refreshing = True
+                    threading.Thread(
+                        target=self._background_refresh,
+                        args=(config,),
+                        daemon=True,
+                        name="dashboard-refresh",
+                    ).start()
+                return
+
+            # 尚无缓存：同步刷新；若已有其它线程在刷，则等待
+            if self._refreshing:
+                while self._refreshing and self._png is None:
+                    self._cond.wait(timeout=1.0)
+                return
+
+            self._refreshing = True
+
+        try:
+            self._refresh(config)
+        finally:
+            with self._cond:
+                self._refreshing = False
+                self._cond.notify_all()
+
+    def _background_refresh(self, config: dict) -> None:
+        try:
+            self._refresh(config)
+        finally:
+            with self._cond:
+                self._refreshing = False
+                self._cond.notify_all()
 
     def _refresh(self, config: dict) -> None:
         log.info("刷新天气与台历图像…")
-        weather = fetch_weather(
-            config["latitude"],
-            config["longitude"],
-            config["timezone"],
-        )
-        screen = config["screen"]
-        img = render_dashboard(
-            weather,
-            width=screen["width"],
-            height=screen["height"],
-            location_name=config["location_name"],
-            timezone=config["timezone"],
-            font_path=config.get("font_path", ""),
-        )
-        buf = io.BytesIO()
-        img.save(buf, format="PNG")
-        self._png = buf.getvalue()
-        self._weather = weather
-        self._updated_at = time.time()
-        log.info("图像已更新 (%d bytes)", len(self._png))
+        try:
+            weather = fetch_weather(
+                config["latitude"],
+                config["longitude"],
+                config["timezone"],
+            )
+            screen = config["screen"]
+            img = render_dashboard(
+                weather,
+                width=screen["width"],
+                height=screen["height"],
+                location_name=config["location_name"],
+                timezone=config["timezone"],
+                font_path=config.get("font_path", ""),
+            )
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            png = buf.getvalue()
+        except Exception as exc:
+            log.exception("刷新失败: %s", exc)
+            with self._cond:
+                self._last_error = str(exc)
+                self._last_error_at = time.time()
+            return
+
+        with self._cond:
+            self._png = png
+            self._weather = weather
+            self._updated_at = time.time()
+            self._last_error = None
+            self._last_error_at = 0
+            log.info("图像已更新 (%d bytes)", len(self._png))
 
 
 def create_app() -> Flask:
@@ -143,7 +225,9 @@ def create_app() -> Flask:
 
     @app.get("/health")
     def health():
-        return jsonify({"status": "ok"})
+        info = cache.health_info()
+        # 进程能响应即为存活；附带缓存信息便于排查「假活」
+        return jsonify({"status": "ok", **info})
 
     @app.get("/dashboard.png")
     def dashboard_png():

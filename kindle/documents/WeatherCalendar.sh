@@ -82,7 +82,7 @@ fetch_png() {
     if command -v wget >/dev/null 2>&1; then
         wget -q -T 30 -O "$DASH_PNG.tmp" "$SERVER_URL" && mv "$DASH_PNG.tmp" "$DASH_PNG"
     elif command -v curl >/dev/null 2>&1; then
-        curl -s --connect-timeout 30 -o "$DASH_PNG.tmp" "$SERVER_URL" && mv "$DASH_PNG.tmp" "$DASH_PNG"
+        curl -s --connect-timeout 30 --max-time 60 -o "$DASH_PNG.tmp" "$SERVER_URL" && mv "$DASH_PNG.tmp" "$DASH_PNG"
     else
         return 1
     fi

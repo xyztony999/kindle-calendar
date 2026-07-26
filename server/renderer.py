@@ -52,36 +52,48 @@ HEAVENLY_STEMS = ["甲", "乙", "丙", "丁", "戊", "己", "庚", "辛", "壬",
 EARTHLY_BRANCHES = ["子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥"]
 ZODIAC = ["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"]
 
+# 按 (字体路径, 字号) 缓存，避免长期运行反复打开 TTC 导致 fd/内存缓慢泄漏
+_font_cache: dict[tuple[str, int], ImageFont.FreeTypeFont | ImageFont.ImageFont] = {}
+
 
 def _find_font(size: int, font_path: str = "") -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    cache_key = (font_path or "", size)
+    cached = _font_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont
     if font_path and Path(font_path).exists():
-        return ImageFont.truetype(font_path, size)
-
-    candidates: list[str] = []
-    system = platform.system()
-    if system == "Windows":
-        candidates = [
-            r"C:\Windows\Fonts\msyh.ttc",
-            r"C:\Windows\Fonts\simhei.ttf",
-            r"C:\Windows\Fonts\simsun.ttc",
-        ]
-    elif system == "Darwin":
-        candidates = [
-            "/System/Library/Fonts/PingFang.ttc",
-            "/System/Library/Fonts/STHeiti Light.ttc",
-        ]
+        font = ImageFont.truetype(font_path, size)
     else:
-        candidates = [
-            "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
-            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-            "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
-        ]
+        candidates: list[str] = []
+        system = platform.system()
+        if system == "Windows":
+            candidates = [
+                r"C:\Windows\Fonts\msyh.ttc",
+                r"C:\Windows\Fonts\simhei.ttf",
+                r"C:\Windows\Fonts\simsun.ttc",
+            ]
+        elif system == "Darwin":
+            candidates = [
+                "/System/Library/Fonts/PingFang.ttc",
+                "/System/Library/Fonts/STHeiti Light.ttc",
+            ]
+        else:
+            candidates = [
+                "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+                "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+                "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+            ]
 
-    for path in candidates:
-        if Path(path).exists():
-            return ImageFont.truetype(path, size)
+        font = ImageFont.load_default()
+        for path in candidates:
+            if Path(path).exists():
+                font = ImageFont.truetype(path, size)
+                break
 
-    return ImageFont.load_default()
+    _font_cache[cache_key] = font
+    return font
 
 
 def _text_size(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont) -> tuple[int, int]:

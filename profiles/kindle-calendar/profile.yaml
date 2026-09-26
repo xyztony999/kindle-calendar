@@ -1,0 +1,31 @@
+apiVersion: 1
+profile:
+  name: kindle-calendar
+  type: business
+  title: Kindle 电子天气台历（云端渲染 · Kindle 自主拉取）
+  depends: []
+knowledge:
+  inject: CLAUDE.md
+  sections:
+    business-concepts: knowledge/business-concepts/index.md
+    design-decisions: knowledge/design-decisions/index.md
+    service-pool: knowledge/service-pool/index.md
+    architecture-choices: knowledge/architecture-choices/index.md
+workspace:
+  root: workspace
+  index: workspace/INDEX.md
+  stages:
+    architecture: workspace/00-architecture
+    prd: workspace/02-detailed/prd
+    api: workspace/02-detailed/api
+    interaction: workspace/02-detailed/interaction
+    reports: workspace/05-reports
+  conventions:
+    enum_pool: workspace/01-solution/common-spec/enum-pool.md
+    common_enums: workspace/01-solution/common-spec/common-enums.md
+    select_pool: workspace/01-solution/common-spec/select-pool.md
+
+slots:
+  server: "Flask v2（Python）"
+  deploy: "Render 免费版 / Docker（通用·VPS·宝塔·ACR 镜像）"
+  config: "config.yaml + 环境变量（LOCATION_NAME/LATITUDE/LONGITUDE/TIMEZONE/SCREEN_*）"

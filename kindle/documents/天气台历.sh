@@ -15,7 +15,7 @@ INTERVAL=900
 WIFI_WAIT=15
 WIFI_ON_DEMAND=false
 BOOK_FULLSCREEN=false
-SERVER_URL="https://kindle-calendar.tonyxyz.com/dashboard.png"
+SERVER_URL="https://kindle-calendar.tonyxyz.cn/dashboard.png"
 
 if [ -f "$CONFIG" ]; then
     . "$CONFIG"

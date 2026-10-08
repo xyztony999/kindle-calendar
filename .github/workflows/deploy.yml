@@ -34,6 +34,9 @@ jobs:
             ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/kindle-calendar:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # 阿里云 ACR 不支持 OCI 1.1 provenance manifest，必须关闭，否则推送报
+          # "denied: unknown manifest class for application/vnd.oci.empty.v1+json"
+          provenance: false
 
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1

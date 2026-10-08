@@ -5,3 +5,6 @@ venv/
 preview.png
 config.yaml
 kindle/config.sh
+.env
+.mimosa/
+.claude/.profile-mounts.json

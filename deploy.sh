@@ -13,8 +13,16 @@ for f in Dockerfile docker-compose.yml start.sh requirements.txt server/app.py; 
   fi
 done
 
+# 国内构建源：apt 默认走阿里云内网镜像（仅阿里云 ECS 可达，不占公网带宽）；
+# 非阿里云服务器执行前覆盖：APT_MIRROR=mirrors.aliyun.com bash deploy.sh
+APT_MIRROR="${APT_MIRROR:-mirrors.cloud.aliyuncs.com}"
+PIP_INDEX_URL="${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}"
+
 echo "==> 构建镜像..."
-docker build -t kindle-calendar:latest .
+docker build \
+  --build-arg APT_MIRROR="${APT_MIRROR}" \
+  --build-arg PIP_INDEX_URL="${PIP_INDEX_URL}" \
+  -t kindle-calendar:latest .
 
 echo "==> 启动容器..."
 docker compose -f docker-compose.image.yml up -d

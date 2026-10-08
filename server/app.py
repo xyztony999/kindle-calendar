@@ -1,19 +1,16 @@
-"""Kindle 天气台历 HTTP 服务。"""
+"""Kindle 天气台历 HTTP 服务（v2：JSON 数据 + 分区图 + 整页兼容）。"""
 
 from __future__ import annotations
 
-import io
 import logging
 import os
-import threading
-import time
+import re
 from pathlib import Path
 
 import yaml
-from flask import Flask, Response, jsonify
+from flask import Flask, Response, jsonify, request
 
-from server.renderer import render_dashboard
-from server.weather import WeatherData, fetch_weather
+from server.service import DashboardService
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = ROOT / "config.yaml"
@@ -30,14 +27,11 @@ def load_config() -> dict:
     path = CONFIG_PATH
     if not path.exists():
         path = ROOT / "config.example.yaml"
-        if path.exists():
-            with open(path, encoding="utf-8") as f:
-                config = yaml.safe_load(f) or {}
-        else:
-            config = {}
-    else:
+    if path.exists():
         with open(path, encoding="utf-8") as f:
             config = yaml.safe_load(f) or {}
+    else:
+        config = {}
 
     # 环境变量覆盖（云端部署时使用，无需 config.yaml）
     if _env("LOCATION_NAME"):
@@ -74,139 +68,23 @@ def load_config() -> dict:
     return config
 
 
-class DashboardCache:
-    """缓存渲染结果，避免每次请求都拉取天气。
+_REGION_RE = re.compile(r"^[a-z]+$")
+_GLYPH_RE = re.compile(r"^[0-9:]$")
 
-    策略：
-    - 刷新（网络 + 渲染）在锁外执行，避免阻塞其它请求
-    - 有旧图时采用 stale-while-revalidate，后台刷新并立刻返回旧图
-    - 刷新失败时保留旧图并短暂退避，避免雪崩式重试
-    """
 
-    def __init__(self, refresh_seconds: int = 900, error_backoff_seconds: int = 60) -> None:
-        self.refresh_seconds = refresh_seconds
-        self.error_backoff_seconds = error_backoff_seconds
-        self._cond = threading.Condition()
-        self._png: bytes | None = None
-        self._weather: WeatherData | None = None
-        self._updated_at: float = 0
-        self._refreshing = False
-        self._last_error: str | None = None
-        self._last_error_at: float = 0
-
-    def health_info(self) -> dict:
-        with self._cond:
-            age = None if self._updated_at == 0 else round(time.time() - self._updated_at, 1)
-            return {
-                "has_image": self._png is not None,
-                "age_seconds": age,
-                "refreshing": self._refreshing,
-                "last_error": self._last_error,
-                "last_error_age_seconds": (
-                    None if self._last_error_at == 0 else round(time.time() - self._last_error_at, 1)
-                ),
-            }
-
-    def get_png(self, config: dict) -> bytes:
-        self._ensure_fresh(config)
-        with self._cond:
-            if self._png is None:
-                raise RuntimeError(self._last_error or "dashboard image unavailable")
-            return self._png
-
-    def get_weather(self, config: dict) -> WeatherData:
-        self._ensure_fresh(config)
-        with self._cond:
-            if self._weather is None:
-                raise RuntimeError(self._last_error or "weather unavailable")
-            return self._weather
-
-    def _ensure_fresh(self, config: dict) -> None:
-        with self._cond:
-            now = time.time()
-            fresh = self._png is not None and now - self._updated_at <= self.refresh_seconds
-            backing_off = (
-                self._png is not None
-                and self._last_error_at > 0
-                and now - self._last_error_at < self.error_backoff_seconds
-            )
-            if fresh or backing_off:
-                return
-
-            # 已有旧图：后台刷新，立刻返回（stale-while-revalidate）
-            if self._png is not None:
-                if not self._refreshing:
-                    self._refreshing = True
-                    threading.Thread(
-                        target=self._background_refresh,
-                        args=(config,),
-                        daemon=True,
-                        name="dashboard-refresh",
-                    ).start()
-                return
-
-            # 尚无缓存：同步刷新；若已有其它线程在刷，则等待
-            if self._refreshing:
-                while self._refreshing and self._png is None:
-                    self._cond.wait(timeout=1.0)
-                return
-
-            self._refreshing = True
-
-        try:
-            self._refresh(config)
-        finally:
-            with self._cond:
-                self._refreshing = False
-                self._cond.notify_all()
-
-    def _background_refresh(self, config: dict) -> None:
-        try:
-            self._refresh(config)
-        finally:
-            with self._cond:
-                self._refreshing = False
-                self._cond.notify_all()
-
-    def _refresh(self, config: dict) -> None:
-        log.info("刷新天气与台历图像…")
-        try:
-            weather = fetch_weather(
-                config["latitude"],
-                config["longitude"],
-                config["timezone"],
-            )
-            screen = config["screen"]
-            img = render_dashboard(
-                weather,
-                width=screen["width"],
-                height=screen["height"],
-                location_name=config["location_name"],
-                timezone=config["timezone"],
-                font_path=config.get("font_path", ""),
-            )
-            buf = io.BytesIO()
-            img.save(buf, format="PNG")
-            png = buf.getvalue()
-        except Exception as exc:
-            log.exception("刷新失败: %s", exc)
-            with self._cond:
-                self._last_error = str(exc)
-                self._last_error_at = time.time()
-            return
-
-        with self._cond:
-            self._png = png
-            self._weather = weather
-            self._updated_at = time.time()
-            self._last_error = None
-            self._last_error_at = 0
-            log.info("图像已更新 (%d bytes)", len(self._png))
+def _png_response(png: bytes, etag: str | None = None, max_age: int = 300) -> Response:
+    if etag is not None and request.headers.get("If-None-Match") == etag:
+        resp = Response(status=304)
+    else:
+        resp = Response(png, mimetype="image/png")
+    resp.headers["ETag"] = etag or ""
+    resp.headers["Cache-Control"] = f"public, max-age={max_age}"
+    return resp
 
 
 def create_app() -> Flask:
     config = load_config()
-    cache = DashboardCache()
+    service = DashboardService(config)
 
     app = Flask(__name__)
 
@@ -215,45 +93,62 @@ def create_app() -> Flask:
         return jsonify(
             {
                 "name": "kindle-calendar",
+                "version": 2,
                 "endpoints": {
-                    "/dashboard.png": "Kindle 台历 PNG 图像",
-                    "/health": "健康检查",
+                    "/api/v1/dashboard.json": "台历数据 JSON",
+                    "/api/v1/dashboard.env": "设备端 POSIX env 配置",
+                    "/r/today/<region>.png": "今日页分区图",
+                    "/r/today/clock/<glyph>.png": "时钟字形（0-9 与冒号）",
+                    "/dashboard.png": "整页合成图（v1 兼容）",
                     "/weather": "当前天气 JSON",
+                    "/health": "健康检查",
                 },
             }
         )
 
     @app.get("/health")
     def health():
-        info = cache.health_info()
-        # 进程能响应即为存活；附带缓存信息便于排查「假活」
-        return jsonify({"status": "ok", **info})
+        return jsonify({"status": "ok", **service.health_info()})
+
+    @app.get("/api/v1/dashboard.json")
+    def dashboard_json():
+        return jsonify(service.get_payload())
+
+    @app.get("/api/v1/dashboard.env")
+    def dashboard_env():
+        env = service.build_env(request.host_url)
+        return Response(env, mimetype="text/plain")
+
+    @app.get("/r/<page>/<region>.png")
+    def region_png(page: str, region: str):
+        if page != "today" or not _REGION_RE.match(region):
+            return Response("not found", status=404)
+        rendered = service.get_region(region)
+        if rendered is None:
+            return Response("not found", status=404)
+        return _png_response(rendered.png, rendered.etag)
+
+    @app.get("/r/<page>/clock/<glyph>.png")
+    def clock_glyph_png(page: str, glyph: str):
+        if page != "today" or not _GLYPH_RE.match(glyph):
+            return Response("not found", status=404)
+        glyphs = service.get_glyphs()
+        return _png_response(glyphs[glyph], f"glyph-{glyph}")
 
     @app.get("/dashboard.png")
     def dashboard_png():
-        png = cache.get_png(config)
-        return Response(png, mimetype="image/png")
+        png = service.get_composite()
+        return _png_response(png, max_age=60)
 
     @app.get("/weather")
     def weather_json():
-        w = cache.get_weather(config)
+        payload = service.get_payload()
+        cur = payload["weather"]["current"]
         return jsonify(
             {
-                "current": {
-                    "temperature": w.current.temperature,
-                    "humidity": w.current.humidity,
-                    "wind_speed": w.current.wind_speed,
-                    "description": w.current.description,
-                },
-                "daily": [
-                    {
-                        "date": d.date,
-                        "temp_min": d.temp_min,
-                        "temp_max": d.temp_max,
-                        "description": d.description,
-                    }
-                    for d in w.daily
-                ],
+                "current": cur,
+                "daily": payload["weather"]["daily"],
+                "hourly": payload["weather"]["hourly"],
             }
         )
 
@@ -270,6 +165,7 @@ def main() -> None:
 
 
 app = create_app()
+
 
 if __name__ == "__main__":
     main()

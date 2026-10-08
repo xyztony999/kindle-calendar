@@ -24,15 +24,17 @@
 ## 工作原理
 
 ```
-  云端（Render / Docker）              Kindle（越狱 + WiFi）
- ┌──────────────┐    HTTPS GET    ┌──────────────────────┐
- │ Flask 服务    │ ◄────────────── │ dash.sh 定时拉取     │
- │ Open-Meteo   │  /dashboard.png │ 或「脚本书」点书名   │
- │ Pillow 渲染   │                 │ eips 显示 PNG       │
- └──────────────┘                 └──────────────────────┘
-        ▲
-   部署一次，24h 在线
-   PC 仅用于开发预览
+  云端（Render / Docker）                Kindle（越狱 + WiFi + fbink）
+ ┌──────────────────────┐  env+JSON+PNG  ┌────────────────────────────┐
+ │ Flask v2 服务         │ ◄───────────── │ dash.sh v2 主循环           │
+ │ ├ /api/v1/dashboard  │  按需拉取      │ ├ 时钟：本地字形拼装，每分钟 │
+ │ │  (天气/农历/节气/   │                │ │  A2 局刷，零网络           │
+ │ │  月相/一言/节假日)  │                │ ├ 分区图：ETAG 变化才拉取， │
+ │ ├ /r/today/*.png     │                │ │  GC16 局刷                │
+ │ │  (分区灰度图)       │                │ └ 凌晨 03:00 全刷清残影     │
+ │ └ /dashboard.png     │                │ (无 fbink 时回退 eips 整图) │
+ │   (v1 整图兼容)       │                └────────────────────────────┘
+ └──────────────────────┘
 ```
 
 ## 推荐方案：云端部署 + Kindle 自主拉取
@@ -83,6 +85,10 @@ bash deploy.sh
 
 > 宝塔「编排」界面构建有时不稳定，若失败请在宝塔终端执行 `bash deploy.sh`。
 
+**CI/CD 自动部署（长期使用推荐）：**
+
+推送代码到 GitHub 即自动部署到阿里云服务器：GitHub Actions 构建镜像 → 推送到阿里云 ACR → SSH 拉取重启，服务器无需访问 GitHub / Docker Hub。一次性配置见 [DEPLOY.md](DEPLOY.md)；不想配 CI 时也可用 `./deploy-remote.sh root@服务器IP` 一键部署。
+
 ### 3. Kindle 端配置
 
 **上传文件：**
@@ -90,19 +96,25 @@ bash deploy.sh
 ```bash
 # 复制配置模板，填入云端 URL
 cp kindle/config.sh.example kindle/config.sh
-# 编辑 SERVER_URL="https://kindle-calendar-xxxx.onrender.com/dashboard.png"
+# 编辑 API_URL="https://kindle-calendar-xxxx.onrender.com/api/v1/dashboard.env"
 
-scp kindle/config.sh kindle/dash.sh kindle/lib/display.sh root@<Kindle的IP>:/mnt/us/kindle-calendar/
+scp kindle/config.sh kindle/dash.sh root@<Kindle的IP>:/mnt/us/kindle-calendar/
+scp -r kindle/lib kindle/bin root@<Kindle的IP>:/mnt/us/kindle-calendar/
 ssh root@<Kindle的IP> "chmod +x /mnt/us/kindle-calendar/*.sh /mnt/us/kindle-calendar/lib/*.sh"
 ```
+
+**v2 分区模式还需安装 [fbink](https://github.com/NiLuJe/FBInk)**（方法见 `kindle/bin/README.md`，
+放入 `/mnt/us/kindle-calendar/bin/fbink`）。没有 fbink 时 `dash.sh` 自动回退 v1 整图模式。
 
 **Kindle 端配置项**（`config.sh`）：
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `SERVER_URL` | — | 云端 `/dashboard.png` 地址 |
-| `INTERVAL` | 900 | 刷新间隔（秒），建议 ≥ 900 |
-| `FULL_REFRESH_EVERY` | 6 | 每 N 次局部刷新后全刷，减少残影 |
+| `API_URL` | — | 云端 v2 env 端点，分区模式总入口 |
+| `CLOCK_ENABLED` | 1 | 分钟级时钟（本地跳，不耗网络） |
+| `SERVER_URL` | — | v1 整图地址（回退模式使用） |
+| `INTERVAL` | 900 | 数据拉取间隔（秒），建议 ≥ 900；时钟每分钟走不受此限 |
+| `FULL_REFRESH_EVERY` | 6 | v1 模式：每 N 次局部刷新后全刷 |
 | `WIFI_ON_DEMAND` | false | false=保持 WiFi；true=拉完关 WiFi 省电 |
 | `BOOK_FULLSCREEN` | false | 脚本书模式：false=按 Home 回书库；true=全屏沉浸 |
 | `WIFI_WAIT` | 15 | 开 WiFi 后等待连接秒数 |
@@ -207,7 +219,11 @@ python -m server.app               # http://localhost:8080/dashboard.png
 
 | 路径 | 说明 |
 |------|------|
-| `GET /dashboard.png` | Kindle 拉取的 8 位灰度 PNG |
+| `GET /api/v1/dashboard.json` | 台历全量数据（天气/农历/节气/黄历/月相/一言/节假日） |
+| `GET /api/v1/dashboard.env` | 设备端 POSIX env（分区坐标 + URL + ETAG） |
+| `GET /r/today/<region>.png` | 今日页分区灰度图（header/weather/sun/scene/quote） |
+| `GET /r/today/clock/<g>.png` | 时钟字形（0-9 与 `:`） |
+| `GET /dashboard.png` | 整页合成图（v1 兼容，8 位灰度 PNG） |
 | `GET /weather` | 当前天气 JSON |
 | `GET /health` | 健康检查 |
 
@@ -235,28 +251,43 @@ python -m server.app               # http://localhost:8080/dashboard.png
 
 ```
 kindle-calendar/
-├── Dockerfile                  # 云端部署
+├── Dockerfile                  # 云端部署（含思源宋体）
 ├── docker-compose.yml          # 通用 Docker 编排
 ├── docker-compose.baota.yml    # 宝塔面板专用编排
 ├── docker-compose.image.yml    # 仅启动已构建镜像
 ├── deploy.sh                   # VPS 一键构建部署
 ├── render.yaml                 # Render 一键部署
 ├── config.yaml                 # 本地开发配置
-├── server/                     # Flask 渲染服务
+├── docs/v2-design.md           # v2 电子翻页台历设计定稿
+├── server/                     # Flask v2 服务
+│   ├── app.py                 # 路由
+│   ├── service.py             # 天气缓存 / 分区渲染编排
+│   ├── data.py                # 数据聚合 payload
+│   ├── almanac.py             # 农历/节气/黄历（lunar-python）
+│   ├── astro.py               # 日出日落（NOAA）/月相
+│   ├── holidays.py            # 法定节假日/调休
+│   ├── quotes.py              # 每日一言 + 离线兜底
+│   └── render/                # 印刷杂志风渲染（分区/字形/场景）
 ├── kindle/
-│   ├── dash.sh                 # 后台守护拉取
-│   ├── config.sh.example       # Kindle 端配置模板
-│   ├── lib/display.sh          # 公共显示 / WiFi 函数
-│   ├── documents/天气台历.sh   # 脚本书入口
-│   └── kual-extension/         # KUAL 菜单扩展
+│   ├── dash.sh                # v2 主循环（分区 + 分钟时钟，可回退 v1）
+│   ├── config.sh.example      # Kindle 端配置模板
+│   ├── lib/display.sh         # fbink/eips 显示封装
+│   ├── bin/                   # fbink 二进制（见 bin/README.md）
+│   ├── documents/天气台历.sh  # 脚本书入口（v1 整图模式）
+│   └── kual-extension/        # KUAL 菜单扩展
 └── scripts/preview.py
 ```
 
 ## 扩展
 
-- 添加 RSS 新闻、待办事项 → 修改 `renderer.py`
-- 接入 Home Assistant → 用 Playwright 截图 HA 面板替代本渲染器
-- 使用 [Online Screensaver](https://www.mobileread.com/forums/showthread.php?t=236104) KUAL 插件替代 `dash.sh`
+v2 路线图（详见 [docs/v2-design.md](docs/v2-design.md)）：
+
+- **P1（已完成）**：分区刷新 + 分钟级时钟 + 印刷杂志风今日页
+- **P2**：触摸翻页 + 一周/月历/详情/老黄历页面集
+- **P3**：ICS 个人日程订阅等内容扩展
+
+其它：接入 Home Assistant → 用 Playwright 截图 HA 面板做新分区；使用
+[Online Screensaver](https://www.mobileread.com/forums/showthread.php?t=236104) KUAL 插件替代 `dash.sh`。
 
 ## 许可
 

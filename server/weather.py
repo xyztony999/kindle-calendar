@@ -4,10 +4,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlsplit
 
 import requests
 
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
+ALLOWED_HOSTS = {"api.open-meteo.com"}
+
+
+def _check_url(url: str) -> None:
+    parts = urlsplit(url)
+    if parts.scheme != "https" or parts.hostname not in ALLOWED_HOSTS:
+        raise ValueError(f"blocked request target: {url}")
+
 
 # WMO 天气代码 → 中文描述
 WEATHER_CODES: dict[int, str] = {
@@ -65,9 +74,18 @@ class DailyForecast:
 
 
 @dataclass
+class HourlyPoint:
+    time: str  # "2026-09-12T14:00"
+    temperature: float
+    precipitation_probability: int
+    code: int
+
+
+@dataclass
 class WeatherData:
     current: CurrentWeather
     daily: list[DailyForecast]
+    hourly: list[HourlyPoint]
 
 
 def fetch_weather(latitude: float, longitude: float, timezone: str) -> WeatherData:
@@ -76,15 +94,19 @@ def fetch_weather(latitude: float, longitude: float, timezone: str) -> WeatherDa
         "longitude": longitude,
         "current": "temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m",
         "daily": "weather_code,temperature_2m_max,temperature_2m_min",
+        "hourly": "temperature_2m,precipitation_probability,weather_code",
         "timezone": timezone,
-        "forecast_days": 5,
+        "forecast_days": 7,
+        "forecast_hours": 24,
     }
-    resp = requests.get(OPEN_METEO_URL, params=params, timeout=15)
+    _check_url(OPEN_METEO_URL)
+    resp = requests.get(OPEN_METEO_URL, params=params, timeout=15, allow_redirects=False)
     resp.raise_for_status()
     data: dict[str, Any] = resp.json()
 
     current = data["current"]
     daily = data["daily"]
+    hourly = data.get("hourly", {})
 
     current_weather = CurrentWeather(
         temperature=current["temperature_2m"],
@@ -107,4 +129,16 @@ def fetch_weather(latitude: float, longitude: float, timezone: str) -> WeatherDa
             )
         )
 
-    return WeatherData(current=current_weather, daily=forecasts)
+    times = hourly.get("time", [])
+    n = len(times)
+    hourly_points = [
+        HourlyPoint(
+            time=times[i],
+            temperature=hourly["temperature_2m"][i],
+            precipitation_probability=hourly.get("precipitation_probability", [0] * n)[i] or 0,
+            code=hourly.get("weather_code", [0] * n)[i] or 0,
+        )
+        for i in range(n)
+    ]
+
+    return WeatherData(current=current_weather, daily=forecasts, hourly=hourly_points)

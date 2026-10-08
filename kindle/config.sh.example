@@ -1,13 +1,21 @@
 # Kindle 端配置 — 复制为 config.sh 后修改
 # 部署: scp config.sh root@<Kindle的IP>:/mnt/us/kindle-calendar/config.sh
 
-# 云端服务地址（部署 Render / Docker 后填入，Kindle 通过 WiFi 自行拉取）
+# ── v2 分区模式（推荐）──
+# 云端 v2 服务的 env 端点，Kindle 据此拉取分区图与时钟字形
+API_URL="https://your-app.onrender.com/api/v1/dashboard.env"
+
+# 分钟级时钟开关（1=开启；时钟离线本地跳，不耗流量）
+CLOCK_ENABLED=1
+
+# ── v1 整图模式（回退用）──
+# API_URL 为空或缺少 fbink 时，回退为定时拉取整张 PNG
 SERVER_URL="https://your-app.onrender.com/dashboard.png"
 
-# 刷新间隔（秒），建议 ≥ 900
+# 拉取间隔（秒），建议 ≥ 900；时钟每分钟走，不受此限制
 INTERVAL=900
 
-# 每 N 次局部刷新后做一次全刷，清除残影
+# v1 模式：每 N 次局部刷新后做一次全刷，清除残影
 FULL_REFRESH_EVERY=6
 
 # false = 保持 WiFi 常开（推荐，不会出现飞行模式图标）

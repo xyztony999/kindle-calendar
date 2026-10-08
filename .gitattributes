@@ -1,0 +1,2 @@
+# Shell 脚本必须 LF：CRLF 会让容器内 exec 报 no such file or directory
+*.sh text eol=lf

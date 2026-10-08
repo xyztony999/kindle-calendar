@@ -67,7 +67,9 @@ GitHub 仓库 → Settings → Secrets and variables → Actions → New reposit
 | `DEPLOY_USER` | `root` | SSH 用户 |
 | `DEPLOY_SSH_KEY` | 私钥内容 | `cat ~/.ssh/kindle_deploy` 的**全部输出**（含 BEGIN/END 行） |
 | `DEPLOY_PORT` | `22` | 可选，改过 SSH 端口才需要 |
-| `DEPLOY_DIR` | `/www/wwwroot/kindle-calendar` | 可选，项目在服务器上的路径 |
+
+> 部署路径固定为 `/www/wwwroot/kindle-calendar`（与 deploy-remote.sh 默认一致），
+> 如需更换请改 workflow 里 SSH 脚本的 `cd` 行。
 
 ### 4. 初始化服务器（首次执行一次）
 

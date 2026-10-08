@@ -47,7 +47,7 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script: |
             set -e
-            cd "${{ secrets.DEPLOY_DIR || '/www/wwwroot/kindle-calendar' }}"
+            cd /www/wwwroot/kindle-calendar
             echo "${{ secrets.ACR_PASSWORD }}" | docker login "${{ secrets.ACR_REGISTRY }}" -u "${{ secrets.ACR_USERNAME }}" --password-stdin
             docker compose -f docker-compose.acr.yml pull
             docker compose -f docker-compose.acr.yml up -d

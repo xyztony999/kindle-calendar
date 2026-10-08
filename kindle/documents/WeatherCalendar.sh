@@ -1,9 +1,11 @@
 #!/bin/sh
-# 英文文件名版，内容与 天气台历.sh 相同
+# 英文文件名版，内容与 天气台历.sh 相同（部分固件对中文文件名的脚本书支持不佳时用这本）
 
 DASH_DIR="/mnt/us/kindle-calendar"
 LIB="$DASH_DIR/lib/display.sh"
 CONFIG="$DASH_DIR/config.sh"
+DASH_SH="$DASH_DIR/dash.sh"
+DASH_PIDFILE="$DASH_DIR/dash.pid"
 DASH_PNG="$DASH_DIR/dashboard.png"
 LOG_FILE="$DASH_DIR/dash.log"
 PIDFILE="$DASH_DIR/book.pid"
@@ -13,7 +15,7 @@ INTERVAL=900
 WIFI_WAIT=15
 WIFI_ON_DEMAND=false
 BOOK_FULLSCREEN=false
-SERVER_URL="https://kindle-calendar.tonyxyz.com/dashboard.png"
+SERVER_URL="https://kindle-calendar.tonyxyz.cn/dashboard.png"
 
 if [ -f "$CONFIG" ]; then
     . "$CONFIG"
@@ -59,6 +61,7 @@ fi
 
 mkdir -p "$DASH_DIR"
 
+# 防止重复打开多个实例：停掉旧书进程与旧 dash 守护
 if [ -f "$PIDFILE" ]; then
     old_pid="$(cat "$PIDFILE" 2>/dev/null)"
     if [ -n "$old_pid" ] && kill -0 "$old_pid" 2>/dev/null; then
@@ -66,10 +69,22 @@ if [ -f "$PIDFILE" ]; then
         sleep 1
     fi
 fi
+if [ -f "$DASH_PIDFILE" ]; then
+    kill "$(cat "$DASH_PIDFILE" 2>/dev/null)" 2>/dev/null
+    rm -f "$DASH_PIDFILE"
+    sleep 1
+fi
+pkill -f "$DASH_SH" 2>/dev/null && sleep 1
+
 echo $$ > "$PIDFILE"
 
 cleanup() {
     rm -f "$PIDFILE"
+    if [ -f "$DASH_PIDFILE" ]; then
+        kill "$(cat "$DASH_PIDFILE" 2>/dev/null)" 2>/dev/null
+        rm -f "$DASH_PIDFILE"
+    fi
+    pkill -f "$DASH_SH" 2>/dev/null
     restore_kindle_ui
 }
 trap cleanup EXIT INT TERM HUP
@@ -77,6 +92,28 @@ trap cleanup EXIT INT TERM HUP
 log() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') [book] $1" >> "$LOG_FILE"
 }
+
+log "打开天气台历 (BOOK_FULLSCREEN=${BOOK_FULLSCREEN:-false})"
+init_book_display
+
+# 等待首次拉取期间先显示上次的整图缓存，避免空白
+if [ -f "$DASH_PNG" ]; then
+    show_dashboard_png "$DASH_PNG" 1
+fi
+
+# ── v2：拉起 dash.sh 守护并常驻等待 ──
+if [ -f "$DASH_SH" ]; then
+    log "启动 dash.sh 守护（v2 分区模式）"
+    "$DASH_SH" >> "$LOG_FILE" 2>&1 &
+    dash_pid=$!
+    echo "$dash_pid" > "$DASH_PIDFILE"
+    wait "$dash_pid"
+    log "dash.sh 已退出"
+    exit 0
+fi
+
+# ── v1 回退：本书自带整图循环（无 dash.sh 时）──
+log "未找到 dash.sh，回退 v1 整图模式"
 
 fetch_png() {
     if command -v wget >/dev/null 2>&1; then
@@ -101,13 +138,6 @@ refresh_once() {
     wifi_off
     return $ok
 }
-
-log "打开天气台历 (BOOK_FULLSCREEN=${BOOK_FULLSCREEN:-false})"
-init_book_display
-
-if [ -f "$DASH_PNG" ]; then
-    show_dashboard_png "$DASH_PNG" 1
-fi
 
 refresh_once
 

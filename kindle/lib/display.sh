@@ -84,7 +84,8 @@ show_dashboard_png() {
 }
 
 wifi_on() {
-    if [ "$WIFI_ON_DEMAND" != "true" ] && ping -c 1 -W 3 8.8.8.8 >/dev/null 2>&1; then
+    # 8.8.8.8 在国内网络常不可达，用阿里 DNS 探测，避免误判掉线多等 15s
+    if [ "$WIFI_ON_DEMAND" != "true" ] && ping -c 1 -W 3 223.5.5.5 >/dev/null 2>&1; then
         return 0
     fi
     lipc-set-prop com.lab126.cmd wirelessEnable 1 2>/dev/null

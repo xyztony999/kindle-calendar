@@ -12,7 +12,8 @@ find_fbink() {
     if [ -n "$FBINK" ] && [ -x "$FBINK" ]; then
         return 0
     fi
-    if [ -x "$DASH_DIR/bin/fbink" ]; then
+    # 必须同时是文件且可执行：误放目录时 -x 也为真，会把目录当二进制执行导致白屏
+    if [ -f "$DASH_DIR/bin/fbink" ] && [ -x "$DASH_DIR/bin/fbink" ]; then
         FBINK="$DASH_DIR/bin/fbink"
         return 0
     fi

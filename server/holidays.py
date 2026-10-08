@@ -19,10 +19,14 @@ import requests
 
 log = logging.getLogger(__name__)
 
-# 仅允许访问的固定主机（holiday-cn 官方发布地址）；年份由服务端日期计算并做整数校验
-HOLIDAY_CN_HOST = "raw.githubusercontent.com"
-HOLIDAY_CN_PATH_PREFIX = "/NateScarlet/holiday-cn/master/"
-ALLOWED_HOSTS = {HOLIDAY_CN_HOST}
+# 数据源（固定 URL 模板，仅 https，主机白名单校验）：
+# Gitee 镜像优先（国内可达，年度数据更新无需重新部署镜像），官方 GitHub 次之，
+# 都失败时回退内置 server/holidays_data/<年>.json
+HOLIDAY_CN_SOURCES = (
+    "https://raw.giteeusercontent.com/xyztony999/holiday-cn/raw/master/{year}.json",
+    "https://raw.githubusercontent.com/NateScarlet/holiday-cn/master/{year}.json",
+)
+ALLOWED_HOSTS = {"raw.giteeusercontent.com", "raw.githubusercontent.com"}
 YEAR_MIN, YEAR_MAX = 2020, 2100
 CACHE_TTL = 12 * 3600
 
@@ -37,14 +41,16 @@ def _parse_days(raw: dict) -> dict[str, dict]:
     return {d["date"]: {"name": d.get("name", ""), "off": bool(d.get("isOffDay"))} for d in raw.get("days", [])}
 
 
-def _build_url(year: int) -> str | None:
+def _build_urls(year: int) -> list[str]:
     if not (YEAR_MIN <= year <= YEAR_MAX):
-        return None
-    url = f"https://{HOLIDAY_CN_HOST}{HOLIDAY_CN_PATH_PREFIX}{year}.json"
-    parts = urlsplit(url)
-    if parts.scheme != "https" or parts.hostname not in ALLOWED_HOSTS or not parts.path.startswith(HOLIDAY_CN_PATH_PREFIX):
-        return None
-    return url
+        return []
+    urls: list[str] = []
+    for tpl in HOLIDAY_CN_SOURCES:
+        url = tpl.format(year=year)
+        parts = urlsplit(url)
+        if parts.scheme == "https" and parts.hostname in ALLOWED_HOSTS:
+            urls.append(url)
+    return urls
 
 
 def _load_year(year: int) -> dict[str, dict]:
@@ -52,16 +58,18 @@ def _load_year(year: int) -> dict[str, dict]:
     with _lock:
         if year in _cache and now - _fetched_at.get(year, 0) < CACHE_TTL:
             return _cache[year]
-    url = _build_url(year)
+    url_list = _build_urls(year)
     data: dict[str, dict] = {}
-    if url is not None:
+    for url in url_list:
         try:
             # 禁止重定向，避免跳转到未知主机
             resp = requests.get(url, timeout=10, allow_redirects=False)
             resp.raise_for_status()
             data = _parse_days(resp.json())
+            if data:
+                break
         except Exception as exc:
-            log.warning("holiday-cn %s 拉取失败: %s", year, exc)
+            log.warning("holiday-cn %s 拉取失败(%s): %s", year, urlsplit(url).hostname, exc)
     if not data:
         bundled = BUNDLED_DIR / f"{year}.json"
         if bundled.is_file():

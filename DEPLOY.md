@@ -171,4 +171,4 @@ vi .env && docker compose -f docker-compose.acr.yml up -d
 | WSL 里用 `/mnt/c` 下的密钥报 `bad permissions` | Windows 盘挂载到 WSL 后权限恒为 0777 且 chmod 无效；把密钥复制进 WSL 家目录：`cp /mnt/c/.../key ~/.ssh/ && chmod 600 ~/.ssh/key` |
 | `docker compose` 不存在 | 宝塔安装 Docker 时勾选 docker-compose 插件；或使用 `docker-compose`（v1）命令 |
 | 服务器是 ARM 实例 | 把 workflow 里 `platforms: linux/amd64` 改为 `linux/arm64` |
-| ACR 拉取慢 | 服务器与 ACR 同地域时可改用控制台同页显示的 VPC 地址 |
+| ACR 拉取慢 | `.env` 的 `ACR_IMAGE` 可填控制台同页显示的 **VPC 地址**（同地域服务器内网拉取，不占公网带宽）。SSH 部署脚本会自动读取 `.env` 里的仓库主机并登录，公网/VPC 地址均支持 |

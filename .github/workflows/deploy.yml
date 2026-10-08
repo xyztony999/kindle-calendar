@@ -48,7 +48,11 @@ jobs:
           script: |
             set -e
             cd /www/wwwroot/kindle-calendar
-            echo "${{ secrets.ACR_PASSWORD }}" | docker login "${{ secrets.ACR_REGISTRY }}" -u "${{ secrets.ACR_USERNAME }}" --password-stdin
+            # 从 .env 的 ACR_IMAGE 提取实际使用的仓库主机（公网或 VPC 地址均可），保证登录的仓库与拉取的一致
+            ACR_HOST=$(grep -E '^ACR_IMAGE=' .env | head -1 | tr -d '\r' | cut -d= -f2- | cut -d/ -f1)
+            if [ -z "$ACR_HOST" ]; then echo "ERROR: .env 中未配置 ACR_IMAGE"; exit 1; fi
+            echo "登录镜像仓库: ${ACR_HOST}"
+            echo "${{ secrets.ACR_PASSWORD }}" | docker login "${ACR_HOST}" -u "${{ secrets.ACR_USERNAME }}" --password-stdin
             docker compose -f docker-compose.acr.yml pull
             docker compose -f docker-compose.acr.yml up -d
             sleep 5

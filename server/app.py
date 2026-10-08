@@ -9,6 +9,7 @@ from pathlib import Path
 
 import yaml
 from flask import Flask, Response, jsonify, request
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from server.service import DashboardService
 
@@ -164,7 +165,9 @@ def main() -> None:
     create_app().run(host=host, port=port, debug=False)
 
 
-app = create_app()
+# nginx TLS 终结后经 X-Forwarded-Proto 传递真实协议，
+# 否则 dashboard.env 里的分区图 URL 会退化为 http://（或反代未传 Host 时退化为 127.0.0.1）
+app = ProxyFix(create_app(), x_proto=1)
 
 
 if __name__ == "__main__":

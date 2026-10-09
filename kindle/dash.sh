@@ -172,15 +172,18 @@ sync_glyphs() {
 
     mkdir -p "$GLYPH_DIR"
     # 原子同步：全部拉取成功才替换旧字形，失败保留旧集（避免半套字形白块）
+    # 注意：冒号字形本地存为 colon.png —— /mnt/us 文件系统不允许文件名含 ':'
     ok=0
     for g in 0 1 2 3 4 5 6 7 8 9 :; do
-        if fetch_url "$GLYPH_DIR/$g.new" "${CLOCK_GLYPH_URL_PREFIX}$g.png"; then
+        if [ "$g" = ":" ]; then name="colon"; else name="$g"; fi
+        if fetch_url "$GLYPH_DIR/$name.new" "${CLOCK_GLYPH_URL_PREFIX}$g.png"; then
             ok=$((ok + 1))
         fi
     done
     if [ "$ok" -eq 11 ]; then
         for g in 0 1 2 3 4 5 6 7 8 9 :; do
-            mv "$GLYPH_DIR/$g.new" "$GLYPH_DIR/$g.png"
+            if [ "$g" = ":" ]; then name="colon"; else name="$g"; fi
+            mv "$GLYPH_DIR/$name.new" "$GLYPH_DIR/$name.png"
         done
         echo "$key" > "$STATE_DIR/glyph.key"
         rm -f "$STATE_DIR/clock.last"
@@ -204,16 +207,18 @@ draw_clock() {
     while [ "$i" -le 5 ]; do
         if [ "$i" -eq 3 ]; then
             c=":"
+            file="colon"  # 冒号字形本地文件名（文件系统不允许 ':'）
             w="$CLOCK_COLON_W"
             prev=":"
         else
             if [ "$i" -le 2 ]; then idx="$i"; else idx=$((i - 1)); fi
             c="$(printf '%s' "$str" | cut -c "$idx")"
             prev="$(printf '%s' "$last" | cut -c "$idx")"
+            file="$c"
             w="$CLOCK_DIGIT_W"
         fi
-        if [ "$c" != "$prev" ] && [ -f "$GLYPH_DIR/$c.png" ]; then
-            fbink_img "$GLYPH_DIR/$c.png" "$x" "$CLOCK_Y" A2 0
+        if [ "$c" != "$prev" ] && [ -f "$GLYPH_DIR/$file.png" ]; then
+            fbink_img "$GLYPH_DIR/$file.png" "$x" "$CLOCK_Y" A2 0
         fi
         x=$((x + w + CLOCK_GAP))
         i=$((i + 1))

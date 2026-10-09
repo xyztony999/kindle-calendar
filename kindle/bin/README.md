@@ -20,4 +20,25 @@ scp kindle/bin/fbink root@<Kindle的IP>:/mnt/us/kindle-calendar/bin/fbink
 没有 fbink 也能用：`dash.sh` 会自动回退 v1 整图模式（eips），
 只是没有分钟级时钟和分区刷新。
 
-> P2 触摸翻页时，本目录还会放入 `tapread`（触摸事件读取助手）。
+## tapread（v2.1 触摸翻页，可选）
+
+源码在本目录 `tapread.c`：读取触摸屏 evdev 设备，输出 `D x y` / `U x y`
+行协议（长按/点击判定由 dash.sh 完成）。自动按名称探测触摸设备，
+找不到时回退含 ABS_MT 能力的设备。
+
+**需要交叉编译**（Kindle 上无工具链）：
+
+```bash
+# Ubuntu/Debian: apt install gcc-arm-linux-gnueabi
+arm-linux-gnueabi-gcc -O2 -static -o tapread tapread.c
+scp tapread root@<Kindle的IP>:/mnt/us/kindle-calendar/bin/tapread
+ssh root@<Kindle的IP> "chmod +x /mnt/us/kindle-calendar/bin/tapread"
+```
+
+验证：`ssh root@<Kindle的IP> /mnt/us/kindle-calendar/bin/tapread`，
+点按屏幕应输出 `D x y` / `U x y` 行（Ctrl-C 退出）。
+
+放置 tapread 后 `dash.sh` 自动进入沉浸模式并启用手势（左右边缘翻页、
+月历页左右下角翻月、右上角刷新、长按右上角退出、底部中央夜间反色）；
+不放则仅有自动轮播（今日页 120s、其余 30s）。
+

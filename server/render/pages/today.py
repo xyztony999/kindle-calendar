@@ -1,4 +1,4 @@
-"""今日页：印刷杂志风分区渲染 + 时钟字形 + 合成图。"""
+"""今日页：分区渲染 + 时钟字形。页眉/页脚见 common.py。"""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from PIL import Image, ImageDraw
 
 from server.icons import draw_weather_icon
 from server.render import style
+from server.render.pages import common
 from server.render.regions import ClockMetrics, Rect, clock_metrics, today_regions
 from server.render.scene import render_scene
 
@@ -28,30 +29,7 @@ def _font(payload_size: float, base: int, font_path: str):
 
 
 def render_header(payload: dict, rect: Rect, font_path: str) -> Image.Image:
-    img = Image.new("L", (rect.w, rect.h), style.PAPER)
-    draw = ImageDraw.Draw(img)
-    sx = rect.w / 646
-
-    date = payload["date"]
-    holiday = payload.get("holiday")
-
-    style.hairline(draw, 0, 2, rect.w)
-    style.hairline(draw, 0, rect.h - 3, rect.w)
-
-    f_big = _font(sx, 46, font_path)
-    f_small = _font(sx, 24, font_path)
-
-    draw.text((2, 14), date["month_day_cn"], fill=style.INK, font=f_big)
-
-    style.draw_text_right(draw, rect.w, 14, f"{date['lunar']} · {date['ganzhi_year']}{date['zodiac']}年", f_small, style.MID)
-
-    weekday_line = f"星期{date['weekday']}"
-    notes = list(date.get("festivals") or [])
-    if holiday:
-        notes.append(f"{holiday['name']}{holiday['note']}")
-    if notes:
-        weekday_line += " · " + " · ".join(notes[:2])
-    style.draw_text_right(draw, rect.w, 48, weekday_line, f_small, style.INK)
+    return common.render_header(payload, rect, font_path, page="today")
     return img
 
 
@@ -127,46 +105,30 @@ def render_sun(payload: dict, rect: Rect, font_path: str) -> Image.Image:
 
 
 def render_quote(payload: dict, rect: Rect, font_path: str) -> Image.Image:
-    img = Image.new("L", (rect.w, rect.h), style.PAPER)
-    draw = ImageDraw.Draw(img)
-    sx = rect.w / 646
+    return common.render_quote(payload, rect, font_path)
 
-    quote = payload["quote"]
-    text = f"「{quote['text']}」"
-    if quote.get("from"):
-        text += f" ——{quote['from']}"
 
-    # 长句自适应：字号从基准向下收缩直至放得下（最低 60%）
-    size = 27
-    f_quote = _font(sx, size, font_path)
-    while size > 16 and style.tracked_width(draw, text, f_quote) > rect.w - 12:
-        size -= 2
-        f_quote = _font(sx, size, font_path)
-
-    style.draw_text_center(draw, rect.w // 2, (rect.h - style.text_size(draw, text, f_quote)[1]) // 2, text, f_quote, style.MID)
-    return img
+def render_scene_region(payload: dict, rect: Rect, font_path: str) -> Image.Image:
+    code = payload["weather"]["current"]["code"]
+    return render_scene(
+        code, _is_day(payload), payload["sun"].get("phase", 0.5), datetime.fromisoformat(payload["clock"]["iso"]), rect.w, rect.h
+    )
 
 
 def render_regions(payload: dict, width: int, height: int, font_path: str) -> dict[str, Image.Image]:
     """渲染今日页的五个内容分区（时钟由设备端字形拼装，不在其中）。"""
     regions = today_regions(width, height)
-    now = datetime.fromisoformat(payload["clock"]["iso"])
-    out: dict[str, Image.Image] = {}
 
+    out: dict[str, Image.Image] = {}
     for name, fn in (
         ("header", render_header),
         ("weather", render_weather),
         ("sun", render_sun),
+        ("scene", render_scene_region),
         ("quote", render_quote),
     ):
         rect = regions[name]
         out[name] = fn(payload, rect, font_path)
-
-    scene_rect = regions["scene"]
-    code = payload["weather"]["current"]["code"]
-    out["scene"] = render_scene(
-        code, _is_day(payload), payload["sun"].get("phase", 0.5), now, scene_rect.w, scene_rect.h
-    )
     return out
 
 
@@ -194,7 +156,7 @@ def compose(
     font_path: str,
     glyphs: dict[str, Image.Image] | None = None,
 ) -> Image.Image:
-    """合成整页（/dashboard.png 与本地预览用），含当前时间时钟。"""
+    """合成今日页整页（含当前时间时钟）。其余页的合成见 render.compose_page。"""
     canvas = Image.new("L", (width, height), style.PAPER)
     regions = today_regions(width, height)
 
@@ -209,7 +171,7 @@ def compose(
     metrics = clock_metrics(width, height)
     x0 = (width - metrics.total_w()) // 2
     y0 = regions["clock"].y + (regions["clock"].h - metrics.digit_h) // 2
-    hhmm = payload["clock"]["now"]  # "14:23"
+    hhmm = payload["clock"]["now"]
     sequence = [hhmm[0], hhmm[1], ":", hhmm[3], hhmm[4]]
     x = x0
     for glyph in sequence:

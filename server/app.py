@@ -11,6 +11,7 @@ import yaml
 from flask import Flask, Response, jsonify, request
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+from server.render import PAGES
 from server.service import DashboardService
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -69,7 +70,7 @@ def load_config() -> dict:
     return config
 
 
-_REGION_RE = re.compile(r"^[a-z]+$")
+_REGION_RE = re.compile(r"^[a-z0-9-]+$")
 _GLYPH_RE = re.compile(r"^[0-9:]$")
 
 
@@ -94,13 +95,13 @@ def create_app() -> Flask:
         return jsonify(
             {
                 "name": "kindle-calendar",
-                "version": 2,
+                "version": 2.1,
                 "endpoints": {
                     "/api/v1/dashboard.json": "台历数据 JSON",
-                    "/api/v1/dashboard.env": "设备端 POSIX env 配置",
-                    "/r/today/<region>.png": "今日页分区图",
+                    "/api/v1/dashboard.env": "设备端 POSIX env 配置（五页分区+轮播参数）",
+                    "/r/<page>/<region>.png": "页面分区图（today/week/month/detail/almanac）",
                     "/r/today/clock/<glyph>.png": "时钟字形（0-9 与冒号）",
-                    "/dashboard.png": "整页合成图（v1 兼容）",
+                    "/dashboard.png?page=": "整页合成图（v1 兼容，默认 today）",
                     "/weather": "当前天气 JSON",
                     "/health": "健康检查",
                 },
@@ -122,9 +123,9 @@ def create_app() -> Flask:
 
     @app.get("/r/<page>/<region>.png")
     def region_png(page: str, region: str):
-        if page != "today" or not _REGION_RE.match(region):
+        if page not in PAGES or not _REGION_RE.match(region):
             return Response("not found", status=404)
-        rendered = service.get_region(region)
+        rendered = service.get_region(page, region)
         if rendered is None:
             return Response("not found", status=404)
         return _png_response(rendered.png, rendered.etag)
@@ -138,7 +139,11 @@ def create_app() -> Flask:
 
     @app.get("/dashboard.png")
     def dashboard_png():
-        png = service.get_composite()
+        page = request.args.get("page", "today")
+        if page not in PAGES:
+            log.warning("未知页面参数 page=%s，回退 today", page)
+            page = "today"
+        png = service.get_composite(page)
         return _png_response(png, max_age=60)
 
     @app.get("/weather")

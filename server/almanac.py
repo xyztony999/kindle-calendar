@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+import calendar as _calendar
+from datetime import date, datetime
 
 from lunar_python import Solar
+
+from server import holidays
 
 CN_DIGITS = "〇一二三四五六七八九"
 
@@ -66,3 +69,49 @@ def _day_cn(d: int) -> str:
     if d == 30:
         return "三十"
     return "三十一"
+
+
+# ── 月历网格：按月缓存每日角标信息（农历/节气/节日/班休）──
+
+_grid_cache: dict[tuple[int, int], dict] = {}
+
+
+def month_grid_info(year: int, month: int) -> dict:
+    """返回 {"weeks": [[day,...]], "days": {day: {lunar, jieqi, fest, holiday}}}。
+
+    weeks 为周一起始的月历矩阵（0 表示上月/下月占位）。
+    """
+    key = (year, month)
+    cached = _grid_cache.get(key)
+    if cached is not None:
+        return cached
+
+    weeks = _calendar.Calendar(firstweekday=0).monthdayscalendar(year, month)
+    days: dict[int, dict] = {}
+    for week in weeks:
+        for day in week:
+            if day == 0:
+                continue
+            lunar = Solar.fromYmd(year, month, day).getLunar()
+            lunar_day = lunar.getDayInChinese()
+            if lunar.getDay() == 1:  # 初一显示月名（农历月起始）
+                lunar_month = lunar.getMonth()
+                leap = "闰" if lunar_month < 0 else ""
+                lunar_day = f"{leap}{lunar.getMonthInChinese()}月"
+            fests = list(dict.fromkeys(lunar.getFestivals() + solar_festivals(year, month, day)))
+            days[day] = {
+                "lunar": lunar_day,
+                "jieqi": lunar.getJieQi(),
+                "fest": fests[0] if fests else "",
+                "holiday": holidays.day_info(date(year, month, day)),
+            }
+
+    result = {"weeks": weeks, "days": days}
+    if len(_grid_cache) > 24:  # 覆盖两整年足矣
+        _grid_cache.clear()
+    _grid_cache[key] = result
+    return result
+
+
+def solar_festivals(year: int, month: int, day: int) -> list[str]:
+    return Solar.fromYmd(year, month, day).getFestivals()

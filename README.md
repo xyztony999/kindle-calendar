@@ -112,12 +112,19 @@ ssh root@<Kindle的IP> "chmod +x /mnt/us/kindle-calendar/*.sh /mnt/us/kindle-cal
 |------|--------|------|
 | `API_URL` | — | 云端 v2 env 端点，分区模式总入口 |
 | `CLOCK_ENABLED` | 1 | 分钟级时钟（本地跳，不耗网络） |
+| `ROTATE_ENABLED` | 1 | 自动轮播（无触摸时的导航）：今日页 120s、其余 30s |
+| `ROTATE_TODAY_S` / `ROTATE_OTHER_S` | 120 / 30 | 轮播停留秒数（留空用服务端默认） |
+| `ROTATE_SUPPRESS_S` | 600 | 触摸后轮播让位秒数 |
 | `SERVER_URL` | — | v1 整图地址（回退模式使用） |
 | `INTERVAL` | 900 | 数据拉取间隔（秒），建议 ≥ 900；时钟每分钟走不受此限 |
 | `FULL_REFRESH_EVERY` | 6 | v1 模式：每 N 次局部刷新后全刷 |
 | `WIFI_ON_DEMAND` | false | false=保持 WiFi；true=拉完关 WiFi 省电 |
 | `BOOK_FULLSCREEN` | false | 脚本书模式：false=按 Home 回书库；true=全屏沉浸 |
 | `WIFI_WAIT` | 15 | 开 WiFi 后等待连接秒数 |
+
+**触摸翻页（可选）**：交叉编译 `kindle/bin/tapread.c`（方法见 `kindle/bin/README.md`）
+放到设备后自动启用：左右边缘翻页、月历页左右下角翻月、右上角刷新、长按右上角
+退出沉浸、底部中央夜间反色。启动时先全刷清屏，消除与旧画面的重影。
 
 **方式 A：后台守护（`dash.sh`）**
 
@@ -220,10 +227,10 @@ python -m server.app               # http://localhost:8080/dashboard.png
 | 路径 | 说明 |
 |------|------|
 | `GET /api/v1/dashboard.json` | 台历全量数据（天气/农历/节气/黄历/月相/一言/节假日） |
-| `GET /api/v1/dashboard.env` | 设备端 POSIX env（分区坐标 + URL + ETAG） |
-| `GET /r/today/<region>.png` | 今日页分区灰度图（header/weather/sun/scene/quote） |
+| `GET /api/v1/dashboard.env` | 设备端 POSIX env（五页分区坐标/URL/ETAG + 轮播参数） |
+| `GET /r/<page>/<region>.png` | 页面分区灰度图（page: today/week/month/detail/almanac；month 含 grid-prev/grid-next 三月预裁） |
 | `GET /r/today/clock/<g>.png` | 时钟字形（0-9 与 `:`） |
-| `GET /dashboard.png` | 整页合成图（v1 兼容，8 位灰度 PNG） |
+| `GET /dashboard.png?page=` | 整页合成图（v1 兼容，默认 today，可指定五页） |
 | `GET /weather` | 当前天气 JSON |
 | `GET /health` | 健康检查 |
 
@@ -280,10 +287,12 @@ kindle-calendar/
 
 ## 扩展
 
-v2 路线图（详见 [docs/v2-design.md](docs/v2-design.md)）：
+v2 路线图（详见 [docs/v2-design.md](docs/v2-design.md) 与
+`profiles/kindle-calendar/workspace/`（设计文档））：
 
 - **P1（已完成）**：分区刷新 + 分钟级时钟 + 印刷杂志风今日页
-- **P2**：触摸翻页 + 一周/月历/详情/老黄历页面集
+- **P2（已完成）**：五页面集（今日/一周/月历/详情/黄历）+ 触摸/轮播双导航 +
+  三月预裁翻月 + 启动清屏
 - **P3**：ICS 个人日程订阅等内容扩展
 
 其它：接入 Home Assistant → 用 Playwright 截图 HA 面板做新分区；使用

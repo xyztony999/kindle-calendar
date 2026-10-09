@@ -158,7 +158,8 @@ static int open_touch(void) {
     unsigned pl = slen(pre);
 
     for (int i = 0; i < 32; i++) {
-        /* path = pre + i 的十进制（无除法拼法） */
+        /* path = 前缀 + i 的十进制（无除法拼法） */
+        memcpy(path, pre, pl);
         unsigned k = pl;
         if (i >= 20) {
             path[k++] = '2';
@@ -170,13 +171,35 @@ static int open_touch(void) {
             path[k++] = (char)('0' + i);
         }
         path[k] = 0;
+        wstr(2, "tapread: try ");
+        wstr(2, path);
+        wstr(2, " k=");
+        wuint(2, k);
+        wstr(2, " pl=");
+        wuint(2, pl);
+        wstr(2, " p0=");
+        wuint(2, (u32)(unsigned char)path[0]);
+        wstr(2, " pre0=");
+        wuint(2, (u32)(unsigned char)pre[0]);
+        wstr(2, "\n");
         long fd = sys3(SYS_OPEN, (long)path, 0 /*O_RDONLY*/, 0);
-        if (fd < 0)
+        if (fd < 0) {
+            /* 调试：open 失败码（负值=errno） */
+            wstr(2, "tapread: open ");
+            wstr(2, path);
+            wstr(2, " err=");
+            wint(2, (s32)fd);
+            wstr(2, "\n");
             continue;
+        }
         memset(name, 0, sizeof(name));
         long r = sys3(SYS_IOCTL, fd, (long)EVIOCGNAME(sizeof(name) - 1), (long)name);
         if (r > 0) {
-            name[r] = 0;
+            wstr(2, "tapread: probe ");
+            wstr(2, path);
+            wstr(2, " name=[");
+            wstr(2, name);
+            wstr(2, "]\n");
             for (int t = 0; TOUCH_KEYS[t]; t++) {
                 if (seq_contains(name, TOUCH_KEYS[t])) {
                     wstr(2, "tapread: using ");
@@ -192,6 +215,7 @@ static int open_touch(void) {
     }
     /* 回退：第一个带 ABS_MT_POSITION_X 能力的设备 */
     for (int i = 0; i < 6; i++) {
+        memcpy(path, pre, pl);
         unsigned k = pl;
         path[k++] = (char)('0' + i);
         path[k] = 0;

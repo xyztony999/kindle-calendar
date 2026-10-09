@@ -230,7 +230,9 @@ draw_clock() {
 do_fetch() {
     wifi_on
     wait_for_network
+    ENV_OK=0
     if env_sync; then
+        ENV_OK=1
         for p in ${PAGES:-today}; do
             upper=$(printf '%s' "$p" | tr '[:lower:]' '[:upper:]')
             eval regions=\"\$R_${upper}_REGIONS\"
@@ -249,7 +251,9 @@ do_fetch() {
         log "env 拉取失败"
     fi
     wifi_off
-    goto_page "$CUR_PAGE"
+    if goto_page "$CUR_PAGE"; then
+        READY_DRAWN=1
+    fi
 }
 
 redraw_all_flash() {
@@ -358,6 +362,8 @@ apply_gestures() {
 # ───────── 页面焦点 ─────────
 
 switch_page() {
+    # 首次成功绘制内容前不切页（env 未就绪时无可画资产，切了也只换焦点不换画面）
+    [ "$READY_DRAWN" = "1" ] || return 0
     dir="$1"
     set -- $PAGES
     n=$#
@@ -371,10 +377,15 @@ switch_page() {
     else
         i=$((i - 1)); [ "$i" -lt 1 ] && i=$n
     fi
-    eval 'CUR_PAGE=$'$i
+    eval 'new_page=$'$i
+    prev_page="$CUR_PAGE"
+    CUR_PAGE="$new_page"
     MONTH_OFFSET=0
-    rotate_arm
-    goto_page "$CUR_PAGE"
+    if goto_page "$CUR_PAGE"; then
+        rotate_arm
+    else
+        CUR_PAGE="$prev_page"  # 目标页无资产（如该页从未同步过）时回退，保持画面与状态一致
+    fi
 }
 
 change_month() {
@@ -424,7 +435,8 @@ v21_loop() {
     exit_request=0
     LAST_REFRESH=0
     ROTATE_UNTIL=0
-    READY=0  # 首次成功绘制前忽略触摸（framework 切换期的噪声事件不触发误退出）
+    READY=0        # 首次成功绘制前忽略触摸（framework 切换期的噪声事件不触发误退出）
+    READY_DRAWN=0  # 首次成功绘制分区内容前不轮播不切页（env 未就绪时无可画资产）
 
     # 触摸可用 → 沉浸模式（退出时恢复系统 UI）
     if [ -n "$TOUCH_ENABLED" ]; then
@@ -452,6 +464,8 @@ v21_loop() {
     rotate_arm
 
     last_fetch=$(date +%s)
+    # env 失败时快速重试（60s），成功后恢复正常 INTERVAL
+    [ "$ENV_OK" = "1" ] && FETCH_RETRY="$INTERVAL" || FETCH_RETRY=60
     last_day="$(date +%Y%m%d)"
     last_full="$(cat "$STATE_DIR/lastfull" 2>/dev/null)"
 
@@ -463,12 +477,13 @@ v21_loop() {
         [ "$CUR_PAGE" = "today" ] && draw_clock
 
         now=$(date +%s)
-        if [ "$ROTATE_ENABLED" = "1" ] && [ "$now" -ge "$ROTATE_DEADLINE" ] && [ "$now" -gt "$ROTATE_UNTIL" ]; then
+        if [ "$ROTATE_ENABLED" = "1" ] && [ "$READY_DRAWN" = "1" ] && [ "$now" -ge "$ROTATE_DEADLINE" ] && [ "$now" -gt "$ROTATE_UNTIL" ]; then
             switch_page next
         fi
-        if [ $((now - last_fetch)) -ge "$INTERVAL" ]; then
+        if [ $((now - last_fetch)) -ge "$FETCH_RETRY" ]; then
             do_fetch
             last_fetch=$(date +%s)
+            [ "$ENV_OK" = "1" ] && FETCH_RETRY="$INTERVAL" || FETCH_RETRY=60
         fi
 
         day="$(date +%Y%m%d)"

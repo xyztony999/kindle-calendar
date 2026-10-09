@@ -8,7 +8,7 @@ pipeline:
         note: "D0-D4 + Gate 1 PASS（2026-10-09）；报告见 05-reports/gate1-v2-pages.md"
       code:
         status: complete
-        note: "B1-B7 完成（2026-10-09）：五页渲染/env 契约/路由通用化/dash.sh v2.1/tapread.c/启动清屏；本地端点与出图验证通过，实现偏差见 api 文档附录；Gate 2 待确认"
+        note: "B1-B7 + 真机验收 + Gate 2 PASS（2026-10-10）：五页/env 契约/路由/dash.sh v2.1/tapread freestanding/滑动翻月/轮播圈清/防锁死；实现偏差见 api 文档附录；报告 05-reports/gate2-v2-pages.md"
     artifacts:
       architecture:
         - 00-architecture/business-arch.md (v1.0)

@@ -31,6 +31,9 @@ ROTATE_ENABLED=1
 ROTATE_TODAY_S=120
 ROTATE_OTHER_S=30
 ROTATE_SUPPRESS_S=600
+TOUCH_MODE=auto       # auto：验证后才沉浸 / force：立即沉浸 / off：纯轮播
+TOUCH_VERIFY_S=90     # auto 模式验证窗口
+TOUCH_DEAD_S=300      # 沉浸后无触摸事件多久自动恢复系统界面（防锁死）
 
 [ -f "$CONFIG" ] && . "$CONFIG"
 
@@ -345,7 +348,8 @@ translate_gesture() {
 # 主循环消费手势命令（在主 shell 中执行，状态可持久）
 apply_gestures() {
     [ "$READY" = "1" ] || return 0  # 首绘完成前忽略手势噪声
-    [ -f "$STATE_DIR/gesture.cmds" ] || return 0
+    [ -s "$STATE_DIR/gesture.cmds" ] || return 0
+    LAST_TOUCH_OK=$(date +%s)  # 有命令产出 = tapread 工作正常（看门狗续期）
     while read -r cmd; do
         [ -n "$cmd" ] || continue
         ROTATE_UNTIL=$(( $(date +%s) + ${ROTATE_SUPPRESS_S:-600} ))
@@ -440,11 +444,24 @@ v21_loop() {
     ROTATE_UNTIL=0
     READY=0        # 首次成功绘制前忽略触摸（framework 切换期的噪声事件不触发误退出）
     READY_DRAWN=0  # 首次成功绘制分区内容前不轮播不切页（env 未就绪时无可画资产）
+    IMMERSIVE=0    # 是否已停 framework 进入沉浸
+    TOUCH_START=0  # auto 验证窗口起点
+    LAST_TOUCH_OK=0
 
-    # 触摸可用 → 沉浸模式（退出时恢复系统 UI）
+    # 触摸策略（TOUCH_MODE）：
+    #   auto（默认）— tapread 先跑 TOUCH_VERIFY_S 秒，真的收到触摸事件才进沉浸；无事件则禁触摸、保持轮播+Home 可用
+    #   force        — 检测到 tapread 立即沉浸（旧行为，仅确信设备兼容时用）
+    #   off          — 不启触摸，纯轮播
     if [ -n "$TOUCH_ENABLED" ]; then
-        init_kindle_display
         start_tapread || { TOUCH_ENABLED=""; log "tapread 启动失败，降级轮播"; }
+        if [ "$TOUCH_MODE" = "force" ]; then
+            init_kindle_display
+            IMMERSIVE=1
+            IMMERSIVE_SINCE=$(date +%s)
+        elif [ "$TOUCH_MODE" = "auto" ]; then
+            TOUCH_START=$(date +%s)
+            log "触摸 auto 模式：${TOUCH_VERIFY_S}s 验证窗口（点几下屏幕）"
+        fi
     fi
 
     # 启动序列：清屏 → 拉取（失败也画缓存）→ 时钟（BR-3 清屏优先）
@@ -480,6 +497,38 @@ v21_loop() {
         [ "$CUR_PAGE" = "today" ] && draw_clock
 
         now=$(date +%s)
+
+        # auto 模式：验证窗口结束时决定是否进入沉浸
+        if [ -n "$TOUCH_ENABLED" ] && [ "$TOUCH_START" -gt 0 ] && [ "$now" -ge $((TOUCH_START + TOUCH_VERIFY_S)) ]; then
+            if [ "$LAST_TOUCH_OK" -gt "$TOUCH_START" ]; then
+                log "tapread 已验证（收到触摸事件），进入沉浸模式"
+                init_kindle_display
+                IMMERSIVE=1
+                IMMERSIVE_SINCE=$(date +%s)
+                clear_screen
+                redraw_all_flash
+            else
+                log "tapread ${TOUCH_VERIFY_S}s 内无事件输出，禁用触摸（轮播 + Home 键保持可用）"
+                stop_tapread
+                TOUCH_ENABLED=""
+            fi
+            TOUCH_START=0
+        fi
+
+        # 沉浸看门狗：长时间无触摸事件 → 自动恢复系统界面，绝不锁死
+        if [ "$IMMERSIVE" = "1" ]; then
+            if [ "$LAST_TOUCH_OK" -gt "$IMMERSIVE_SINCE" ]; then
+                IMMERSIVE_SINCE="$LAST_TOUCH_OK"
+            elif [ "$now" -ge $((IMMERSIVE_SINCE + TOUCH_DEAD_S)) ]; then
+                log "沉浸 ${TOUCH_DEAD_S}s 无触摸事件，自动恢复系统界面（防锁死看门狗）"
+                stop_tapread
+                TOUCH_ENABLED=""
+                restore_kindle_ui
+                IMMERSIVE=0
+                goto_page "$CUR_PAGE" 1
+            fi
+        fi
+
         if [ "$ROTATE_ENABLED" = "1" ] && [ "$READY_DRAWN" = "1" ] && [ "$now" -ge "$ROTATE_DEADLINE" ] && [ "$now" -gt "$ROTATE_UNTIL" ]; then
             switch_page next
         fi
@@ -553,7 +602,7 @@ v1_loop() {
 mkdir -p "$DASH_DIR"
 
 if [ -n "$API_URL" ] && find_fbink; then
-    if [ -f "$DASH_DIR/bin/tapread" ] && [ -x "$DASH_DIR/bin/tapread" ]; then
+    if [ "$TOUCH_MODE" != "off" ] && [ -f "$DASH_DIR/bin/tapread" ] && [ -x "$DASH_DIR/bin/tapread" ]; then
         TOUCH_ENABLED=1
     fi
     v21_loop

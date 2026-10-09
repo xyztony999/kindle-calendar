@@ -16,7 +16,16 @@ ROTATE_TODAY_S=120
 ROTATE_OTHER_S=30
 # 触摸后轮播让位秒数
 ROTATE_SUPPRESS_S=600
-# 触摸翻页：无需配置，检测到 bin/tapread 自动启用（构建方法见 bin/README.md）
+
+# ── 触摸模式（v2.1）──
+# auto（默认）：tapread 先跑 90s 验证，真的收到触摸事件才进沉浸模式；无事件则
+#               自动禁用触摸，保持轮播 + Home 键可用（不会锁死在沉浸里）
+# force       ：检测到 tapread 立即进沉浸（仅确信设备兼容时用）
+# off         ：纯轮播，不启触摸
+TOUCH_MODE=auto
+# auto 验证窗口秒数 / 沉浸后无触摸事件多久自动恢复系统界面（防锁死）
+TOUCH_VERIFY_S=90
+TOUCH_DEAD_S=300
 
 # ── v1 整图模式（回退用）──
 # API_URL 为空或缺少 fbink 时，回退为定时拉取整张 PNG

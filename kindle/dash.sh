@@ -309,12 +309,25 @@ poll_touch() {
     done
 }
 
-# 手势 → 命令行写入队列（NEXT_PAGE/PREV_PAGE/MONTH_PREV/MONTH_NEXT/INVERT/REFRESH/EXIT）
+# 手势 → 命令行写入队列
+#   NEXT_PAGE/PREV_PAGE/MONTH_PREV/MONTH_NEXT/INVERT/REFRESH/EXIT（点击热区）
+#   SWIPE_L/SWIPE_R（滑动：月历页=翻月，其余页=翻页）
 translate_gesture() {
     dx="$1" dy="$2" ux="$3" uy="$4" t0="$5"
     dt=$(( $(date +%s) - t0 ))
-    shift_dist=$((ux - dx)); [ "$shift_dist" -lt 0 ] && shift_dist=$((-shift_dist))
-    [ "$shift_dist" -gt 30 ] && return 0  # 滑动忽略
+    sdx=$((ux - dx)); [ "$sdx" -lt 0 ] && sdx=$((-sdx))
+    sdy=$((uy - dy)); [ "$sdy" -lt 0 ] && sdy=$((-sdy))
+
+    # 水平滑（位移 >50 且水平分量明显占优）
+    if [ "$sdx" -gt 50 ] && [ "$sdx" -gt $((sdy * 2)) ]; then
+        if [ "$ux" -gt "$dx" ]; then
+            echo "SWIPE_R" >> "$STATE_DIR/gesture.cmds"
+        else
+            echo "SWIPE_L" >> "$STATE_DIR/gesture.cmds"
+        fi
+        return 0
+    fi
+    [ "$sdx" -gt 30 ] && return 0  # 垂直/无意图滑动忽略
 
     # 热区（由 env 布局坐标推导）
     header_bot=$(( ${R_TODAY_HEADER_Y:-44} + ${R_TODAY_HEADER_H:-78} ))
@@ -330,10 +343,11 @@ translate_gesture() {
 
     if [ "$uy" -lt "$header_bot" ] && [ "$ux" -gt $((SCREEN_W - 80)) ]; then
         echo "REFRESH" >> "$STATE_DIR/gesture.cmds"
-    elif [ "$uy" -ge "$quote_top" ]; then
-        if [ "$ux" -lt 80 ]; then
+    elif [ "$uy" -ge 900 ]; then
+        # 底部：左右角（110px，翻月）；中央（反色）
+        if [ "$ux" -lt 110 ]; then
             echo "MONTH_PREV" >> "$STATE_DIR/gesture.cmds"
-        elif [ "$ux" -gt $((SCREEN_W - 80)) ]; then
+        elif [ "$ux" -gt $((SCREEN_W - 110)) ]; then
             echo "MONTH_NEXT" >> "$STATE_DIR/gesture.cmds"
         elif [ "$ux" -ge $((SCREEN_W / 2 - 100)) ] && [ "$ux" -le $((SCREEN_W / 2 + 100)) ]; then
             echo "INVERT" >> "$STATE_DIR/gesture.cmds"
@@ -358,6 +372,9 @@ apply_gestures() {
             PREV_PAGE) switch_page prev ;;
             MONTH_PREV) [ "$CUR_PAGE" = "month" ] && change_month -1 ;;
             MONTH_NEXT) [ "$CUR_PAGE" = "month" ] && change_month 1 ;;
+            # 滑动：月历页=翻月，其余页=翻页（滑动比角落热区好点）
+            SWIPE_L) if [ "$CUR_PAGE" = "month" ]; then change_month 1; else switch_page next; fi ;;
+            SWIPE_R) if [ "$CUR_PAGE" = "month" ]; then change_month -1; else switch_page prev; fi ;;
             INVERT) toggle_invert ;;
             REFRESH) manual_refresh ;;
             EXIT) exit_request=1; log "长按退出请求" ;;
@@ -530,7 +547,18 @@ v21_loop() {
         fi
 
         if [ "$ROTATE_ENABLED" = "1" ] && [ "$READY_DRAWN" = "1" ] && [ "$now" -ge "$ROTATE_DEADLINE" ] && [ "$now" -gt "$ROTATE_UNTIL" ]; then
-            switch_page next
+            # 轮播回到今日页 = 一圈结束：全刷清屏一次，清掉整圈累积的残影
+            if [ "$CUR_PAGE" = "almanac" ]; then
+                clear_screen
+                CUR_PAGE=today
+                MONTH_OFFSET=0
+                goto_page today
+                rm -f "$STATE_DIR/clock.last"
+                draw_clock
+                rotate_arm
+            else
+                switch_page next
+            fi
         fi
         if [ $((now - last_fetch)) -ge "$FETCH_RETRY" ]; then
             do_fetch

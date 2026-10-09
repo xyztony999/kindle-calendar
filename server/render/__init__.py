@@ -21,6 +21,7 @@ _RENDERERS = {
         "sun": today.render_sun,
         "scene": today.render_scene_region,
         "quote": common.render_quote,
+        "clockblank": common.render_blank,
     },
     "week": {
         "header": lambda p, r, f: common.render_header(p, r, f, page="week"),
@@ -53,7 +54,7 @@ _RENDERERS = {
 
 # 设备端 env 下发的每页分区清单（月历的 title/grid 由设备按偏移月展开三预裁键）
 PAGE_REGION_LISTS = {
-    "today": ["header", "weather", "sun", "scene", "quote"],
+    "today": ["header", "weather", "sun", "scene", "quote", "clockblank"],
     "week": ["header", "list", "chart", "quote"],
     "month": ["header", "title", "grid", "quote"],
     "detail": ["header", "hourly", "indices", "quote"],
@@ -80,9 +81,16 @@ def render_page_regions(page: str, payload: dict, width: int, height: int, font_
     """渲染一页的全部分区（月历含三月预裁），键为分区渲染键。"""
     rects = page_regions(page, width, height)
     renderers = _RENDERERS[page]
+    # 资产键 → 布局波段键（月历三预裁共用基准波段；clockblank 用 clock 波段）
+    _MONTH_KEYS = ("title-prev", "title-next", "grid-prev", "grid-next")
     out: dict[str, Image.Image] = {}
     for key, fn in renderers.items():
-        base = key.split("-")[0] if key in ("title-prev", "title-next", "grid-prev", "grid-next") else key
+        if key == "clockblank":
+            base = "clock"
+        elif key in _MONTH_KEYS:
+            base = key.split("-")[0]
+        else:
+            base = key
         out[key] = fn(payload, rects[base], font_path)
     return out
 

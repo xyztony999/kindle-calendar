@@ -40,6 +40,10 @@ restore_kindle_ui() {
     lipc-set-prop com.lab126.powerd preventScreenSaver 0 2>/dev/null
     initctl start webreader >/dev/null 2>&1
     /etc/init.d/framework start >/dev/null 2>&1
+    # framework 恢复后会尝试续启被中断的「脚本书」并报「无法启动选定程序」，
+    # 主动拉回主页 booklet 规避报错弹窗
+    sleep 2
+    lipc-set-prop com.lab126.appmgrd start "app://com.lab126.booklet.home" >/dev/null 2>&1
     FRAMEWORK_STOPPED=0
 }
 

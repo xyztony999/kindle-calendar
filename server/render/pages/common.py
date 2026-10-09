@@ -57,6 +57,12 @@ def render_header(payload: dict, rect: Rect, font_path: str, page: str) -> Image
     return img
 
 
+def render_blank(payload: dict, rect: Rect, font_path: str) -> Image.Image:
+    """纯白底分区：进今日页时先铺在时钟区，盖掉上一页残留（字形只盖数字格，
+    缝隙会漏旧内容）。"""
+    return Image.new("L", (rect.w, rect.h), style.PAPER)
+
+
 def render_quote(payload: dict, rect: Rect, font_path: str) -> Image.Image:
     img = Image.new("L", (rect.w, rect.h), style.PAPER)
     draw = ImageDraw.Draw(img)

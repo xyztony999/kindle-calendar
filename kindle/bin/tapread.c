@@ -3,13 +3,16 @@
  * 读取触摸屏 evdev 设备，向 stdout 输出行协议（API 契约 I-6）：
  *   D <x> <y>   触摸按下
  *   U <x> <y>   触摸抬起
+ * 调试模式（-v）：把所有 EV_ABS/EV_KEY/SYN 事件打到 stderr，
+ *   用于真机排查触摸协议（PW2 为 cyttsp4_mt，event1）。
  *
- * 长按/点击判定由 dash.sh 根据相邻 D/U 行的时间差完成。
- * 自动探测触摸设备：按名称匹配（cyttsp/atmel/goodix/elan/touch 等），
- * 找不到时回退遍历全部 event 设备。
+ * 按下/抬起判定（兼容 type-A / type-B 多点协议）：
+ *   BTN_TOUCH            → 1/0（权威）
+ *   ABS_MT_TRACKING_ID   → >=0 / -1
+ *   ABS_MT_PRESSURE 或 ABS_MT_TOUCH_MAJOR → >0 判按下（type-A 兜底）
  *
- * 交叉编译（在 PC 上，任一 ARM 交叉工具链均可）：
- *   arm-linux-gnueabi-gcc -O2 -static -o tapread tapread.c
+ * 交叉编译：
+ *   arm-linux-gnueabihf-gcc -O2 -static -o tapread tapread.c
  * 放置：/mnt/us/kindle-calendar/bin/tapread && chmod +x
  */
 
@@ -22,6 +25,8 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 
+static int verbose = 0;
+
 static int name_matches(const char *name)
 {
     static const char *keys[] = {
@@ -30,18 +35,6 @@ static int name_matches(const char *name)
     for (int i = 0; keys[i]; i++)
         if (strstr(name, keys[i]))
             return 1;
-    /* 大小写不敏感再扫一遍（如 "Touchscreen"） */
-    for (int i = 0; keys[i]; i++) {
-        size_t kl = strlen(keys[i]);
-        for (const char *p = name; *p; p++) {
-            size_t j;
-            for (j = 0; j < kl && p[j]; j++)
-                if (p[j] >= 'A' && p[j] <= 'Z' ? p[j] + 32 != keys[i][j] : p[j] != keys[i][j])
-                    break;
-            if (j == kl)
-                return 1;
-        }
-    }
     return 0;
 }
 
@@ -69,7 +62,7 @@ static int open_touch_device(const char *explicit_path)
         }
         close(fd);
     }
-    /* 名称探测失败：回退 event0..event5 中第一个有 ABS_MT 的设备 */
+    /* 名称探测失败：回退第一个有 ABS_MT 能力的设备 */
     for (int i = 0; i < 6; i++) {
         snprintf(path, sizeof(path), "/dev/input/event%d", i);
         int fd = open(path, O_RDONLY);
@@ -89,13 +82,20 @@ static int open_touch_device(const char *explicit_path)
 
 int main(int argc, char **argv)
 {
-    int fd = open_touch_device(argc > 1 ? argv[1] : NULL);
+    const char *explicit_path = NULL;
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "-v"))
+            verbose = 1;
+        else
+            explicit_path = argv[i];
+    }
+
+    int fd = open_touch_device(explicit_path);
     if (fd < 0) {
         fprintf(stderr, "tapread: no touchscreen found\n");
         return 1;
     }
 
-    /* 行缓冲 + 立即刷出，保证 dash.sh 每行可读 */
     setvbuf(stdout, NULL, _IOLBF, 0);
 
     struct input_event ev;
@@ -107,15 +107,33 @@ int main(int argc, char **argv)
             break;
 
         if (ev.type == EV_ABS) {
-            if (ev.code == ABS_MT_POSITION_X || ev.code == ABS_X)
+            switch (ev.code) {
+            case ABS_MT_POSITION_X:
+            case ABS_X:
                 x = ev.value;
-            else if (ev.code == ABS_MT_POSITION_Y || ev.code == ABS_Y)
+                break;
+            case ABS_MT_POSITION_Y:
+            case ABS_Y:
                 y = ev.value;
-            else if (ev.code == ABS_MT_TRACKING_ID)
+                break;
+            case ABS_MT_TRACKING_ID:
                 down = (ev.value >= 0);
+                break;
+            case ABS_MT_PRESSURE:
+            case ABS_MT_TOUCH_MAJOR:
+                if (ev.value > 0)
+                    down = 1;
+                break;
+            }
+            if (verbose)
+                fprintf(stderr, "E ABS code=%u val=%d\n", ev.code, ev.value);
         } else if (ev.type == EV_KEY && ev.code == BTN_TOUCH) {
             down = ev.value;
+            if (verbose)
+                fprintf(stderr, "E KEY BTN_TOUCH val=%d\n", ev.value);
         } else if (ev.type == EV_SYN && ev.code == SYN_REPORT) {
+            if (verbose)
+                fprintf(stderr, "E SYN down=%d x=%d y=%d\n", down, x, y);
             if (down && !emitted && x >= 0 && y >= 0) {
                 printf("D %d %d\n", x, y);
                 emitted = 1;

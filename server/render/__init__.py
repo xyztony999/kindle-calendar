@@ -110,7 +110,7 @@ def compose_page(
     regions = PAGE_REGION_LISTS[page]
     rendered = render_page_regions(page, payload, width, height, font_path)
     for name in regions:
-        rect = rects[name]
+        rect = rects["clock" if name == "clockblank" else name]
         canvas.paste(rendered[name], (rect.x, rect.y))
 
     if page == "today":

@@ -71,7 +71,7 @@ fetch_url() {
 wait_for_network() {
     i=0
     while [ "$i" -lt 10 ]; do
-        ping -c 1 -W 3 8.8.8.8 >/dev/null 2>&1 && return 0
+        ping -c 1 -W 3 223.5.5.5 >/dev/null 2>&1 && return 0
         i=$((i + 1))
         sleep 3
     done
@@ -82,13 +82,18 @@ wait_for_network() {
 # ───────── v2.1: 多页分区模式 ─────────
 
 env_sync() {
-    fetch_url "$CACHE_DIR/dashboard.env" "$API_URL" || return 1
-    # shellcheck disable=SC1090
-    . "$CACHE_DIR/dashboard.env"
-    # 恢复 config.sh 本地轮播覆盖
-    [ "$LOCAL_ROTATE_ENABLED" != "1" ] && ROTATE_ENABLED="$LOCAL_ROTATE_ENABLED"
-    [ -n "$LOCAL_ROTATE_TODAY_S" ] && [ "$LOCAL_ROTATE_TODAY_S" != "120" ] && ROTATE_TODAY_S="$LOCAL_ROTATE_TODAY_S"
-    [ -n "$LOCAL_ROTATE_OTHER_S" ] && [ "$LOCAL_ROTATE_OTHER_S" != "30" ] && ROTATE_OTHER_S="$LOCAL_ROTATE_OTHER_S"
+    if fetch_url "$CACHE_DIR/dashboard.env" "$API_URL"; then
+        # shellcheck disable=SC1090
+        . "$CACHE_DIR/dashboard.env"
+        # 恢复 config.sh 本地轮播覆盖
+        [ "$LOCAL_ROTATE_ENABLED" != "1" ] && ROTATE_ENABLED="$LOCAL_ROTATE_ENABLED"
+        [ -n "$LOCAL_ROTATE_TODAY_S" ] && [ "$LOCAL_ROTATE_TODAY_S" != "120" ] && ROTATE_TODAY_S="$LOCAL_ROTATE_TODAY_S"
+        [ -n "$LOCAL_ROTATE_OTHER_S" ] && [ "$LOCAL_ROTATE_OTHER_S" != "30" ] && ROTATE_OTHER_S="$LOCAL_ROTATE_OTHER_S"
+        return 0
+    fi
+    # 诊断：非静默重试一次，把 wget 的真实报错记进日志（DNS/TLS/路由）
+    log "env 拉取诊断: $(wget -T 10 -O /dev/null "$API_URL" 2>&1 | head -2 | tr '\n' ' ')"
+    return 1
 }
 
 # sync_region_asset <VAR前缀 如 TODAY_HEADER>：ETAG 变化时拉取资产（不绘制）
@@ -166,17 +171,22 @@ sync_glyphs() {
     [ "$old" = "$key" ] && return 0
 
     mkdir -p "$GLYPH_DIR"
-    rm -f "$GLYPH_DIR"/*.png
+    # 原子同步：全部拉取成功才替换旧字形，失败保留旧集（避免半套字形白块）
     ok=0
     for g in 0 1 2 3 4 5 6 7 8 9 :; do
-        if fetch_url "$GLYPH_DIR/$g.png" "${CLOCK_GLYPH_URL_PREFIX}$g.png"; then
+        if fetch_url "$GLYPH_DIR/$g.new" "${CLOCK_GLYPH_URL_PREFIX}$g.png"; then
             ok=$((ok + 1))
         fi
     done
     if [ "$ok" -eq 11 ]; then
+        for g in 0 1 2 3 4 5 6 7 8 9 :; do
+            mv "$GLYPH_DIR/$g.new" "$GLYPH_DIR/$g.png"
+        done
         echo "$key" > "$STATE_DIR/glyph.key"
+        rm -f "$STATE_DIR/clock.last"
         return 0
     fi
+    rm -f "$GLYPH_DIR"/*.new
     return 1
 }
 
@@ -211,7 +221,7 @@ draw_clock() {
     echo "$str" > "$STATE_DIR/clock.last"
 }
 
-# 拉取周期：同步全部页面资产，然后只重绘当前页
+# 拉取周期：同步全部页面资产；无论成败都重绘当前页（失败时画本地缓存，不清屏不白屏）
 do_fetch() {
     wifi_on
     wait_for_network
@@ -230,11 +240,11 @@ do_fetch() {
             done
         done
         sync_glyphs || log "字形同步失败"
-        goto_page "$CUR_PAGE"
     else
         log "env 拉取失败"
     fi
     wifi_off
+    goto_page "$CUR_PAGE"
 }
 
 redraw_all_flash() {
@@ -322,6 +332,7 @@ translate_gesture() {
 
 # 主循环消费手势命令（在主 shell 中执行，状态可持久）
 apply_gestures() {
+    [ "$READY" = "1" ] || return 0  # 首绘完成前忽略手势噪声
     [ -f "$STATE_DIR/gesture.cmds" ] || return 0
     while read -r cmd; do
         [ -n "$cmd" ] || continue
@@ -408,6 +419,7 @@ v21_loop() {
     exit_request=0
     LAST_REFRESH=0
     ROTATE_UNTIL=0
+    READY=0  # 首次成功绘制前忽略触摸（framework 切换期的噪声事件不触发误退出）
 
     # 触摸可用 → 沉浸模式（退出时恢复系统 UI）
     if [ -n "$TOUCH_ENABLED" ]; then
@@ -415,11 +427,23 @@ v21_loop() {
         start_tapread || { TOUCH_ENABLED=""; log "tapread 启动失败，降级轮播"; }
     fi
 
-    # 启动序列：清屏 → 拉取 → 绘制 → 时钟（BR-3 清屏优先）
+    # 启动序列：清屏 → 拉取（失败也画缓存）→ 时钟（BR-3 清屏优先）
     prevent_sleep
     clear_screen
     do_fetch
+
+    # 完全无分区缓存（首次部署/换机）→ 回退 v1 整图，保证不白屏
+    if ! ls "$CACHE_DIR"/*.png >/dev/null 2>&1; then
+        log "无分区缓存，回退 v1 整图: $SERVER_URL"
+        if fetch_url "$DASH_PNG" "$SERVER_URL"; then
+            show_dashboard_png "$DASH_PNG" 1
+        else
+            log "v1 整图也拉取失败（网络问题），保留白屏等待下轮重试"
+        fi
+    fi
+
     draw_clock
+    READY=1
     rotate_arm
 
     last_fetch=$(date +%s)

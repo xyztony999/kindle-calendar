@@ -114,17 +114,20 @@ sync_region_asset() {
     return 1
 }
 
-# draw_region <VAR前缀> [flash]：绘制分区（已绘制 ETAG 相同则跳过，flash=1 强制）
+# draw_region <VAR前缀> [flash] [force]：绘制分区
+#   flash=1 全刷；force=1 无视「已绘制 ETAG」跳过（翻页必须整页重绘——
+#   ETAG 跳过是"内容变了才画"，但切页时屏幕上是别的页，内容没变也得画）
 draw_region() {
     up="$1"
     flash="${2:-0}"
+    force="${3:-0}"
     lc=$(printf '%s' "$up" | tr '[:upper:]' '[:lower:]')
     eval x="\$R_${up}_X"
     eval y="\$R_${up}_Y"
     eval etag="\$R_${up}_ETAG"
     [ -f "$CACHE_DIR/$lc.png" ] || return 1
 
-    if [ "$flash" != "1" ]; then
+    if [ "$flash" != "1" ] && [ "$force" != "1" ]; then
         drawn=""
         [ -f "$STATE_DIR/$lc.etag" ] && drawn="$(cat "$STATE_DIR/$lc.etag")"
         [ "$drawn" = "$etag" ] && return 0
@@ -134,7 +137,7 @@ draw_region() {
     fi
 }
 
-# goto_page <page> [flash]：同步并整页绘制（flash=1 全刷）
+# goto_page <page> [flash]：同步并整页绘制（翻页语义：force 全量重绘）
 goto_page() {
     page="$1"
     flash="${2:-0}"
@@ -151,10 +154,10 @@ goto_page() {
                 *) suffix="_CUR" ;;
             esac
             sync_region_asset "${upper}_${r}${suffix}"
-            draw_region "${upper}_${r}${suffix}" "$flash"
+            draw_region "${upper}_${r}${suffix}" "$flash" 1
         else
             sync_region_asset "${upper}_${r}"
-            draw_region "${upper}_${r}" "$flash"
+            draw_region "${upper}_${r}" "$flash" 1
         fi
     done
     if [ "$page" = "today" ]; then

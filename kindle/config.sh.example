@@ -14,8 +14,8 @@ ROTATE_ENABLED=1
 # 轮播停留秒数：今日页 / 其余页（留空则用服务端 env 下发的默认值 120/30）
 ROTATE_TODAY_S=120
 ROTATE_OTHER_S=30
-# 触摸后轮播让位秒数
-ROTATE_SUPPRESS_S=600
+# 触摸后轮播让位秒数（触摸翻页后暂停轮播，2 分钟无操作即恢复）
+ROTATE_SUPPRESS_S=120
 
 # ── 触摸模式（v2.1）──
 # force（默认）：检测到 bin/tapread 即进入沉浸模式（tapread 已真机验证）

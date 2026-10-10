@@ -12,7 +12,9 @@ BASE_W, BASE_H = 758, 1024
 
 PAGES = ("today", "week", "month", "detail", "almanac")
 
-# 各页内容分区（基准 y 区间），页眉/页脚由公共骨架统一提供
+# 各页内容分区（基准 y 区间）。pageblank 为整页白底 underlay（122-948），
+# 先铺它再画内容分区——消除分区间缝隙里的上一页残留。
+# 各页共用页眉（44-122）与页脚一言（948-1000，共享资产）。
 _PAGE_BANDS: dict[str, dict[str, tuple[float, float]]] = {
     "today": {
         "header": (44, 122),
@@ -21,29 +23,34 @@ _PAGE_BANDS: dict[str, dict[str, tuple[float, float]]] = {
         "sun": (656, 788),
         "scene": (808, 932),
         "quote": (948, 1000),
+        "pageblank": (122, 948),
     },
     "week": {
         "header": (44, 122),
         "list": (130, 620),
         "chart": (640, 930),
         "quote": (948, 1000),
+        "pageblank": (122, 948),
     },
     "month": {
         "header": (44, 122),
         "title": (130, 190),
         "grid": (200, 930),
         "quote": (948, 1000),
+        "pageblank": (122, 948),
     },
     "detail": {
         "header": (44, 122),
         "hourly": (130, 560),
         "indices": (580, 930),
         "quote": (948, 1000),
+        "pageblank": (122, 948),
     },
     "almanac": {
         "header": (44, 122),
         "main": (130, 930),
         "quote": (948, 1000),
+        "pageblank": (122, 948),
     },
 }
 

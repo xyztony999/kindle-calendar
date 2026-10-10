@@ -16,20 +16,22 @@ from server.render.regions import PAGES, Rect, clock_metrics, page_regions, toda
 # 各页内容分区的渲染函数（quote 用公共共享资产）
 _RENDERERS = {
     "today": {
+        "pageblank": common.render_blank,
         "header": today.render_header,
         "weather": today.render_weather,
         "sun": today.render_sun,
         "scene": today.render_scene_region,
         "quote": common.render_quote,
-        "clockblank": common.render_blank,
     },
     "week": {
+        "pageblank": common.render_blank,
         "header": lambda p, r, f: common.render_header(p, r, f, page="week"),
         "list": _week_page.render_list,
         "chart": _week_page.render_chart,
         "quote": common.render_quote,
     },
     "month": {
+        "pageblank": common.render_blank,
         "header": lambda p, r, f: common.render_header(p, r, f, page="month"),
         "title": lambda p, r, f: _month_page.render_title(p, r, f, offset=0),
         "title-prev": lambda p, r, f: _month_page.render_title(p, r, f, offset=-1),
@@ -40,25 +42,28 @@ _RENDERERS = {
         "quote": common.render_quote,
     },
     "detail": {
+        "pageblank": common.render_blank,
         "header": lambda p, r, f: common.render_header(p, r, f, page="detail"),
         "hourly": _detail_page.render_hourly,
         "indices": _detail_page.render_indices,
         "quote": common.render_quote,
     },
     "almanac": {
+        "pageblank": common.render_blank,
         "header": lambda p, r, f: common.render_header(p, r, f, page="almanac"),
         "main": _almanac_page.render_main,
         "quote": common.render_quote,
     },
 }
 
-# 设备端 env 下发的每页分区清单（月历的 title/grid 由设备按偏移月展开三预裁键）
+# 设备端 env 下发的每页分区清单（顺序即绘制顺序：pageblank 最先铺白；
+# 月历的 title/grid 由设备按偏移月展开三预裁键）
 PAGE_REGION_LISTS = {
-    "today": ["header", "weather", "sun", "scene", "quote", "clockblank"],
-    "week": ["header", "list", "chart", "quote"],
-    "month": ["header", "title", "grid", "quote"],
-    "detail": ["header", "hourly", "indices", "quote"],
-    "almanac": ["header", "main", "quote"],
+    "today": ["pageblank", "header", "weather", "sun", "scene", "quote"],
+    "week": ["pageblank", "header", "list", "chart", "quote"],
+    "month": ["pageblank", "header", "title", "grid", "quote"],
+    "detail": ["pageblank", "header", "hourly", "indices", "quote"],
+    "almanac": ["pageblank", "header", "main", "quote"],
 }
 
 # (page, region) → 渲染键（月历偏移资产别名）
@@ -81,13 +86,11 @@ def render_page_regions(page: str, payload: dict, width: int, height: int, font_
     """渲染一页的全部分区（月历含三月预裁），键为分区渲染键。"""
     rects = page_regions(page, width, height)
     renderers = _RENDERERS[page]
-    # 资产键 → 布局波段键（月历三预裁共用基准波段；clockblank 用 clock 波段）
+    # 资产键 → 布局波段键（月历三预裁共用基准波段；pageblank 用自己的波段）
     _MONTH_KEYS = ("title-prev", "title-next", "grid-prev", "grid-next")
     out: dict[str, Image.Image] = {}
     for key, fn in renderers.items():
-        if key == "clockblank":
-            base = "clock"
-        elif key in _MONTH_KEYS:
+        if key in _MONTH_KEYS:
             base = key.split("-")[0]
         else:
             base = key
@@ -110,8 +113,7 @@ def compose_page(
     regions = PAGE_REGION_LISTS[page]
     rendered = render_page_regions(page, payload, width, height, font_path)
     for name in regions:
-        rect = rects["clock" if name == "clockblank" else name]
-        canvas.paste(rendered[name], (rect.x, rect.y))
+        canvas.paste(rendered[name], (rects[name].x, rects[name].y))
 
     if page == "today":
         if glyphs is None:

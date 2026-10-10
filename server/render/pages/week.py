@@ -48,8 +48,6 @@ def render_list(payload: dict, rect: Rect, font_path: str) -> Image.Image:
         # 右：高低温
         temp_line = f"{d['temp_max']:.0f}° / {d['temp_min']:.0f}°"
         style.draw_text_right(draw, rect.w - 12, y0 + row_h // 2 - 16, temp_line, f_temp, style.INK)
-        if is_today:
-            draw.text((rect.w - 60, y0 + 8), "今", fill=style.MID, font=f_desc)
 
         if i < len(daily) - 1:
             style.hairline(draw, 12, y0 + row_h, rect.w - 12, style.RULE)

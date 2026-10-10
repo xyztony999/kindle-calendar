@@ -30,7 +30,7 @@ CLOCK_ENABLED=1
 ROTATE_ENABLED=1
 ROTATE_TODAY_S=120
 ROTATE_OTHER_S=30
-ROTATE_SUPPRESS_S=600
+ROTATE_SUPPRESS_S=120
 TOUCH_MODE=force      # force：tapread 在位即沉浸（tapread 已真机验证）；auto：先验证；off：纯轮播
 TOUCH_VERIFY_S=90     # auto 模式验证窗口
 TOUCH_DEAD_S=0        # 沉浸后无触摸事件自动恢复的秒数；0=关闭（tapread 已稳定，避免误踢回书库）

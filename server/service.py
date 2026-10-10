@@ -166,12 +166,7 @@ class DashboardService:
             images = render_page_regions(page, payload, self.width, self.height, self.font_path)
             rects = page_regions(page, self.width, self.height)
             for key, img in images.items():
-                if key == "clockblank":
-                    base = "clock"
-                elif key in ("title-prev", "title-next", "grid-prev", "grid-next"):
-                    base = key.split("-")[0]
-                else:
-                    base = key
+                base = key.split("-")[0] if key in ("title-prev", "title-next", "grid-prev", "grid-next") else key
                 png = _png_bytes(img)
                 regions[(page, key)] = RegionRender(
                     rect=rects[base], png=png, etag=hashlib.sha256(png).hexdigest()[:32]
@@ -260,6 +255,7 @@ class DashboardService:
             # 轮播默认值（设备 config.sh 可覆盖）
             "ROTATE_TODAY_S=120",
             "ROTATE_OTHER_S=30",
+            "ROTATE_SUPPRESS_S=120",
             f'LEGACY_URL="{base}/dashboard.png"',
         ]
 

@@ -25,19 +25,20 @@ def render_header(payload: dict, rect: Rect, font_path: str, page: str) -> Image
     style.hairline(draw, 0, 2, rect.w)
     style.hairline(draw, 0, rect.h - 3, rect.w)
 
-    f_big = _font(sx, 40, font_path)
+    f_big = _font(sx, 34, font_path)
     f_small = _font(sx, 22, font_path)
     f_page = _font(sx, 20, font_path)
 
-    # 左：大字日期（上）+ 星期/节日/班休（下）
-    draw.text((2, 8), date["month_day_cn"], fill=style.INK, font=f_big)
+    # 左：大字日期（上）+ 星期/节日/班休（下）——40px 大字与 22px 小字在
+    # 78px 高的页眉里会贴字，缩一档并拉开基线
+    draw.text((2, 6), date["month_day_cn"], fill=style.INK, font=f_big)
     weekday_line = f"星期{date['weekday']}"
     notes = list(date.get("festivals") or [])
     if holiday:
         notes.append(f"{holiday['name']}{holiday['note']}")
     if notes:
         weekday_line += " · " + " · ".join(notes[:2])
-    draw.text((4, 50), weekday_line, fill=style.INK, font=f_small)
+    draw.text((4, 48), weekday_line, fill=style.INK, font=f_small)
 
     # 右：页指示（最上）+ 农历干支（其下），两行右对齐、互不侵入
     dot_r = 4

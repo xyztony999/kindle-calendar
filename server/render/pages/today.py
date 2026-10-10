@@ -63,23 +63,20 @@ def render_weather(payload: dict, rect: Rect, font_path: str) -> Image.Image:
 
 
 def render_moon_disk(draw: ImageDraw.ImageDraw, cx: int, cy: int, r: int, phase: float, illum: int) -> None:
-    """月相盘：按照亮比例连续绘制真实月形（ink=暗面 / paper=亮面）。
+    """月相盘：按照亮比例连续绘制真实月形。
 
-    亮区由外圆弧与 terminator（明暗界线）椭圆弧围成：椭圆半宽
-    k = |2·illum-1|·r 随照度连续变化——0.5 为精确半圆，趋 0/1 为细牙/满轮。
-    北半球视觉：盈月亮右、亏月亮左。
+    图标语义（墨水屏友好）：ink=月亮亮面（清晰可见的月牙/月盘），
+    暗面留白、外圈细线标出月盘边界——类似 🌙 的直觉形态。
+    北半球视觉：盈月亮右、亏月亮左。亮区由外圆弧与 terminator
+    椭圆弧围成（polygon 采样），椭圆半宽 k=|2·illum-1|·r 随照度连续变化。
     """
     frac = min(max(illum, 0), 100) / 100.0
-    outline_kw = dict(outline=style.MID, width=2)
-    if frac <= 0.005:
-        draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=style.INK, **outline_kw)
+    # 月盘轮廓（暗面所在，白底 + 细线圈）
+    draw.ellipse((cx - r, cy - r, cx + r, cy + r), outline=style.MID, width=2)
+    if frac <= 0.005 or frac >= 0.995:
+        if frac >= 0.995:  # 满月：实心
+            draw.ellipse((cx - r + 1, cy - r + 1, cx + r - 1, cy + r - 1), fill=style.INK)
         return
-    if frac >= 0.995:
-        draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=style.PAPER, outline=style.INK, width=2)
-        return
-
-    # 暗盘 + 亮区多边形
-    draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=style.INK, **outline_kw)
 
     waxing = phase < 0.5
     sign = 1 if waxing else -1          # 亮面方向（x 相对盘心）
@@ -102,7 +99,7 @@ def render_moon_disk(draw: ImageDraw.ImageDraw, cx: int, cy: int, r: int, phase:
         for i in range(n + 1):
             t = math.pi / 2 - math.pi * i / n
             pts.append((cx - sign * k * math.cos(t), cy + r * math.sin(t)))
-    draw.polygon(pts, fill=style.PAPER)
+    draw.polygon(pts, fill=style.INK)
 
 
 def render_sun(payload: dict, rect: Rect, font_path: str) -> Image.Image:

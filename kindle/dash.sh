@@ -165,6 +165,8 @@ goto_page() {
                         eval x="\$R_MONTH_${r}_X"
                         eval y="\$R_MONTH_${r}_Y"
                         fbink_img "$CACHE_DIR/${lc}_m${MONTH_OFFSET}.png" "$x" "$y" GC16 "$flash"
+                    else
+                        log "动态月资产缺失 offset=$MONTH_OFFSET region=$r"
                     fi ;;
             esac
         else

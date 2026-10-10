@@ -38,7 +38,9 @@ def render_title(payload: dict, rect: Rect, font_path: str, offset: int = 0) -> 
     f_hint = _font(sx, 20, font_path)
 
     draw.text((2, 4), f"{today.year if viewing.year == today.year else viewing.year}年{_month_cn(viewing.month)}月", fill=style.INK, font=f_title)
-    style.draw_text_right(draw, rect.w, 14, "‹ 上月      下月 ›", f_hint, style.MID)
+    # 翻月交互为滑动（非当月时提示左右滑可回当月）
+    if offset != 0:
+        style.draw_text_right(draw, rect.w, 16, "左右滑回当月", f_hint, style.MID)
     return img
 
 

@@ -162,8 +162,9 @@ goto_page() {
                 *)  ensure_month_asset "$r" "$MONTH_OFFSET"
                     f="$CACHE_DIR/month_${r}_m${MONTH_OFFSET}.png"
                     if [ -f "$f" ]; then
-                        eval x="\$R_MONTH_${r}_X"
-                        eval y="\$R_MONTH_${r}_Y"
+                        # 动态月与当月共用同一 rect；env 只下发 CUR 坐标
+                        eval x="\$R_MONTH_${r}_CUR_X"
+                        eval y="\$R_MONTH_${r}_CUR_Y"
                         fbink_img "$f" "$x" "$y" GC16 "$flash"
                     else
                         log "动态月资产缺失 offset=$MONTH_OFFSET region=$r"

@@ -139,7 +139,7 @@ ssh root@<KINDLE_IP> "nohup /mnt/us/kindle-calendar/dash.sh &"
 
 1. Copy `kindle/documents/天气台历.sh` into the Kindle `documents/` folder
 2. Upload `/mnt/us/kindle-calendar/lib/display.sh`
-3. Open 「天气台历」 from the library
+3. Open 「天气台历」 for the Chinese screen. `WeatherCalendar.sh` in the same folder is the English screen. `Weather Calendar.sh` (with a space) still opens the Chinese launcher.
 
 With `BOOK_FULLSCREEN=false`, Home returns to the library. `true` can only be left by rebooting.
 

@@ -21,8 +21,21 @@ WIFI_ON_DEMAND=false
 BOOK_FULLSCREEN=false
 SERVER_URL="https://kindle-calendar.tonyxyz.cn/dashboard.png"
 
+BOOK_LANG_PRESET="${KC_BOOK_LANG-}"
 if [ -f "$CONFIG" ]; then
     . "$CONFIG"
+fi
+# 语言只来自启动器。config.sh 不能把英文入口改回中文。
+if [ "$BOOK_LANG_PRESET" = "en" ]; then
+    KC_BOOK_LANG=en
+    export KC_BOOK_LANG
+    case "$SERVER_URL" in
+        *lang=*) ;;
+        *\?*) SERVER_URL="${SERVER_URL}&lang=en" ;;
+        *) SERVER_URL="${SERVER_URL}?lang=en" ;;
+    esac
+else
+    unset KC_BOOK_LANG
 fi
 
 if [ -f "$LIB" ]; then

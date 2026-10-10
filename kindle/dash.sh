@@ -36,7 +36,28 @@ TOUCH_MODE=force      # force：tapread 在位即沉浸（tapread 已真机验�
 TOUCH_VERIFY_S=90     # auto 模式验证窗口
 TOUCH_DEAD_S=0        # 沉浸后无触摸事件自动恢复的秒数；0=关闭（tapread 已稳定，避免误踢回书库）
 
+_BOOK_LANG_PRESET="${KC_BOOK_LANG-}"
 [ -f "$CONFIG" ] && . "$CONFIG"
+# config.sh 不是语言开关。只有英文启动器传入的 en 才保留。
+if [ "$_BOOK_LANG_PRESET" = "en" ]; then
+    KC_BOOK_LANG=en
+    export KC_BOOK_LANG
+else
+    unset KC_BOOK_LANG
+fi
+
+with_book_lang() {
+    case "$1" in
+        "") printf '' ;;
+        *lang=*) printf '%s' "$1" ;;
+        *\?*) printf '%s&lang=en' "$1" ;;
+        *) printf '%s?lang=en' "$1" ;;
+    esac
+}
+if [ "${KC_BOOK_LANG-}" = "en" ]; then
+    API_URL=$(with_book_lang "$API_URL")
+    SERVER_URL=$(with_book_lang "$SERVER_URL")
+fi
 
 # config.sh 的 ROTATE_* 只在 env 拉取失败时保留；拉取成功后以云端值为准。
 

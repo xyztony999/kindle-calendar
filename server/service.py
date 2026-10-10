@@ -39,6 +39,7 @@ from server.render import (
     render_page_regions,
 )
 from server.render.regions import Rect, clock_metrics
+from server.locale import localize_payload, with_lang_query
 from server.weather import WeatherData, fetch_weather
 
 log = logging.getLogger(__name__)
@@ -87,8 +88,11 @@ class DashboardService:
 
         self._payload: dict | None = None
         self._payload_fingerprint = ""
+        self._payloads: dict[str, dict] = {}
+        self._fingerprints: dict[str, str] = {}
         self._regions: dict[tuple[str, str], RegionRender] = {}
         self._regions_fingerprint = ""
+        self._regions_by_lang: dict[str, tuple[str, dict[tuple[str, str], RegionRender]]] = {}
         self._month_offset_cache: dict[tuple, RegionRender] = {}  # (region, offset, fingerprint)
         self._glyphs: dict[str, bytes] = {}
         self._glyphs_key: tuple | None = None
@@ -125,6 +129,9 @@ class DashboardService:
             self._degraded = False
             self._regions.clear()
             self._regions_fingerprint = ""
+            self._regions_by_lang.clear()
+            self._payloads.clear()
+            self._fingerprints.clear()
             self._month_offset_cache.clear()
             self._payload = None
         if not location_was_changed:
@@ -239,7 +246,8 @@ class DashboardService:
 
     # ── payload / 渲染 ──
 
-    def get_payload(self) -> dict:
+    def get_payload(self, lang: str = "zh") -> dict:
+        lang = "en" if lang == "en" else "zh"
         self._ensure_weather()
         now = datetime.now(ZoneInfo(self.config["timezone"]))
         with self._weather_cond:
@@ -251,18 +259,25 @@ class DashboardService:
         with self._lock:
             settings = copy_settings(self._settings)
         payload = data_mod.build_payload(self.config, weather, now, aqi, settings)
+        if lang == "en":
+            payload = localize_payload(payload)
         fingerprint = data_mod.data_fingerprint(payload)
         with self._lock:
-            self._payload = payload
-            self._payload_fingerprint = fingerprint
+            self._payloads[lang] = payload
+            self._fingerprints[lang] = fingerprint
+            if lang == "zh":
+                self._payload = payload
+                self._payload_fingerprint = fingerprint
         return payload
 
-    def _get_regions(self) -> dict[tuple[str, str], RegionRender]:
-        payload = self.get_payload()
-        fingerprint = self._payload_fingerprint
+    def _get_regions(self, lang: str = "zh") -> dict[tuple[str, str], RegionRender]:
+        lang = "en" if lang == "en" else "zh"
+        payload = self.get_payload(lang)
+        fingerprint = self._fingerprints[lang]
         with self._lock:
-            if self._regions and self._regions_fingerprint == fingerprint:
-                return self._regions
+            cached = self._regions_by_lang.get(lang)
+            if cached and cached[0] == fingerprint:
+                return cached[1]
 
         regions: dict[tuple[str, str], RegionRender] = {}
         for page in PAGES:
@@ -276,23 +291,27 @@ class DashboardService:
                 )
 
         with self._lock:
-            self._regions = regions
-            self._regions_fingerprint = fingerprint
+            self._regions_by_lang[lang] = (fingerprint, regions)
+            if lang == "zh":
+                self._regions = regions
+                self._regions_fingerprint = fingerprint
         return regions
 
-    def get_region(self, page: str, region: str, offset: int = 0) -> RegionRender | None:
+    def get_region(self, page: str, region: str, offset: int = 0, lang: str = "zh") -> RegionRender | None:
+        lang = "en" if lang == "en" else "zh"
         if page not in PAGES or region not in page_region_names(page):
             return None
         # 月历 title/grid 支持任意月偏移（跨月浏览），独立小缓存
         if page == "month" and region in ("title", "grid") and offset != 0:
-            return self._get_month_offset_region(region, offset)
-        regions = self._get_regions()
+            return self._get_month_offset_region(region, offset, lang)
+        regions = self._get_regions(lang)
         return regions.get((page, region))
 
-    def _get_month_offset_region(self, region: str, offset: int) -> RegionRender:
+    def _get_month_offset_region(self, region: str, offset: int, lang: str = "zh") -> RegionRender:
+        lang = "en" if lang == "en" else "zh"
         offset = max(-120, min(120, int(offset)))
-        payload = self.get_payload()
-        key = (region, offset, self._payload_fingerprint)
+        payload = self.get_payload(lang)
+        key = (region, offset, self._fingerprints[lang], lang)
         with self._lock:
             cached = self._month_offset_cache.get(key)
         if cached is not None:
@@ -327,19 +346,21 @@ class DashboardService:
             self._glyphs_key = key
         return glyphs
 
-    def get_composite(self, page: str = "today") -> bytes:
+    def get_composite(self, page: str = "today", lang: str = "zh") -> bytes:
+        lang = "en" if lang == "en" else "zh"
         if page not in PAGES:
             page = "today"
-        payload = self.get_payload()
+        payload = self.get_payload(lang)
         img = compose_page(page, payload, self.width, self.height, self.font_path)
         return _png_bytes(img)
 
     # ── 设备端 env ──
 
-    def build_env(self, base_url: str) -> str:
+    def build_env(self, base_url: str, lang: str = "zh") -> str:
+        lang = "en" if lang == "en" else "zh"
         base = base_url.rstrip("/")
-        regions = self._get_regions()
-        payload = self._payload or {}
+        regions = self._get_regions(lang)
+        payload = self._payloads.get(lang) or {}
         with self._lock:
             settings = copy_settings(self._settings)
         pages = enabled_pages(settings) or ["today"]
@@ -358,13 +379,17 @@ class DashboardService:
                 f"{var_prefix}_Y={region.rect.y}",
                 f"{var_prefix}_W={region.rect.w}",
                 f"{var_prefix}_H={region.rect.h}",
-                f'{var_prefix}_URL="{base}/r/{page}/{key}.png"',
+                f'{var_prefix}_URL="{with_lang_query(f"{base}/r/{page}/{key}.png", lang)}"',
                 f'{var_prefix}_ETAG="{region.etag}"',
             ]
 
         lines = [
             f"DASH_DATE={payload.get('date', {}).get('iso', '').replace('-', '')}",
-            f"REGIONS_VERSION={self._regions_fingerprint}",
+            f"REGIONS_VERSION={self._fingerprints.get(lang, self._regions_fingerprint)}",
+        ]
+        if lang == "en":
+            lines.append("lang=en")
+        lines += [
             f"SCREEN_W={self.width}",
             f"SCREEN_H={self.height}",
             f'PAGES="{" ".join(pages)}"',
@@ -403,9 +428,9 @@ class DashboardService:
         lines += [
             # 翻月范围（±N 月）：±1 用预裁资产零流量，超出经 TMPL 按需拉取
             "MONTH_LIMIT=24",
-            f'R_MONTH_TITLE_TMPL="{base}/r/month/title.png?offset={{o}}"',
-            f'R_MONTH_GRID_TMPL="{base}/r/month/grid.png?offset={{o}}"',
-            f'LEGACY_URL="{base}/dashboard.png"',
+            f'R_MONTH_TITLE_TMPL="{with_lang_query(f"{base}/r/month/title.png?offset={{o}}", lang)}"',
+            f'R_MONTH_GRID_TMPL="{with_lang_query(f"{base}/r/month/grid.png?offset={{o}}", lang)}"',
+            f'LEGACY_URL="{with_lang_query(f"{base}/dashboard.png", lang)}"',
         ]
 
         # P1 旧名兼容别名（保留一个版本）

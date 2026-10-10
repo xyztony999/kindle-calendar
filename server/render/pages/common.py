@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import date as date_cls
+
 from PIL import Image, ImageDraw
 
+from server.locale import badge_en, is_en, page_label, short_date, weekday_en, zodiac_en
 from server.render import style
 from server.render.regions import PAGES, Rect
 
@@ -31,13 +34,22 @@ def render_header(payload: dict, rect: Rect, font_path: str, page: str) -> Image
 
     # 左：大字日期（上）+ 星期/节日/班休（下）。78px 页眉要容纳两行，
     # 基线必须留出 descender：小字行底 ≤70（底线在 75），否则压线
-    draw.text((2, 4), date["month_day_cn"], fill=style.INK, font=f_big)
-    weekday_line = f"星期{date['weekday']}"
+    english = is_en(payload)
+    if english:
+        big_date = short_date(date["iso"])
+        weekday_line = weekday_en(date_cls.fromisoformat(date["iso"]).weekday())
+    else:
+        big_date = date["month_day_cn"]
+        weekday_line = f"星期{date['weekday']}"
     notes = list(date.get("festivals") or [])
     if holiday:
-        notes.append(f"{holiday['name']}{holiday['note']}")
+        if english:
+            notes.append(f"{holiday['name']} {badge_en(holiday['note'])}")
+        else:
+            notes.append(f"{holiday['name']}{holiday['note']}")
     if notes:
         weekday_line += " · " + " · ".join(notes[:2])
+    draw.text((2, 4), big_date, fill=style.INK, font=f_big)
     draw.text((4, 42), weekday_line, fill=style.INK, font=f_small)
 
     # 右：页指示（最上）+ 农历干支（其下）。顺序与已启用页一致，默认五页时与原先相同。
@@ -50,7 +62,8 @@ def render_header(payload: dict, rect: Rect, font_path: str, page: str) -> Image
             order = list(PAGES)
     dot_r = 4
     dot_gap = int(46 * sx)
-    labels_w = sum(style.tracked_width(draw, PAGE_LABELS[p], f_page, 2) + dot_gap for p in order)
+    labels = {p: page_label(p, payload) for p in order}
+    labels_w = sum(style.tracked_width(draw, labels[p], f_page, 2) + dot_gap for p in order)
     x = rect.w - labels_w
     for p in order:
         cx = x + dot_r
@@ -59,10 +72,14 @@ def render_header(payload: dict, rect: Rect, font_path: str, page: str) -> Image
             draw.ellipse((cx - dot_r, cy - dot_r, cx + dot_r, cy + dot_r), fill=style.INK)
         else:
             draw.ellipse((cx - dot_r, cy - dot_r, cx + dot_r, cy + dot_r), outline=style.RULE, width=1)
-        style.draw_text(draw, (cx + dot_r + 4, 10), PAGE_LABELS[p], f_page, style.MID if p != page else style.INK, tracking=2)
-        x += style.tracked_width(draw, PAGE_LABELS[p], f_page, 2) + dot_gap
+        style.draw_text(draw, (cx + dot_r + 4, 10), labels[p], f_page, style.MID if p != page else style.INK, tracking=2)
+        x += style.tracked_width(draw, labels[p], f_page, 2) + dot_gap
 
-    style.draw_text_right(draw, rect.w, 46, f"{date['lunar']} · {date['ganzhi_year']}{date['zodiac']}年", f_small, style.MID)
+    if english:
+        lunar_line = f"Lunar {date['lunar']} · {date['ganzhi_year']} {zodiac_en(date['zodiac'])}"
+    else:
+        lunar_line = f"{date['lunar']} · {date['ganzhi_year']}{date['zodiac']}年"
+    style.draw_text_right(draw, rect.w, 46, lunar_line, f_small, style.MID)
     return img
 
 

@@ -16,6 +16,7 @@ from zoneinfo import ZoneInfo
 import requests
 from flask import Blueprint, Response, jsonify, render_template, request, session
 
+from server.locale import LANG_COOKIE, LANG_MAX_AGE, admin_ui, explicit_lang, translate_message, web_lang
 from server.settings import SettingsError, env_int, limits
 
 log = logging.getLogger(__name__)
@@ -93,8 +94,21 @@ def _api_ok(data: dict, status: int = 200):
     return resp
 
 
+def _request_lang() -> str:
+    return web_lang(request.args.get("lang"), request.cookies.get(LANG_COOKIE), request.headers.get("Accept-Language"))
+
+
 def _api_error(code: str, message: str, status: int, details: list | None = None):
-    resp = jsonify({"ok": False, "error": {"code": code, "message": message, "details": details or []}})
+    lang = _request_lang()
+    localized = []
+    for item in details or []:
+        if isinstance(item, dict) and "message" in item:
+            localized.append({**item, "message": translate_message(lang, str(item["message"]))})
+        else:
+            localized.append(item)
+    resp = jsonify(
+        {"ok": False, "error": {"code": code, "message": translate_message(lang, message), "details": localized}}
+    )
     resp.status_code = status
     resp.headers["Cache-Control"] = "no-store"
     return resp
@@ -104,7 +118,7 @@ def _csrf_ok() -> bool:
     return request.headers.get("X-Requested-With") == CSRF_HEADER
 
 
-def search_places(query: str) -> list[dict]:
+def search_places(query: str, lang: str = "zh") -> list[dict]:
     text = query.strip()
     if not text or len(text) > 50:
         raise GeocodeError("GEOCODE_QUERY_INVALID", "查询须为 1–50 字")
@@ -114,7 +128,7 @@ def search_places(query: str) -> list[dict]:
     try:
         resp = requests.get(
             GEOCODE_URL,
-            params={"name": text, "count": GEOCODE_COUNT, "language": "zh", "format": "json"},
+            params={"name": text, "count": GEOCODE_COUNT, "language": "en" if lang == "en" else "zh", "format": "json"},
             timeout=GEOCODE_TIMEOUT_S,
             allow_redirects=False,
         )
@@ -198,9 +212,21 @@ def create_admin_blueprint(service) -> Blueprint:
         else:
             boot = {"view": "login"}
             status = 200
-        html = render_template("admin.html", boot=boot)
+        lang = _request_lang()
+        html = render_template("admin.html", boot=boot, ui=admin_ui(lang))
         resp = Response(html, status=status, mimetype="text/html; charset=utf-8")
         resp.headers["Cache-Control"] = "no-store"
+        chosen = explicit_lang(request.args.get("lang"))
+        if chosen:
+            resp.set_cookie(
+                LANG_COOKIE,
+                chosen,
+                max_age=LANG_MAX_AGE,
+                path="/",
+                samesite="Lax",
+                httponly=True,
+                secure=request.is_secure,
+            )
         return resp
 
     @bp.post("/admin/api/login")
@@ -328,7 +354,7 @@ def create_admin_blueprint(service) -> Blueprint:
         if blocked:
             return blocked
         try:
-            candidates = search_places(request.args.get("q") or "")
+            candidates = search_places(request.args.get("q") or "", _request_lang())
         except GeocodeError as exc:
             status = 400 if exc.code == "GEOCODE_QUERY_INVALID" else 502
             return _api_error(exc.code, exc.message, status)

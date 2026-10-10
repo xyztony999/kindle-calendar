@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="{{ ui.html_lang }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Kindle 台历 · 管理端</title>
+<title>{{ ui.title }}</title>
 <style>
   :root {
     --ink: #1c1c1c;
@@ -167,67 +167,76 @@
 </head>
 <body>
 <div class="wrap">
+  <nav class="lang-switch" style="display:flex;gap:8px;justify-content:flex-end;margin:0 0 8px">
+    {% if ui.lang == 'en' %}
+    <a href="/admin?lang=zh">中文</a>
+    <span aria-current="true">English</span>
+    {% else %}
+    <span aria-current="true">中文</span>
+    <a href="/admin?lang=en">English</a>
+    {% endif %}
+  </nav>
   <section id="view-disabled" hidden>
     <div class="card login-card">
-      <h1>管理端未启用</h1>
-      <p>请在服务端设置环境变量 <code>ADMIN_PASSWORD</code> 后重启服务。</p>
-      <p class="muted">Docker：<code>.env</code> 增加 <code>ADMIN_PASSWORD=…</code>；Render：Environment 面板添加。</p>
+      <h1>{{ ui.disabled_h1 }}</h1>
+      <p>{{ ui.disabled_p }}</p>
+      <p class="muted">{{ ui.disabled_hint }}</p>
     </div>
   </section>
 
   <section id="view-login" hidden>
     <form class="card login-card" id="login-form">
-      <h1>Kindle 台历 · 管理端</h1>
-      <p class="muted">请输入管理员口令</p>
-      <label class="field">口令
+      <h1>{{ ui.h1 }}</h1>
+      <p class="muted">{{ ui.login_prompt }}</p>
+      <label class="field">{{ ui.password }}
         <input id="password" type="password" autocomplete="off" autofocus>
       </label>
       <div id="login-error" class="field-error"></div>
-      <button class="btn primary" id="login-btn" type="submit">登录</button>
+      <button class="btn primary" id="login-btn" type="submit">{{ ui.login }}</button>
     </form>
   </section>
 
   <section id="view-settings" hidden>
     <div class="top">
       <div>
-        <h1>Kindle 台历 · 管理端</h1>
-        <div class="muted">版本 <span id="version-label">—</span> <span id="dirty-flag" class="dirty" hidden>● 未保存</span></div>
+        <h1>{{ ui.h1 }}</h1>
+        <div class="muted">{{ ui.version }} <span id="version-label">—</span> <span id="dirty-flag" class="dirty" hidden>● {{ ui.unsaved }}</span></div>
       </div>
-      <button class="link" id="logout-btn" type="button">退出登录</button>
+      <button class="link" id="logout-btn" type="button">{{ ui.logout }}</button>
     </div>
-    <div id="degraded-banner" class="banner" hidden>配置文件缺失或损坏，当前为默认值运行；保存后将重新创建</div>
+    <div id="degraded-banner" class="banner" hidden>{{ ui.degraded }}</div>
     <div id="error-summary" class="summary"></div>
     <div class="layout">
       <div class="col-main">
         <section class="card" id="card-pages">
-          <h2>页面与轮播</h2>
-          <label class="switch"><input id="rotate-enabled" type="checkbox"> 自动轮播</label>
+          <h2>{{ ui.pages_h2 }}</h2>
+          <label class="switch"><input id="rotate-enabled" type="checkbox"> {{ ui.rotate }}</label>
           <div id="page-list"></div>
-          <p id="only-today" class="muted" hidden>仅今日页：不轮播、无翻页</p>
-          <label class="field">触摸后暂停轮播的秒数
+          <p id="only-today" class="muted" hidden>{{ ui.only_today }}</p>
+          <label class="field">{{ ui.suppress }}
             <input id="suppress" type="number" min="0" max="3600" step="1" data-field="rotation.suppress_s">
           </label>
         </section>
         <section class="card" id="card-location">
-          <span id="loc-flag" class="corner" hidden>保存后天气将重新拉取</span>
-          <h2>城市</h2>
+          <span id="loc-flag" class="corner" hidden>{{ ui.loc_flag }}</span>
+          <h2>{{ ui.city_h2 }}</h2>
           <div class="search-line">
-            <input id="geo-q" type="search" placeholder="搜索城市，例如杭州" maxlength="50">
-            <button class="btn" id="geo-btn" type="button">搜索</button>
+            <input id="geo-q" type="search" placeholder="{{ ui.geo_ph }}" maxlength="50">
+            <button class="btn" id="geo-btn" type="button">{{ ui.search }}</button>
           </div>
           <div id="geo-status" class="muted"></div>
           <div id="geo-list"></div>
           <div class="loc-grid">
-            <label class="field">城市名
+            <label class="field">{{ ui.city_name }}
               <input id="loc-name" type="text" maxlength="20" data-field="location.name">
             </label>
-            <label class="field">时区
+            <label class="field">{{ ui.tz }}
               <input id="loc-tz" type="text" list="tz-list" data-field="location.timezone">
             </label>
-            <label class="field">纬度
+            <label class="field">{{ ui.lat }}
               <input id="loc-lat" type="number" min="-90" max="90" step="0.0001" data-field="location.latitude">
             </label>
-            <label class="field">经度
+            <label class="field">{{ ui.lon }}
               <input id="loc-lon" type="number" min="-180" max="180" step="0.0001" data-field="location.longitude">
             </label>
           </div>
@@ -242,31 +251,31 @@
           </datalist>
         </section>
         <section class="card" id="card-quote">
-          <h2>一言</h2>
+          <h2>{{ ui.quote_h2 }}</h2>
           <div class="radios" id="quote-modes"></div>
           <div id="custom-box" hidden>
             <div id="quote-list"></div>
-            <button class="btn" id="add-quote" type="button">添加一条</button>
+            <button class="btn" id="add-quote" type="button">{{ ui.add_quote }}</button>
             <p id="quote-preview" class="muted"></p>
           </div>
         </section>
       </div>
       <div class="col-side">
         <section class="card" id="card-device">
-          <h2>设备状态</h2>
+          <h2>{{ ui.device_h2 }}</h2>
           <div id="device-body" class="muted">—</div>
         </section>
         <section class="card">
-          <h2>预览</h2>
-          <p id="preview-hint" class="muted" hidden>预览反映已保存配置，保存后更新</p>
+          <h2>{{ ui.preview_h2 }}</h2>
+          <p id="preview-hint" class="muted" hidden>{{ ui.preview_hint }}</p>
           <div id="previews" class="previews"></div>
         </section>
         <section class="card">
           <div class="actions">
-            <button class="btn primary" id="save-btn" type="button">保存</button>
-            <button class="btn danger" id="reset-btn" type="button">恢复默认</button>
-            <a class="btn" id="export-link" href="/admin/api/settings/export">导出</a>
-            <button class="btn" id="import-btn" type="button">导入</button>
+            <button class="btn primary" id="save-btn" type="button">{{ ui.save }}</button>
+            <button class="btn danger" id="reset-btn" type="button">{{ ui.reset }}</button>
+            <a class="btn" id="export-link" href="/admin/api/settings/export">{{ ui.export }}</a>
+            <button class="btn" id="import-btn" type="button">{{ ui.import_ }}</button>
             <input id="import-file" type="file" accept=".json,application/json" hidden>
           </div>
         </section>
@@ -279,14 +288,11 @@
 <script id="boot" type="application/json">{{ boot|tojson }}</script>
 <script>
 (function () {
-  const PAGE_LABEL = {today: "今日", week: "一周", month: "月历", detail: "详情", almanac: "黄历"};
-  const QUOTE_LABEL = {
-    online: "在线一言（失败回退离线诗词）",
-    offline: "离线诗词",
-    custom: "自定义文案"
-  };
-  const DELIVERY = {pending: "待下发", delivered: "已下发", unknown: "未知"};
-  const ONLINE = {online: "在线", offline: "离线", unknown: "未知"};
+  const T = {{ ui|tojson }};
+  const PAGE_LABEL = T.page_label;
+  const QUOTE_LABEL = T.quote_mode;
+  const DELIVERY = T.delivery;
+  const ONLINE = T.online;
   const boot = JSON.parse(document.getElementById("boot").textContent);
   let state = null;
   let saved = null;
@@ -366,7 +372,7 @@
     if (resp.status === 401 && !opts.login) {
       draft = state ? JSON.parse(JSON.stringify(state)) : draft;
       showView("login");
-      toast("登录已过期，请重新登录", true);
+      toast(T.expired, true);
       const err = new Error("auth");
       err.handled = true;
       throw err;
@@ -559,7 +565,7 @@
       const from = document.createElement("input");
       from.type = "text";
       from.maxLength = limits.from_max;
-      from.placeholder = "出处";
+      from.placeholder = T.source_ph;
       from.value = item.from || "";
       from.dataset.field = "quote.custom[" + index + "].from";
       from.addEventListener("input", () => {
@@ -592,12 +598,12 @@
     const items = state.quote.custom.filter((item) => (item.text || "").trim());
     const el = $("quote-preview");
     if (!items.length) {
-      el.textContent = "自定义模式至少需要一条文案";
+      el.textContent = T.need_quote;
       return;
     }
     const yday = dayOfYearIn(state.location.timezone);
     const index = yday % items.length;
-    el.textContent = "今日将显示：第 " + (index + 1) + " 条「" + items[index].text.trim() + "」";
+    el.textContent = T.showing.replace("{n}", String(index + 1)).replace("{text}", items[index].text.trim());
   }
 
   function fillLocation() {
@@ -629,13 +635,13 @@
       const fig = document.createElement("figure");
       fig.className = "shot";
       const img = document.createElement("img");
-      const url = "/dashboard.png?page=" + encodeURIComponent(page.page_id) + "&v=" + encodeURIComponent(version);
+      const url = "/dashboard.png?page=" + encodeURIComponent(page.page_id) + (T.lang === "en" ? "&lang=en" : "") + "&v=" + encodeURIComponent(version);
       img.alt = PAGE_LABEL[page.page_id] || page.page_id;
       img.loading = "lazy";
       let retried = false;
       const placeholder = document.createElement("div");
       placeholder.className = "placeholder";
-      placeholder.textContent = "渲染中…";
+      placeholder.textContent = T.rendering;
       img.addEventListener("error", () => {
         if (retried) {
           if (img.isConnected) img.replaceWith(placeholder);
@@ -675,7 +681,7 @@
     body.replaceChildren();
     if (!data || data.online_state === "unknown") {
       body.replaceChildren();
-      ["在线 —", "最近拉取 —", "下发状态 未知", "版本 —"].forEach((line) => {
+      T.device_unknown.forEach((line) => {
         const row = document.createElement("div");
         row.textContent = line;
         body.appendChild(row);
@@ -683,20 +689,20 @@
       return;
     }
     const line1 = document.createElement("div");
-    line1.append("在线 ", badge(data.online_state, ONLINE));
+    line1.append(T.online.online + " ", badge(data.online_state, ONLINE));
     const seen = document.createElement("div");
-    seen.textContent = "最近拉取 " + relTime(data.last_seen_at);
+    seen.textContent = T.last_fetch.replace("{when}", relTime(data.last_seen_at));
     if (data.last_seen_at) seen.title = data.last_seen_at;
     const line2 = document.createElement("div");
-    line2.append("下发 ", badge(data.delivery_state, DELIVERY));
+    line2.append(T.delivery_word + " ", badge(data.delivery_state, DELIVERY));
     if (data.delivery_state === "pending") {
-      line2.append(" 预计最迟 " + (data.eta_minutes || 0) + " 分钟后生效");
+      line2.append(" " + T.eta.replace("{n}", String(data.eta_minutes || 0)));
     }
     const same = data.delivered_settings_version && data.delivered_settings_version === data.current_settings_version;
     const ver = document.createElement("div");
     ver.textContent = same || !data.delivered_settings_version
-      ? ("版本 " + (data.current_settings_version || "—"))
-      : ("设备 " + data.delivered_settings_version + " · 当前 " + data.current_settings_version);
+      ? T.version_line.replace("{v}", data.current_settings_version || "—")
+      : T.device_versions.replace("{device}", data.delivered_settings_version).replace("{current}", data.current_settings_version);
     const src = document.createElement("div");
     src.className = "muted";
     const ua = (data.last_user_agent || "").slice(0, 40);
@@ -708,10 +714,10 @@
     if (!iso) return "—";
     const diff = (Date.now() - new Date(iso).getTime()) / 1000;
     if (Number.isNaN(diff)) return iso;
-    if (diff < 60) return "刚刚";
-    if (diff < 3600) return Math.floor(diff / 60) + " 分钟前";
-    if (diff < 86400) return Math.floor(diff / 3600) + " 小时前";
-    return Math.floor(diff / 86400) + " 天前";
+    if (diff < 60) return T.just_now;
+    if (diff < 3600) return T.minutes_ago.replace("{n}", String(Math.floor(diff / 60)));
+    if (diff < 86400) return T.hours_ago.replace("{n}", String(Math.floor(diff / 3600)));
+    return T.days_ago.replace("{n}", String(Math.floor(diff / 86400)));
   }
 
   function applySettings(payload, keepDraft) {
@@ -743,7 +749,7 @@
       renderDevice(data.data);
       return data.data;
     } catch (err) {
-      if (!err.handled) $("device-body").textContent = "状态暂不可用";
+      if (!err.handled) $("device-body").textContent = T.status_unavailable;
       return null;
     }
   }
@@ -765,31 +771,31 @@
     const details = [];
     state.pages.forEach((page, index) => {
       if (!Number.isInteger(page.dwell_s) || page.dwell_s < limits.dwell_min || page.dwell_s > limits.dwell_max) {
-        details.push({field: "pages[" + index + "].dwell_s", message: "停留须为 " + limits.dwell_min + "–" + limits.dwell_max + " 秒"});
+        details.push({field: "pages[" + index + "].dwell_s", message: T.dwell.replace("{min}", limits.dwell_min).replace("{max}", limits.dwell_max)});
       }
     });
     if (!Number.isInteger(state.rotation.suppress_s) || state.rotation.suppress_s < 0 || state.rotation.suppress_s > limits.suppress_max) {
-      details.push({field: "rotation.suppress_s", message: "让位秒数须为 0–" + limits.suppress_max});
+      details.push({field: "rotation.suppress_s", message: T.pause.replace("{max}", limits.suppress_max)});
     }
     if (!state.location.name || state.location.name.length > 20) {
-      details.push({field: "location.name", message: "城市名须为 1–20 字"});
+      details.push({field: "location.name", message: T.name_len});
     }
     if (typeof state.location.latitude !== "number" || state.location.latitude < -90 || state.location.latitude > 90) {
-      details.push({field: "location.latitude", message: "纬度超出范围"});
+      details.push({field: "location.latitude", message: T.lat_range});
     }
     if (typeof state.location.longitude !== "number" || state.location.longitude < -180 || state.location.longitude > 180) {
-      details.push({field: "location.longitude", message: "经度超出范围"});
+      details.push({field: "location.longitude", message: T.lon_range});
     }
     if (!state.location.timezone) {
-      details.push({field: "location.timezone", message: "请填写时区"});
+      details.push({field: "location.timezone", message: T.need_tz});
     }
     if (state.quote.mode === "custom") {
       const usable = state.quote.custom.filter((item) => (item.text || "").trim());
-      if (!usable.length) details.push({field: "quote.custom", message: "自定义模式至少需要一条文案"});
+      if (!usable.length) details.push({field: "quote.custom", message: T.need_quote});
       state.quote.custom.forEach((item, index) => {
         const text = (item.text || "").trim();
         if (!text || text.length > limits.text_max) {
-          details.push({field: "quote.custom[" + index + "].text", message: "文案须为 1–" + limits.text_max + " 字"});
+          details.push({field: "quote.custom[" + index + "].text", message: T.quote_len.replace("{max}", limits.text_max)});
         }
       });
     }
@@ -821,8 +827,8 @@
     markDirty();
     const device = await refreshDevice();
     const minutes = device && typeof device.eta_minutes === "number" ? device.eta_minutes : 15;
-    let message = "已保存，设备最迟 " + minutes + " 分钟后生效";
-    if (data.location_changed && data.weather_refreshed === false) message += "。天气暂未更新，将稍后重试";
+    let message = T.saved.replace("{n}", String(minutes));
+    if (data.location_changed && data.weather_refreshed === false) message += T.weather_later;
     if (extra) message += extra;
     toast(message);
   }
@@ -840,7 +846,7 @@
     const err = $("login-error");
     err.textContent = "";
     if (!password) {
-      err.textContent = "请填写口令";
+      err.textContent = T.need_password;
       return;
     }
     $("login-btn").disabled = true;
@@ -855,10 +861,10 @@
         const seconds = (body.details && body.details[0] && body.details[0].retry_after_s) || 60;
         startLock(seconds);
       } else if (body && body.code === "ADMIN_AUTH_INVALID") {
-        err.textContent = "口令错误";
+        err.textContent = T.bad_password;
         $("login-btn").disabled = false;
       } else if (!error.handled) {
-        err.textContent = (body && body.message) || "登录失败";
+        err.textContent = (body && body.message) || T.login_failed;
         $("login-btn").disabled = false;
       }
     }
@@ -869,7 +875,7 @@
     let left = seconds;
     const tick = () => {
       const minutes = Math.max(1, Math.ceil(left / 60));
-      $("login-error").textContent = "失败次数过多，请 " + minutes + " 分钟后再试";
+      $("login-error").textContent = T.locked.replace("{n}", String(minutes));
       $("login-btn").disabled = true;
       if (left <= 0) {
         clearInterval(lockTimer);
@@ -925,7 +931,7 @@
       if (!err.handled) {
         const body = err.data && err.data.error;
         if (body && body.details) showErrors(body.details);
-        toast((body && body.message) || "保存失败", true);
+        toast((body && body.message) || T.save_failed, true);
       }
     } finally {
       $("save-btn").disabled = false;
@@ -934,13 +940,13 @@
 
   $("reset-btn").addEventListener("click", async () => {
     const city = defaults && defaults.location ? defaults.location.name : "";
-    if (!confirm("恢复默认？\n城市：" + city + "\n五页全启用 120/30")) return;
+    if (!confirm(T.confirm_reset.replace("{city}", city))) return;
     $("reset-btn").disabled = true;
     try {
       const data = await api("POST", "/admin/api/settings/reset");
       await afterWrite(data.data);
     } catch (err) {
-      if (!err.handled) toast("恢复失败", true);
+      if (!err.handled) toast(T.reset_failed, true);
     } finally {
       $("reset-btn").disabled = false;
     }
@@ -959,7 +965,7 @@
     } catch (err) {
       if (!err.handled) {
         const body = err.data && err.data.error;
-        toast((body && body.message) || "导入失败", true);
+        toast((body && body.message) || T.import_failed, true);
       }
     }
   });
@@ -968,10 +974,10 @@
     const q = $("geo-q").value.trim();
     $("geo-list").replaceChildren();
     if (!q || q.length > 50) {
-      $("geo-status").textContent = q ? "查询须为 1–50 字" : "";
+      $("geo-status").textContent = q ? T.query_len : "";
       return;
     }
-    $("geo-status").textContent = "搜索中…";
+    $("geo-status").textContent = T.searching;
     try {
       const data = await api("GET", "/admin/api/geocode?q=" + encodeURIComponent(q));
       $("geo-status").textContent = "";
@@ -993,12 +999,12 @@
         });
         list.appendChild(btn);
       });
-      if (!(data.data.candidates || []).length) $("geo-status").textContent = "没有匹配的城市";
+      if (!(data.data.candidates || []).length) $("geo-status").textContent = T.no_city;
       else $("geo-list").appendChild(list);
     } catch (err) {
       if (err.handled) return;
       const body = err.data && err.data.error;
-      $("geo-status").textContent = (body && body.message) || "搜索服务暂不可用，请手动填写";
+      $("geo-status").textContent = (body && body.message) || T.geo_failed;
     }
   }
 
@@ -1029,7 +1035,7 @@
   showView(boot.view === "settings" ? "settings" : boot.view === "disabled" ? "disabled" : "login");
   if (boot.view === "settings") {
     loadSettings(false).catch((err) => {
-      if (!err.handled) toast("加载配置失败", true);
+      if (!err.handled) toast(T.load_failed, true);
     });
   }
 })();

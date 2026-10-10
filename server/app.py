@@ -14,6 +14,8 @@ from flask import Flask, Response, jsonify, render_template, request
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from server.admin import create_admin_blueprint
+from server.landing import endpoint_rows, landing_copy, resolve_landing_lang
+from server.locale import LANG_COOKIE, LANG_MAX_AGE, device_lang, explicit_lang
 from server.render import PAGES
 from server.service import DashboardService
 from server.settings import env_int
@@ -78,6 +80,22 @@ _REGION_RE = re.compile(r"^[a-z0-9-]+$")
 _GLYPH_RE = re.compile(r"^[0-9:]$")
 
 
+def _apply_lang_cookie(resp: Response) -> Response:
+    chosen = explicit_lang(request.args.get("lang"))
+    if chosen is None:
+        return resp
+    resp.set_cookie(
+        LANG_COOKIE,
+        chosen,
+        max_age=LANG_MAX_AGE,
+        path="/",
+        samesite="Lax",
+        httponly=True,
+        secure=request.is_secure,
+    )
+    return resp
+
+
 def _png_response(png: bytes, etag: str | None = None, max_age: int = 300) -> Response:
     if etag is not None and request.headers.get("If-None-Match") == etag:
         resp = Response(status=304)
@@ -125,7 +143,21 @@ def create_app() -> Flask:
         )
         if wants_json:
             return jsonify(payload)
-        return render_template("index.html", version=payload["version"], endpoints=payload["endpoints"])
+        lang = resolve_landing_lang(
+            request.args.get("lang"),
+            request.headers.get("Accept-Language"),
+            request.cookies.get(LANG_COOKIE),
+        )
+        copy = landing_copy(lang)
+        resp = Response(
+            render_template(
+                "index.html",
+                version=payload["version"],
+                endpoints=endpoint_rows(lang, payload["endpoints"]),
+                copy=copy,
+            )
+        )
+        return _apply_lang_cookie(resp)
 
     @app.get("/health")
     def health():
@@ -133,11 +165,11 @@ def create_app() -> Flask:
 
     @app.get("/api/v1/dashboard.json")
     def dashboard_json():
-        return jsonify(service.get_payload())
+        return jsonify(service.get_payload(device_lang(request.args.get("lang"))))
 
     @app.get("/api/v1/dashboard.env")
     def dashboard_env():
-        env = service.build_env(request.host_url)
+        env = service.build_env(request.host_url, device_lang(request.args.get("lang")))
         service.note_heartbeat(request.remote_addr or "", request.headers.get("User-Agent", ""))
         return Response(env, mimetype="text/plain")
 
@@ -147,7 +179,7 @@ def create_app() -> Flask:
             return Response("not found", status=404)
         # 月历 title/grid 支持任意月偏移（跨月浏览）
         offset = request.args.get("offset", type=int) or 0
-        rendered = service.get_region(page, region, offset)
+        rendered = service.get_region(page, region, offset, device_lang(request.args.get("lang")))
         if rendered is None:
             return Response("not found", status=404)
         return _png_response(rendered.png, f"{rendered.etag}-{offset}" if offset else rendered.etag)
@@ -165,12 +197,12 @@ def create_app() -> Flask:
         if page not in PAGES:
             log.warning("未知页面参数 page=%s，回退 today", page)
             page = "today"
-        png = service.get_composite(page)
+        png = service.get_composite(page, device_lang(request.args.get("lang")))
         return _png_response(png, max_age=60)
 
     @app.get("/weather")
     def weather_json():
-        payload = service.get_payload()
+        payload = service.get_payload(device_lang(request.args.get("lang")))
         cur = payload["weather"]["current"]
         return jsonify(
             {

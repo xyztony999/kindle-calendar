@@ -8,6 +8,7 @@ from datetime import datetime
 from PIL import Image, ImageDraw
 
 from server.icons import draw_weather_icon
+from server.locale import aqi_en, is_en
 from server.render import style
 from server.render.pages import common
 from server.render.regions import ClockMetrics, Rect, clock_metrics, today_regions
@@ -47,13 +48,21 @@ def render_weather(payload: dict, rect: Rect, font_path: str) -> Image.Image:
 
     draw.text((2, 4), f"{cur['temperature']:.0f}°", fill=style.INK, font=f_temp)
     draw.text((8, 152), cur["description"], fill=style.INK, font=f_desc)
-    draw.text((8, 198), f"今日 {today['temp_min']:.0f}° / {today['temp_max']:.0f}°", fill=style.MID, font=f_info)
-
-    stats = [
-        f"湿度 {cur['humidity']}%",
-        f"风 {cur['wind_speed']:.0f} km/h",
-        f"降水 {payload['weather'].get('precip_prob', 0)}%",
-    ]
+    if is_en(payload):
+        range_line = f"Today {today['temp_min']:.0f}° / {today['temp_max']:.0f}°"
+        stats = [
+            f"Humidity {cur['humidity']}%",
+            f"Wind {cur['wind_speed']:.0f} km/h",
+            f"Rain {payload['weather'].get('precip_prob', 0)}%",
+        ]
+    else:
+        range_line = f"今日 {today['temp_min']:.0f}° / {today['temp_max']:.0f}°"
+        stats = [
+            f"湿度 {cur['humidity']}%",
+            f"风 {cur['wind_speed']:.0f} km/h",
+            f"降水 {payload['weather'].get('precip_prob', 0)}%",
+        ]
+    draw.text((8, 198), range_line, fill=style.MID, font=f_info)
     for i, line in enumerate(stats):
         style.draw_text_right(draw, rect.w - 150 * sx, 34 + i * 44 * sx, line, f_info, style.MID)
 
@@ -127,8 +136,16 @@ def render_sun(payload: dict, rect: Rect, font_path: str) -> Image.Image:
         r = 5
         draw.ellipse((px - r, py - r, px + r, py + r), fill=style.INK)
 
-    draw.text((x0, 2), f"日出 {sun['sunrise']}", fill=style.MID, font=f_label)
-    style.draw_text_right(draw, x1 + 8, 2, f"日落 {sun['sunset']}", f_label, style.MID)
+    if is_en(payload):
+        rise_line = f"Sunrise {sun['sunrise']}"
+        set_line = f"Sunset {sun['sunset']}"
+        empty_aqi = "No data"
+    else:
+        rise_line = f"日出 {sun['sunrise']}"
+        set_line = f"日落 {sun['sunset']}"
+        empty_aqi = "暂无"
+    draw.text((x0, 2), rise_line, fill=style.MID, font=f_label)
+    style.draw_text_right(draw, x1 + 8, 2, set_line, f_label, style.MID)
 
     # AQI 卡（原月相盘位置）：数值 + 等级 + 六段刻度条（PageSpec §1）
     aqi = payload.get("aqi")
@@ -138,7 +155,8 @@ def render_sun(payload: dict, rect: Rect, font_path: str) -> Image.Image:
     draw.text((ax, int(rect.h * 0.10)), "AQI", fill=style.MID, font=f_aqi_label)
     if aqi:
         draw.text((ax + int(52 * sx), int(rect.h * 0.04)), str(aqi["us_aqi"]), fill=style.INK, font=f_aqi_val)
-        draw.text((ax, int(rect.h * 0.42)), aqi["level_zh"], fill=style.MID, font=f_aqi_label)
+        level_name = aqi_en(aqi["level_zh"]) if is_en(payload) else aqi["level_zh"]
+        draw.text((ax, int(rect.h * 0.42)), level_name, fill=style.MID, font=f_aqi_label)
         # 六段刻度条：当前段实心
         seg_w = int(26 * sx)
         seg_h = max(5, int(6 * sx))
@@ -152,7 +170,7 @@ def render_sun(payload: dict, rect: Rect, font_path: str) -> Image.Image:
                 draw.rectangle((bx, bar_y, bx + seg_w - 2, bar_y + seg_h), outline=style.LIGHT, width=1)
     else:
         draw.text((ax + int(52 * sx), int(rect.h * 0.04)), "--", fill=style.INK, font=f_aqi_val)
-        draw.text((ax, int(rect.h * 0.42)), "暂无", fill=style.MID, font=f_aqi_label)
+        draw.text((ax, int(rect.h * 0.42)), empty_aqi, fill=style.MID, font=f_aqi_label)
     return img
 
 

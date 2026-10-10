@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from PIL import Image, ImageDraw
 
+from server.locale import aqi_en, is_en
 from server.render import style
 from server.render.regions import Rect
 
@@ -43,7 +44,8 @@ def render_hourly(payload: dict, rect: Rect, font_path: str) -> Image.Image:
         # 时间刻度（每 6 小时）
         if i % 6 == 0:
             hh = h["time"][11:13]
-            style.draw_text_center(draw, cx, rect.h - pad_b + 12, f"{hh}时", f_label, style.MID)
+            hour_label = f"{hh}h" if is_en(payload) else f"{hh}时"
+            style.draw_text_center(draw, cx, rect.h - pad_b + 12, hour_label, f_label, style.MID)
 
         # 降水概率 ≥30% 标注
         if h["precip"] >= 30:
@@ -67,15 +69,26 @@ def render_indices(payload: dict, rect: Rect, font_path: str) -> Image.Image:
     cur = payload["weather"]["current"]
     sun = payload["sun"]
     aqi = payload.get("aqi")
-    aqi_val = f"{aqi['us_aqi']} {aqi['level_zh']}" if aqi else "暂无数据"
-    cards = [
-        ("湿度", f"{cur['humidity']}%"),
-        ("风速", f"{cur['wind_speed']:.0f} km/h"),
-        ("降水概率", f"{payload['weather'].get('precip_prob', 0)}%"),
-        ("日出", sun["sunrise"]),
-        ("日落", sun["sunset"]),
-        ("AQI", aqi_val),
-    ]
+    if is_en(payload):
+        aqi_val = f"{aqi['us_aqi']} {aqi_en(aqi['level_zh'])}" if aqi else "No data"
+        cards = [
+            ("Humidity", f"{cur['humidity']}%"),
+            ("Wind", f"{cur['wind_speed']:.0f} km/h"),
+            ("Rain", f"{payload['weather'].get('precip_prob', 0)}%"),
+            ("Sunrise", sun["sunrise"]),
+            ("Sunset", sun["sunset"]),
+            ("AQI", aqi_val),
+        ]
+    else:
+        aqi_val = f"{aqi['us_aqi']} {aqi['level_zh']}" if aqi else "暂无数据"
+        cards = [
+            ("湿度", f"{cur['humidity']}%"),
+            ("风速", f"{cur['wind_speed']:.0f} km/h"),
+            ("降水概率", f"{payload['weather'].get('precip_prob', 0)}%"),
+            ("日出", sun["sunrise"]),
+            ("日落", sun["sunset"]),
+            ("AQI", aqi_val),
+        ]
 
     f_key = _font(sx, 22, font_path)
     f_val = _font(sx, 40, font_path)

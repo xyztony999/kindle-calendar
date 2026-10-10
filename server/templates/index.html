@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="{{ copy.html_lang }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Kindle 电子天气台历</title>
-<meta name="description" content="把闲置 Kindle 变成常亮的电子翻页天气台历。云端渲染，设备自行拉取。">
+<title>{{ copy.title }}</title>
+<meta name="description" content="{{ copy.description }}">
 <style>
   :root {
     --ink: #1a1814;
@@ -213,12 +213,19 @@
 <body>
   <header class="nav">
     <a class="mark" href="/">
-      <strong>Kindle 台历</strong>
+      <strong>{{ copy.mark }}</strong>
       <span>v{{ version }}</span>
     </a>
     <nav class="nav-links">
+      {% if copy.lang == 'zh' %}
+      <span class="btn" aria-current="true">中文</span>
+      <a class="btn" href="/?lang=en">English</a>
+      {% else %}
+      <a class="btn" href="/?lang=zh">中文</a>
+      <span class="btn" aria-current="true">English</span>
+      {% endif %}
       <a class="btn" href="https://github.com/xyztony999/kindle-calendar">GitHub</a>
-      <a class="btn solid" href="/admin">管理端</a>
+      <a class="btn solid" href="/admin">{{ copy.admin }}</a>
     </nav>
   </header>
 
@@ -226,28 +233,26 @@
     <section class="hero">
       <div>
         <p class="kicker">Cloud render · Kindle pull</p>
-        <h1>把闲置 Kindle<br>变成常亮台历</h1>
-        <p class="lede">云端把天气、农历和节假日画成灰度图，Kindle 只在画面变化时拉取。五页可翻：今日、一周、月历、详情、黄历。城市、页序和轮播在管理端改，设备下次拉取即生效。</p>
+        <h1>{{ copy.h1|safe }}</h1>
+        <p class="lede">{{ copy.lede }}</p>
         <div class="cta">
-          <a class="btn solid" href="#preview">看实机画面</a>
-          <a class="btn" href="/admin">配置页面与城市</a>
+          <a class="btn solid" href="#preview">{{ copy.see }}</a>
+          <a class="btn" href="/admin">{{ copy.admin_cta }}</a>
         </div>
-        <p class="status" id="status">正在读取服务状态…</p>
+        <p class="status" id="status">{{ copy.status_pending }}</p>
       </div>
 
       <div class="stage" id="preview">
-        <div class="pages" role="tablist" aria-label="台历页面">
-          <button type="button" role="tab" data-page="today" aria-pressed="true">今日</button>
-          <button type="button" role="tab" data-page="week" aria-pressed="false">一周</button>
-          <button type="button" role="tab" data-page="month" aria-pressed="false">月历</button>
-          <button type="button" role="tab" data-page="detail" aria-pressed="false">详情</button>
-          <button type="button" role="tab" data-page="almanac" aria-pressed="false">黄历</button>
+        <div class="pages" role="tablist" aria-label="{{ copy.pages_label }}">
+          {% for page in copy.pages %}
+          <button type="button" role="tab" data-page="{{ page.id }}" aria-pressed="{{ 'true' if loop.first else 'false' }}">{{ page.label }}</button>
+          {% endfor %}
         </div>
         <figure class="device">
           <figcaption id="caption">TODAY</figcaption>
           <div class="screen">
-            <div class="wait" id="wait">正在渲染今日页…</div>
-            <img id="shot" alt="今日页预览" hidden>
+            <div class="wait" id="wait">{{ copy.wait_today }}</div>
+            <img id="shot" alt="{{ copy.alt_today }}" hidden>
           </div>
         </figure>
       </div>
@@ -255,29 +260,24 @@
 
     <section class="band">
       <div class="grid">
+        {% for card in copy.cards %}
         <article class="card">
-          <h2>五页一轮</h2>
-          <p>今日看天气和时钟，一周看趋势，月历找假期，详情看逐时变化，黄历看宜忌。无触摸时按停留时间轮播。</p>
+          <h2>{{ card.title }}</h2>
+          <p>{{ card.body }}</p>
         </article>
-        <article class="card">
-          <h2>分钟时钟不联网</h2>
-          <p>数字在设备上本地拼装，每分钟只刷新时钟区域。天气分区按内容指纹变化才重新拉取。</p>
-        </article>
-        <article class="card">
-          <h2>浏览器里改配置</h2>
-          <p>管理端可以调整启用的页面、每页停留、城市和页脚一言。口令只放在服务器环境变量里。</p>
-        </article>
+        {% endfor %}
       </div>
     </section>
 
     <section class="band dev">
-      <h2>接口</h2>
+      <h2>{{ copy.endpoints_heading }}</h2>
       <div class="endpoints">
-        {% for path, desc in endpoints.items() %}
+        {% for row in endpoints %}
+        {% set path = row.path %}
         {% set href = '/r/today/header.png' if path.startswith('/r/<') else ('/r/today/clock/0.png' if 'clock' in path else path.split('?')[0]) %}
         <a href="{{ href }}">
           <code>{{ path }}</code>
-          <span>{{ desc }}</span>
+          <span>{{ row.desc }}</span>
         </a>
         {% endfor %}
       </div>
@@ -286,13 +286,17 @@
 
   <footer class="foot">
     <span>GPL-3.0 · Xinyi Zhang</span>
-    <a href="/?format=json">原始 JSON</a>
+    <a href="/?format=json">{{ copy.raw_json }}</a>
   </footer>
 
 <script>
 (function () {
   var labels = { today: "TODAY", week: "WEEK", month: "MONTH", detail: "DETAIL", almanac: "ALMANAC" };
-  var names = { today: "今日页", week: "一周页", month: "月历页", detail: "详情页", almanac: "黄历页" };
+  var names = {{ copy.pages|tojson }};
+  var ui = {{ copy.ui|tojson }};
+  var previewQuery = {{ copy.preview_query|tojson }};
+  var nameById = {};
+  names.forEach(function (page) { nameById[page.id] = page.name; });
   var shot = document.getElementById("shot");
   var wait = document.getElementById("wait");
   var caption = document.getElementById("caption");
@@ -304,10 +308,10 @@
     });
     caption.textContent = labels[page] || page;
     wait.hidden = false;
-    wait.textContent = "正在渲染" + (names[page] || "") + "…";
+    wait.textContent = ui.rendering.replace("{name}", nameById[page] || "");
     shot.hidden = true;
-    shot.alt = (names[page] || page) + "预览";
-    shot.src = "/dashboard.png?page=" + encodeURIComponent(page) + "&v=" + Date.now();
+    shot.alt = ui.alt.replace("{name}", nameById[page] || page);
+    shot.src = "/dashboard.png?page=" + encodeURIComponent(page) + previewQuery + "&v=" + Date.now();
   }
 
   shot.addEventListener("load", function () {
@@ -316,7 +320,7 @@
   });
   shot.addEventListener("error", function () {
     wait.hidden = false;
-    wait.textContent = "这一页暂时渲染不出来";
+    wait.textContent = ui.render_fail;
   });
   buttons.forEach(function (btn) {
     btn.addEventListener("click", function () { show(btn.getAttribute("data-page")); });
@@ -324,10 +328,10 @@
   show("today");
 
   fetch("/health").then(function (res) { return res.json(); }).then(function (data) {
-    var line = "服务在线";
-    if (data.screen) line += " · 画面 " + data.screen;
-    if (data.has_weather) line += " · 天气已更新";
-    else if (data.last_error) line += " · 天气暂不可用";
+    var line = ui.online;
+    if (data.screen) line += ui.screen.replace("{screen}", data.screen);
+    if (data.has_weather) line += ui.weather_ok;
+    else if (data.last_error) line += ui.weather_bad;
     document.getElementById("status").textContent = line;
   }).catch(function () {
     document.getElementById("status").textContent = "";

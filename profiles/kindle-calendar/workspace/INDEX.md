@@ -47,6 +47,31 @@ pipeline:
       reports:
         - 05-reports/gate1-web-admin.md
         - 05-reports/gate2-web-admin.md
+  - module: en-locale
+    title: "双语画面与网页语言（天气台历.sh 中文 / WeatherCalendar.sh 英文；首页与管理端 Cookie 切换）"
+    stages:
+      design:
+        status: complete
+        note: "冷启动新模块，D1 走架构变更管理。D0–D4 + Gate 1 PASS（2026-10-10）。不重做 v2-pages、v2-aqi、web-admin。较早的窄范围（不翻译画面和管理端）已作废。报告 05-reports/gate1-en-locale.md"
+      code:
+        status: complete
+        note: "2026-10-10 按已确认设计实现。Gate 2 WARN：单测 23 项与浏览器中英文切换、lang=en 画面已通过；Kindle 真机未验证。报告 05-reports/gate2-en-locale.md"
+    artifacts:
+      architecture:
+        - 00-architecture/business-arch.md (v1.3)
+        - 00-architecture/application-arch.md (v1.3)
+        - 00-architecture/function-list.md (v1.2)
+      prd:
+        - 02-detailed/prd/prd-en-locale.md (v1.1)
+      api:
+        - 02-detailed/api/api-en-locale.md (v1.1)
+      interaction:
+        - 02-detailed/interaction/interaction-en-locale.md (v1.1)
+      conventions:
+        - 01-solution/common-spec/enum-pool.md (v1.1, §3 ui_lang)
+      reports:
+        - 05-reports/gate1-en-locale.md
+        - 05-reports/gate2-en-locale.md
 reference: []
 modules:
   - name: onboarding

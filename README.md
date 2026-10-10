@@ -138,7 +138,7 @@ ssh root@<Kindle的IP> "nohup /mnt/us/kindle-calendar/dash.sh &"
 
 1. 复制 `kindle/documents/天气台历.sh` 到 Kindle 的 `documents/`
 2. 确保已上传 `/mnt/us/kindle-calendar/lib/display.sh`
-3. 在书库中点「天气台历」
+3. 在书库中点「天气台历」看中文画面。同目录的 `WeatherCalendar.sh` 是英文画面。带空格的 `Weather Calendar.sh` 仍进入中文。
 
 默认 `BOOK_FULLSCREEN=false` 时按 Home 返回书库。设为 `true` 后只能重启退出。
 

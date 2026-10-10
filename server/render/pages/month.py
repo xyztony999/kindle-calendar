@@ -7,6 +7,7 @@ from datetime import date
 from PIL import Image, ImageDraw
 
 from server import almanac
+from server.locale import badge_en, is_en, month_title, weekday_en
 from server.render import style
 from server.render.regions import Rect
 
@@ -37,10 +38,16 @@ def render_title(payload: dict, rect: Rect, font_path: str, offset: int = 0) -> 
     f_title = _font(sx, 38, font_path)
     f_hint = _font(sx, 20, font_path)
 
-    draw.text((2, 4), f"{today.year if viewing.year == today.year else viewing.year}年{_month_cn(viewing.month)}月", fill=style.INK, font=f_title)
+    if is_en(payload):
+        title = month_title(viewing.year, viewing.month)
+        hint = "Swipe back"
+    else:
+        title = f"{today.year if viewing.year == today.year else viewing.year}年{_month_cn(viewing.month)}月"
+        hint = "左右滑回当月"
+    draw.text((2, 4), title, fill=style.INK, font=f_title)
     # 翻月交互为滑动（非当月时提示左右滑可回当月）
     if offset != 0:
-        style.draw_text_right(draw, rect.w, 16, "左右滑回当月", f_hint, style.MID)
+        style.draw_text_right(draw, rect.w, 16, hint, f_hint, style.MID)
     return img
 
 
@@ -63,7 +70,8 @@ def render_grid(payload: dict, rect: Rect, font_path: str, offset: int = 0) -> I
     f_sub = _font(sx, 19, font_path)
 
     # 表头（周一起始，周末 MID）
-    for j, wd in enumerate(WEEKDAYS_CN):
+    headers = [weekday_en(j) for j in range(7)] if is_en(payload) else WEEKDAYS_CN
+    for j, wd in enumerate(headers):
         style.draw_text_center(draw, j * col_w + col_w // 2, 8, wd, f_wd, style.MID if j >= 5 else style.INK)
 
     style.hairline(draw, 0, header_h - 4, rect.w)
@@ -83,8 +91,8 @@ def render_grid(payload: dict, rect: Rect, font_path: str, offset: int = 0) -> I
             hol = info["holiday"]
             has_badge = hol is not None
             if has_badge:
-                badge = hol["note"]
-                bw, bh = int(30 * sx), int(24 * sx)
+                badge = badge_en(hol["note"]) if is_en(payload) else hol["note"]
+                bw, bh = int(52 * sx) if is_en(payload) else int(30 * sx), int(24 * sx)
                 bx = x0 + 4
                 by = y0 + 2
                 if hol["type"] == "holiday":

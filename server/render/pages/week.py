@@ -7,6 +7,7 @@ from datetime import date
 from PIL import Image, ImageDraw
 
 from server.icons import draw_weather_icon
+from server.locale import is_en, weekday_en
 from server.render import style
 from server.render.regions import Rect
 
@@ -41,8 +42,11 @@ def render_list(payload: dict, rect: Rect, font_path: str) -> Image.Image:
         # 星期必须从日期计算——forecast 首行为今天，行号推星期会整体错位
         mday = d["date"][5:7].lstrip("0") or "0"
         dday = d["date"][8:10].lstrip("0") or "0"
-        wd = WEEKDAYS_CN[date.fromisoformat(d["date"]).weekday()]
-        label = "今天" if is_today else f"周{wd}"
+        if is_en(payload):
+            label = "Today" if is_today else weekday_en(date.fromisoformat(d["date"]).weekday())
+        else:
+            wd = WEEKDAYS_CN[date.fromisoformat(d["date"]).weekday()]
+            label = "今天" if is_today else f"周{wd}"
         draw.text((10, y0 + row_h // 2 - 32), label, fill=style.INK, font=f_day)
         draw.text((10, y0 + row_h // 2 + 4), f"{mday}/{dday}", fill=style.MID, font=f_date)
 

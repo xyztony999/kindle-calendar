@@ -134,7 +134,8 @@ def render_sun(payload: dict, rect: Rect, font_path: str) -> Image.Image:
 
     # 月相盘：8 档相位图标，完整居中（右侧留足边距，盘心与标签对齐）
     mcx, mcy, mr = int(rect.w - 46 * sx), int(rect.h * 0.42), int(30 * sx)
-    render_moon_disk(draw, mcx, mcy, mr, sun.get("phase", 0.5), int(sun.get("illumination", 50)))
+    illum = int(sun.get("illumination", 50))
+    render_moon_disk(draw, mcx, mcy, mr, sun.get("phase", 0.5), illum)
     style.draw_text_center(draw, mcx, int(rect.h * 0.78), f"{sun['name']} {illum}%", f_label, style.MID)
     return img
 

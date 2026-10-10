@@ -274,4 +274,4 @@ kindle-calendar/
 
 ## 许可
 
-MIT
+本项目以 [GNU General Public License v3.0](LICENSE) 发布。你可以自由使用、修改和再发行，但再发行时必须提供完整源码，并且修改版也必须使用 GPL-3.0。版权 © 2026 Xinyi Zhang。

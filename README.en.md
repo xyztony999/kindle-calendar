@@ -276,4 +276,4 @@ Design notes live under `profiles/kindle-calendar/workspace/`.
 
 ## License
 
-MIT
+This project is released under the [GNU General Public License v3.0](LICENSE). You may use, modify, and redistribute it, provided that redistributions include the complete corresponding source and that derivative works stay under GPL-3.0. Copyright © 2026 Xinyi Zhang.

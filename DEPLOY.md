@@ -60,7 +60,7 @@ GitHub 仓库 → Settings → Secrets and variables → Actions → New reposit
 | Secret | 值 | 说明 |
 |--------|-----|------|
 | `ACR_REGISTRY` | `crpi-xxxx.cn-beijing.personal.cr.aliyuncs.com` | ACR 注册地址（新版个人版格式；老版形如 `registry.cn-hangzhou.aliyuncs.com`，不含命名空间） |
-| `ACR_NAMESPACE` | `xyztony` | ACR 命名空间 |
+| `ACR_NAMESPACE` | 命名空间名称 | ACR 命名空间 |
 | `ACR_USERNAME` | 阿里云账号 | 「访问凭证」页显示的用户名 |
 | `ACR_PASSWORD` | 固定密码 | 第 1 步设置的 |
 | `DEPLOY_HOST` | `47.x.x.x` | 服务器公网 IP |

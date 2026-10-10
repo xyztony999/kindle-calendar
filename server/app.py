@@ -125,10 +125,12 @@ def create_app() -> Flask:
     def region_png(page: str, region: str):
         if page not in PAGES or not _REGION_RE.match(region):
             return Response("not found", status=404)
-        rendered = service.get_region(page, region)
+        # 月历 title/grid 支持任意月偏移（跨月浏览）
+        offset = request.args.get("offset", type=int) or 0
+        rendered = service.get_region(page, region, offset)
         if rendered is None:
             return Response("not found", status=404)
-        return _png_response(rendered.png, rendered.etag)
+        return _png_response(rendered.png, f"{rendered.etag}-{offset}" if offset else rendered.etag)
 
     @app.get("/r/<page>/clock/<glyph>.png")
     def clock_glyph_png(page: str, glyph: str):

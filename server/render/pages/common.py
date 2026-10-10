@@ -25,20 +25,20 @@ def render_header(payload: dict, rect: Rect, font_path: str, page: str) -> Image
     style.hairline(draw, 0, 2, rect.w)
     style.hairline(draw, 0, rect.h - 3, rect.w)
 
-    f_big = _font(sx, 34, font_path)
-    f_small = _font(sx, 22, font_path)
+    f_big = _font(sx, 30, font_path)
+    f_small = _font(sx, 20, font_path)
     f_page = _font(sx, 20, font_path)
 
-    # 左：大字日期（上）+ 星期/节日/班休（下）——40px 大字与 22px 小字在
-    # 78px 高的页眉里会贴字，缩一档并拉开基线
-    draw.text((2, 6), date["month_day_cn"], fill=style.INK, font=f_big)
+    # 左：大字日期（上）+ 星期/节日/班休（下）。78px 页眉要容纳两行，
+    # 基线必须留出 descender：小字行底 ≤70（底线在 75），否则压线
+    draw.text((2, 4), date["month_day_cn"], fill=style.INK, font=f_big)
     weekday_line = f"星期{date['weekday']}"
     notes = list(date.get("festivals") or [])
     if holiday:
         notes.append(f"{holiday['name']}{holiday['note']}")
     if notes:
         weekday_line += " · " + " · ".join(notes[:2])
-    draw.text((4, 48), weekday_line, fill=style.INK, font=f_small)
+    draw.text((4, 42), weekday_line, fill=style.INK, font=f_small)
 
     # 右：页指示（最上）+ 农历干支（其下），两行右对齐、互不侵入
     dot_r = 4
@@ -55,7 +55,7 @@ def render_header(payload: dict, rect: Rect, font_path: str, page: str) -> Image
         style.draw_text(draw, (cx + dot_r + 4, 10), PAGE_LABELS[p], f_page, style.MID if p != page else style.INK, tracking=2)
         x += style.tracked_width(draw, PAGE_LABELS[p], f_page, 2) + dot_gap
 
-    style.draw_text_right(draw, rect.w, 50, f"{date['lunar']} · {date['ganzhi_year']}{date['zodiac']}年", f_small, style.MID)
+    style.draw_text_right(draw, rect.w, 46, f"{date['lunar']} · {date['ganzhi_year']}{date['zodiac']}年", f_small, style.MID)
     return img
 
 

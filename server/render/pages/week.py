@@ -25,6 +25,7 @@ def render_list(payload: dict, rect: Rect, font_path: str) -> Image.Image:
     f_day = _font(sx, 30, font_path)
     f_temp = _font(sx, 28, font_path)
     f_desc = _font(sx, 24, font_path)
+    f_date = _font(sx, 20, font_path)  # 日期小字：24px 时 descender 会压出今日行框
 
     today_iso = payload["date"]["iso"]
     for i, d in enumerate(daily):
@@ -34,12 +35,12 @@ def render_list(payload: dict, rect: Rect, font_path: str) -> Image.Image:
             # 右/下边界收 1px：坐标等于分区宽高时 PIL 画线越界被裁，框会缺边
             draw.rectangle((0, y0 + 2, rect.w - 1, y0 + row_h - 4), outline=style.RULE, width=1)
 
-        # 左：周几 + 日期
+        # 左：周几 + 日期（双行收进框内：date 底 ≈ y0+40+26 < 框底 y0+66）
         mday = d["date"][5:7].lstrip("0") or "0"
         dday = d["date"][8:10].lstrip("0") or "0"
         label = "今天" if is_today else f"周{WEEKDAYS_CN[i % 7]}"
-        draw.text((10, y0 + row_h // 2 - 30), label, fill=style.INK, font=f_day)
-        draw.text((10, y0 + row_h // 2 + 6), f"{mday}/{dday}", fill=style.MID, font=f_desc)
+        draw.text((10, y0 + row_h // 2 - 32), label, fill=style.INK, font=f_day)
+        draw.text((10, y0 + row_h // 2 + 4), f"{mday}/{dday}", fill=style.MID, font=f_date)
 
         # 中：天气图标 + 描述
         icon_size = row_h - 26

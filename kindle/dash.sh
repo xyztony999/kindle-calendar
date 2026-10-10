@@ -31,6 +31,7 @@ ROTATE_ENABLED=1
 ROTATE_TODAY_S=120
 ROTATE_OTHER_S=30
 ROTATE_SUPPRESS_S=120
+MONTH_LIMIT=24  # 翻月范围（±N 月），env 可覆盖；±1 为预裁资产零延迟，超出按需拉取
 TOUCH_MODE=force      # force：tapread 在位即沉浸（tapread 已真机验证）；auto：先验证；off：纯轮播
 TOUCH_VERIFY_S=90     # auto 模式验证窗口
 TOUCH_DEAD_S=0        # 沉浸后无触摸事件自动恢复的秒数；0=关闭（tapread 已稳定，避免误踢回书库）
@@ -148,16 +149,24 @@ goto_page() {
     eval regions=\"\$R_${upper}_REGIONS\"
     [ -n "$regions" ] || return 1
 
-    # 月历页：TITLE/GRID 按偏移月展开为三预裁键（PREV/CUR/NEXT）
+    # 月历页：TITLE/GRID——±1 月用预裁键（零延迟），其余偏移动态拉取
     for r in $regions; do
         if [ "$page" = "month" ] && { [ "$r" = "TITLE" ] || [ "$r" = "GRID" ]; }; then
             case "$MONTH_OFFSET" in
-                -1) suffix="_PREV" ;;
-                1) suffix="_NEXT" ;;
-                *) suffix="_CUR" ;;
+                -1) sync_region_asset "${upper}_${r}_PREV"
+                    draw_region "${upper}_${r}_PREV" "$flash" 1 ;;
+                1)  sync_region_asset "${upper}_${r}_NEXT"
+                    draw_region "${upper}_${r}_NEXT" "$flash" 1 ;;
+                0)  sync_region_asset "${upper}_${r}_CUR"
+                    draw_region "${upper}_${r}_CUR" "$flash" 1 ;;
+                *)  ensure_month_asset "$r" "$MONTH_OFFSET"
+                    lc="$r"
+                    if [ -f "$CACHE_DIR/${lc}_m${MONTH_OFFSET}.png" ]; then
+                        eval x="\$R_MONTH_${r}_X"
+                        eval y="\$R_MONTH_${r}_Y"
+                        fbink_img "$CACHE_DIR/${lc}_m${MONTH_OFFSET}.png" "$x" "$y" GC16 "$flash"
+                    fi ;;
             esac
-            sync_region_asset "${upper}_${r}${suffix}"
-            draw_region "${upper}_${r}${suffix}" "$flash" 1
         else
             sync_region_asset "${upper}_${r}"
             draw_region "${upper}_${r}" "$flash" 1
@@ -167,6 +176,27 @@ goto_page() {
         rm -f "$STATE_DIR/clock.last"
         draw_clock
     fi
+}
+
+# ensure_month_asset <TITLE|GRID> <offset>：动态月份资产本地缓存
+# （文件存在即用；跨天清除，由 do_fetch 后的重绘触发重拉）
+ensure_month_asset() {
+    r="$1"
+    off="$2"
+    [ -n "$off" ] && [ "$off" != "0" ] || return 1
+    f="$CACHE_DIR/month_${r}_m${off}.png"
+    [ -f "$f" ] && return 0
+
+    eval tmpl="\$R_MONTH_${r}_TMPL"
+    [ -n "$tmpl" ] || return 1
+    url=$(printf '%s' "$tmpl" | sed "s/{o}/$off/")
+    wifi_on
+    if ! fetch_url "$f" "$url"; then
+        rm -f "$f"
+        log "动态月资产拉取失败 offset=$off"
+    fi
+    wifi_off
+    [ -f "$f" ]
 }
 
 sync_glyphs() {
@@ -426,9 +456,13 @@ switch_page() {
 
 change_month() {
     new=$((MONTH_OFFSET + $1))
-    [ "$new" -gt 1 ] || [ "$new" -lt -1 ] && return 0
+    # 跨月范围 ±MONTH_LIMIT（env 下发，默认 24）
+    limit=${MONTH_LIMIT:-24}
+    [ "$new" -gt "$limit" ] || [ "$new" -lt "$((-limit))" ] && return 0
     MONTH_OFFSET=$new
-    goto_page month
+    if goto_page month; then
+        ROTATE_UNTIL=$(( $(date +%s) + ${ROTATE_SUPPRESS_S:-120} ))
+    fi
 }
 
 toggle_invert() {
@@ -582,6 +616,7 @@ v21_loop() {
         if [ "$day" != "$last_day" ]; then
             log "跨天，全量刷新并回当月"
             MONTH_OFFSET=0
+            rm -f "$CACHE_DIR"/month_title_m*.png "$CACHE_DIR"/month_grid_m*.png 2>/dev/null
             do_fetch
             redraw_all_flash
             last_day="$day"

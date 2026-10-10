@@ -78,6 +78,7 @@ class DashboardService:
         self._payload_fingerprint = ""
         self._regions: dict[tuple[str, str], RegionRender] = {}
         self._regions_fingerprint = ""
+        self._month_offset_cache: dict[tuple, RegionRender] = {}  # (region, offset, fingerprint)
         self._glyphs: dict[str, bytes] = {}
         self._glyphs_key: tuple | None = None
 
@@ -177,11 +178,39 @@ class DashboardService:
             self._regions_fingerprint = fingerprint
         return regions
 
-    def get_region(self, page: str, region: str) -> RegionRender | None:
+    def get_region(self, page: str, region: str, offset: int = 0) -> RegionRender | None:
         if page not in PAGES or region not in page_region_names(page):
             return None
+        # 月历 title/grid 支持任意月偏移（跨月浏览），独立小缓存
+        if page == "month" and region in ("title", "grid") and offset != 0:
+            return self._get_month_offset_region(region, offset)
         regions = self._get_regions()
         return regions.get((page, region))
+
+    def _get_month_offset_region(self, region: str, offset: int) -> RegionRender:
+        offset = max(-120, min(120, int(offset)))
+        payload = self.get_payload()
+        key = (region, offset, self._payload_fingerprint)
+        with self._lock:
+            cached = self._month_offset_cache.get(key)
+        if cached is not None:
+            return cached
+
+        from server.render.pages import month as month_page
+
+        rects = page_regions("month", self.width, self.height)
+        if region == "title":
+            img = month_page.render_title(payload, rects["title"], self.font_path, offset=offset)
+        else:
+            img = month_page.render_grid(payload, rects["grid"], self.font_path, offset=offset)
+        png = _png_bytes(img)
+        rendered = RegionRender(rect=rects[region], png=png, etag=hashlib.sha256(png).hexdigest()[:32])
+
+        with self._lock:
+            if len(self._month_offset_cache) > 64:  # 两年跨度的 LRU 上限
+                self._month_offset_cache.clear()
+            self._month_offset_cache[key] = rendered
+        return rendered
 
     def get_glyphs(self) -> dict[str, bytes]:
         key = (self.width, self.height, self.font_path)
@@ -256,6 +285,10 @@ class DashboardService:
             "ROTATE_TODAY_S=120",
             "ROTATE_OTHER_S=30",
             "ROTATE_SUPPRESS_S=120",
+            # 翻月范围（±N 月）：±1 用预裁资产零流量，超出经 TMPL 按需拉取
+            "MONTH_LIMIT=24",
+            f'R_MONTH_TITLE_TMPL="{base}/r/month/title.png?offset={{o}}"',
+            f'R_MONTH_GRID_TMPL="{base}/r/month/grid.png?offset={{o}}"',
             f'LEGACY_URL="{base}/dashboard.png"',
         ]
 

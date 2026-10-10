@@ -90,16 +90,17 @@ def render_sun(payload: dict, rect: Rect, font_path: str) -> Image.Image:
     draw.text((x0, 2), f"日出 {sun['sunrise']}", fill=style.MID, font=f_label)
     style.draw_text_right(draw, x1 + 8, 2, f"日落 {sun['sunset']}", f_label, style.MID)
 
-    # 月相盘
+    # 月相盘：按照亮比例画盈亏（错位圆 carve 法，与场景图 _moon 一致）——
+    # 原 pieslice 写死半圆，2% 的残月也显示成半盘灰
     mcx, mcy, mr = int(rect.w - 52 * sx), int(rect.h * 0.46), int(34 * sx)
-    draw.ellipse((mcx - mr, mcy - mr, mcx + mr, mcy + mr), outline=style.MID, width=2)
+    phase = sun.get("phase", 0.5)
     illum = sun.get("illumination", 50)
-    draw.pieslice(
-        (mcx - mr + 2, mcy - mr + 2, mcx + mr - 2, mcy + mr - 2),
-        start=-90,
-        end=90 if sun.get("phase", 0.5) >= 0.5 else -90,
-        fill=style.LIGHT,
-    )
+    draw.ellipse((mcx - mr, mcy - mr, mcx + mr, mcy + mr), fill=style.INK, outline=style.MID, width=2)
+    # 亮面比例 0→全暗 1→全亮：遮挡圆位移量随 |2*illum-1| 变化；
+    # 上限 1.7r 而非 2r——保证极低照度（如 2% 残月）仍留一弯可见月牙
+    shift = int(mr * 1.7 * abs(2 * min(max(illum, 0), 100) / 100 - 1))
+    dx = -shift if phase < 0.5 else shift
+    draw.ellipse((mcx - mr + dx, mcy - mr, mcx + mr + dx, mcy + mr), fill=style.PAPER)
     style.draw_text_center(draw, mcx, int(rect.h * 0.82), f"{sun['name']} {illum}%", f_label, style.MID)
     return img
 

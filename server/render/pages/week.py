@@ -31,7 +31,8 @@ def render_list(payload: dict, rect: Rect, font_path: str) -> Image.Image:
         y0 = i * row_h
         is_today = d["date"] == today_iso
         if is_today:
-            draw.rectangle((0, y0 + 2, rect.w, y0 + row_h - 4), outline=style.RULE, width=1)
+            # 右/下边界收 1px：坐标等于分区宽高时 PIL 画线越界被裁，框会缺边
+            draw.rectangle((0, y0 + 2, rect.w - 1, y0 + row_h - 4), outline=style.RULE, width=1)
 
         # 左：周几 + 日期
         mday = d["date"][5:7].lstrip("0") or "0"

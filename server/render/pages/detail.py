@@ -79,9 +79,10 @@ def render_indices(payload: dict, rect: Rect, font_path: str) -> Image.Image:
     f_val = _font(sx, 40, font_path)
 
     cols, gap = 2, int(16 * sx)
-    card_w = (rect.w - gap) // cols
+    # 网格整体收 2px：末列/末排边线坐标若等于分区宽高会越界被裁（框缺边）
+    card_w = (rect.w - gap - 2) // cols
     rows = (len(cards) + cols - 1) // cols
-    card_h = (rect.h - gap * (rows - 1)) // rows
+    card_h = (rect.h - gap * (rows - 1) - 2) // rows
 
     for i, (key, val) in enumerate(cards):
         r, c = divmod(i, cols)

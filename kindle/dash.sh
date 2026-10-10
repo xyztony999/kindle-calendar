@@ -160,11 +160,11 @@ goto_page() {
                 0)  sync_region_asset "${upper}_${r}_CUR"
                     draw_region "${upper}_${r}_CUR" "$flash" 1 ;;
                 *)  ensure_month_asset "$r" "$MONTH_OFFSET"
-                    lc="$r"
-                    if [ -f "$CACHE_DIR/${lc}_m${MONTH_OFFSET}.png" ]; then
+                    f="$CACHE_DIR/month_${r}_m${MONTH_OFFSET}.png"
+                    if [ -f "$f" ]; then
                         eval x="\$R_MONTH_${r}_X"
                         eval y="\$R_MONTH_${r}_Y"
-                        fbink_img "$CACHE_DIR/${lc}_m${MONTH_OFFSET}.png" "$x" "$y" GC16 "$flash"
+                        fbink_img "$f" "$x" "$y" GC16 "$flash"
                     else
                         log "动态月资产缺失 offset=$MONTH_OFFSET region=$r"
                     fi ;;

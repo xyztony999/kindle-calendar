@@ -63,45 +63,46 @@ def render_weather(payload: dict, rect: Rect, font_path: str) -> Image.Image:
 
 
 def render_moon_disk(draw: ImageDraw.ImageDraw, cx: int, cy: int, r: int, phase: float, illum: int) -> None:
-    """月相盘：8 档相位图标，全部完整居中（ink=暗面 / paper=亮面）。
+    """月相盘：按照亮比例连续绘制真实月形（ink=暗面 / paper=亮面）。
 
-    北半球视觉：娥眉/上弦亮面在右（盈），亏凸/下弦/残月亮面在左（亏）。
-    牙形用「扇形 + 压扁椭圆蚀刻」近似，蚀圆不越出盘界。
+    亮区由外圆弧与 terminator（明暗界线）椭圆弧围成：椭圆半宽
+    k = |2·illum-1|·r 随照度连续变化——0.5 为精确半圆，趋 0/1 为细牙/满轮。
+    北半球视觉：盈月亮右、亏月亮左。
     """
-    outline = dict(outline=style.MID, width=2)
-    if illum <= 1:
-        draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=style.INK, **outline)
+    frac = min(max(illum, 0), 100) / 100.0
+    outline_kw = dict(outline=style.MID, width=2)
+    if frac <= 0.005:
+        draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=style.INK, **outline_kw)
         return
-    if illum >= 99:
+    if frac >= 0.995:
         draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=style.PAPER, outline=style.INK, width=2)
         return
 
-    waxing = phase < 0.5  # 盈月亮右、亏月亮左
-    inner = (cx - r + 2, cy - r + 2, cx + r - 2, cy + r - 2)
-    # 牙宽随照度：照度越低牙越细（弦月档忽略）
-    w = max(4, int(r * (1 - illum / 100) * 0.6))
+    # 暗盘 + 亮区多边形
+    draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=style.INK, **outline_kw)
 
-    if illum <= 40:  # 娥眉/残月：整盘暗，一侧留弧缘亮牙
-        draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=style.INK, **outline)
-        start, end = (-90, 90) if waxing else (90, 270)
-        draw.pieslice(inner, start=start, end=end, fill=style.PAPER)
-        # 蚀圆盖住扇形中部：亮牙在右→蚀圆左移；在左→右移
-        if waxing:
-            draw.ellipse((cx - r, cy - int(r * 0.62), cx + r - w, cy + int(r * 0.62)), fill=style.INK)
-        else:
-            draw.ellipse((cx - r + w, cy - int(r * 0.62), cx + r, cy + int(r * 0.62)), fill=style.INK)
-    elif illum <= 60:  # 上弦/下弦：精确半圆
-        draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=style.PAPER, **dict(outline=style.INK, width=2))
-        start, end = (90, 270) if waxing else (-90, 90)  # 暗面：盈在左、亏在右
-        draw.pieslice(inner, start=start, end=end, fill=style.INK)
-    else:  # 盈凸/亏凸：整盘亮，一侧留暗牙
-        draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=style.PAPER, **dict(outline=style.INK, width=2))
-        start, end = (90, 270) if waxing else (-90, 90)
-        draw.pieslice(inner, start=start, end=end, fill=style.INK)
-        if waxing:
-            draw.ellipse((cx - r, cy - int(r * 0.62), cx + r - w, cy + int(r * 0.62)), fill=style.PAPER)
-        else:
-            draw.ellipse((cx - r + w, cy - int(r * 0.62), cx + r, cy + int(r * 0.62)), fill=style.PAPER)
+    waxing = phase < 0.5
+    sign = 1 if waxing else -1          # 亮面方向（x 相对盘心）
+    k = abs(2 * frac - 1) * r           # terminator 椭圆半宽
+    n = 48
+    pts = []
+    if frac <= 0.5:
+        # 月牙：外圆右弧（上→下）+ terminator（下→上）
+        for i in range(n + 1):
+            t = -math.pi / 2 + math.pi * i / n
+            pts.append((cx + sign * r * math.cos(t), cy + r * math.sin(t)))
+        for i in range(n + 1):
+            t = math.pi / 2 - math.pi * i / n
+            pts.append((cx + sign * k * math.cos(t), cy + r * math.sin(t)))
+    else:
+        # 凸月：右半圆弧（上→下）+ terminator 左凸椭圆（下→上）
+        for i in range(n + 1):
+            t = -math.pi / 2 + math.pi * i / n
+            pts.append((cx + sign * r * math.cos(t), cy + r * math.sin(t)))
+        for i in range(n + 1):
+            t = math.pi / 2 - math.pi * i / n
+            pts.append((cx - sign * k * math.cos(t), cy + r * math.sin(t)))
+    draw.polygon(pts, fill=style.PAPER)
 
 
 def render_sun(payload: dict, rect: Rect, font_path: str) -> Image.Image:

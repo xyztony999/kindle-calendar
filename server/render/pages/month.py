@@ -77,33 +77,34 @@ def render_grid(payload: dict, rect: Rect, font_path: str, offset: int = 0) -> I
             is_weekend = col >= 5
             is_today = offset == 0 and day == today.day
 
-            # 今日圈注
-            if is_today:
-                r = int(row_h * 0.30)
-                draw.ellipse((cx - r, y0 + row_h // 2 - r, cx + r, y0 + row_h // 2 + r), outline=style.INK, width=3)
-
-            # 公历数字
-            day_fill = style.INK
-            if is_weekend and not is_today:
-                day_fill = style.MID
-            if is_today:
-                # 圈内数字加粗效果：直接 INK
-                day_fill = style.INK
-            draw.text((cx - 14 * sx, y0 + 10), str(day), fill=day_fill, font=f_day)
-
-            # 班休徽标（右上角）
+            # 班休徽标：左上角（右上角会与两位数日期重叠）
             hol = info["holiday"]
-            if hol:
+            has_badge = hol is not None
+            if has_badge:
                 badge = hol["note"]
                 bw, bh = int(30 * sx), int(24 * sx)
-                bx = x0 + col_w - bw - 6
-                by = y0 + 10
+                bx = x0 + 4
+                by = y0 + 2
                 if hol["type"] == "holiday":
                     draw.rectangle((bx, by, bx + bw, by + bh), fill=style.INK)
                     style.draw_text_center(draw, bx + bw // 2, by + 1, badge, f_sub, style.PAPER)
                 else:
                     draw.rectangle((bx, by, bx + bw, by + bh), outline=style.MID, width=2)
                     style.draw_text_center(draw, bx + bw // 2, by + 1, badge, f_sub, style.MID)
+
+            # 公历数字：按真实宽度水平居中；有徽标时略下移避开左上角
+            day_text = str(day)
+            dw, dh = style.text_size(draw, day_text, f_day)
+            dy = y0 + (34 if has_badge else 22)
+            day_fill = style.MID if (is_weekend and not is_today) else style.INK
+            draw.text((cx - dw // 2, dy), day_text, fill=day_fill, font=f_day)
+
+            # 今日圈注：以数字实际包围盒为中心（而非行中心），保证套住数字
+            if is_today:
+                ncx = cx
+                ncy = dy + dh // 2
+                r = max(dw, dh) // 2 + int(9 * sx)
+                draw.ellipse((ncx - r, ncy - r, ncx + r, ncy + r), outline=style.INK, width=3)
 
             # 角标文本：节气 > 节日 > 农历
             sub = info["jieqi"] or info["fest"] or info["lunar"]

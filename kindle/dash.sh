@@ -31,9 +31,9 @@ ROTATE_ENABLED=1
 ROTATE_TODAY_S=120
 ROTATE_OTHER_S=30
 ROTATE_SUPPRESS_S=600
-TOUCH_MODE=auto       # auto：验证后才沉浸 / force：立即沉浸 / off：纯轮播
+TOUCH_MODE=force      # force：tapread 在位即沉浸（tapread 已真机验证）；auto：先验证；off：纯轮播
 TOUCH_VERIFY_S=90     # auto 模式验证窗口
-TOUCH_DEAD_S=300      # 沉浸后无触摸事件多久自动恢复系统界面（防锁死）
+TOUCH_DEAD_S=0        # 沉浸后无触摸事件自动恢复的秒数；0=关闭（tapread 已稳定，避免误踢回书库）
 
 [ -f "$CONFIG" ] && . "$CONFIG"
 
@@ -174,7 +174,17 @@ sync_glyphs() {
     [ -n "$CLOCK_GLYPH_URL_PREFIX" ] || return 1
     old=""
     [ -f "$STATE_DIR/glyph.key" ] && old="$(cat "$STATE_DIR/glyph.key")"
-    [ "$old" = "$key" ] && return 0
+
+    # 几何 key 相同还不够：11 个字形文件必须全部在盘（文件名方案变更、
+    # 半途失败等都会造成缺文件——例如冒号曾因文件名含':'下载失败）
+    complete=1
+    for g in 0 1 2 3 4 5 6 7 8 9 :; do
+        if [ "$g" = ":" ]; then name="colon"; else name="$g"; fi
+        [ -f "$GLYPH_DIR/$name.png" ] || complete=0
+    done
+    if [ "$old" = "$key" ] && [ "$complete" = "1" ]; then
+        return 0
+    fi
 
     mkdir -p "$GLYPH_DIR"
     # 原子同步：全部拉取成功才替换旧字形，失败保留旧集（避免半套字形白块）
@@ -215,7 +225,9 @@ draw_clock() {
             c=":"
             file="colon"  # 冒号字形本地文件名（文件系统不允许 ':'）
             w="$CLOCK_COLON_W"
-            prev=":"
+            # 首次绘制（last 空）时屏幕上没有冒号，必须视为"变化"补画；
+            # 之后再按位比较恒等跳过
+            prev="$(printf '%s' "$last" | cut -c 3)"
         else
             if [ "$i" -le 2 ]; then idx="$i"; else idx=$((i - 1)); fi
             c="$(printf '%s' "$str" | cut -c "$idx")"
@@ -532,8 +544,8 @@ v21_loop() {
             TOUCH_START=0
         fi
 
-        # 沉浸看门狗：长时间无触摸事件 → 自动恢复系统界面，绝不锁死
-        if [ "$IMMERSIVE" = "1" ]; then
+        # 沉浸看门狗（可选，TOUCH_DEAD_S>0 时启用）：长时间无触摸事件 → 自动恢复系统界面
+        if [ "$IMMERSIVE" = "1" ] && [ "${TOUCH_DEAD_S:-0}" -gt 0 ]; then
             if [ "$LAST_TOUCH_OK" -gt "$IMMERSIVE_SINCE" ]; then
                 IMMERSIVE_SINCE="$LAST_TOUCH_OK"
             elif [ "$now" -ge $((IMMERSIVE_SINCE + TOUCH_DEAD_S)) ]; then

@@ -29,31 +29,32 @@ def render_header(payload: dict, rect: Rect, font_path: str, page: str) -> Image
     f_small = _font(sx, 22, font_path)
     f_page = _font(sx, 20, font_path)
 
-    draw.text((2, 16), date["month_day_cn"], fill=style.INK, font=f_big)
-
-    # 页指示（右上）：当前页实心，其余空心
-    dot_r = 4
-    dot_gap = int(46 * sx)
-    labels_w = sum(style.tracked_width(draw, PAGE_LABELS[p], f_page, 2) + dot_gap for p in PAGES)
-    x = rect.w - labels_w
-    for p in PAGES:
-        cx = x + dot_r
-        cy = 16 + dot_r
-        if p == page:
-            draw.ellipse((cx - dot_r, cy - dot_r, cx + dot_r, cy + dot_r), fill=style.INK)
-        else:
-            draw.ellipse((cx - dot_r, cy - dot_r, cx + dot_r, cy + dot_r), outline=style.RULE, width=1)
-        style.draw_text(draw, (cx + dot_r + 4, 12), PAGE_LABELS[p], f_page, style.MID if p != page else style.INK, tracking=2)
-        x += style.tracked_width(draw, PAGE_LABELS[p], f_page, 2) + dot_gap
-
-    style.draw_text_right(draw, rect.w, 46, f"{date['lunar']} · {date['ganzhi_year']}{date['zodiac']}年", f_small, style.MID)
+    # 左：大字日期（上）+ 星期/节日/班休（下）
+    draw.text((2, 8), date["month_day_cn"], fill=style.INK, font=f_big)
     weekday_line = f"星期{date['weekday']}"
     notes = list(date.get("festivals") or [])
     if holiday:
         notes.append(f"{holiday['name']}{holiday['note']}")
     if notes:
         weekday_line += " · " + " · ".join(notes[:2])
-    style.draw_text_right(draw, int(rect.w - labels_w * 0.55), 16, weekday_line, f_small, style.INK)
+    draw.text((4, 50), weekday_line, fill=style.INK, font=f_small)
+
+    # 右：页指示（最上）+ 农历干支（其下），两行右对齐、互不侵入
+    dot_r = 4
+    dot_gap = int(46 * sx)
+    labels_w = sum(style.tracked_width(draw, PAGE_LABELS[p], f_page, 2) + dot_gap for p in PAGES)
+    x = rect.w - labels_w
+    for p in PAGES:
+        cx = x + dot_r
+        cy = 14 + dot_r
+        if p == page:
+            draw.ellipse((cx - dot_r, cy - dot_r, cx + dot_r, cy + dot_r), fill=style.INK)
+        else:
+            draw.ellipse((cx - dot_r, cy - dot_r, cx + dot_r, cy + dot_r), outline=style.RULE, width=1)
+        style.draw_text(draw, (cx + dot_r + 4, 10), PAGE_LABELS[p], f_page, style.MID if p != page else style.INK, tracking=2)
+        x += style.tracked_width(draw, PAGE_LABELS[p], f_page, 2) + dot_gap
+
+    style.draw_text_right(draw, rect.w, 50, f"{date['lunar']} · {date['ganzhi_year']}{date['zodiac']}年", f_small, style.MID)
     return img
 
 

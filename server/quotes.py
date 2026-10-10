@@ -57,8 +57,17 @@ def _check_url(url: str) -> bool:
     return parts.scheme == "https" and parts.hostname in ALLOWED_HOSTS
 
 
-def get_quote(now: datetime) -> dict:
-    """当天内缓存；优先 Hitokoto，失败时用离线库按年内第几天轮换。"""
+def get_quote(now: datetime, mode: str = "online", custom: list | None = None) -> dict:
+    """按来源取当日一言。online 当天内缓存；offline/custom 按年内第几天轮换。"""
+    if mode == "offline":
+        return dict(OFFLINE_QUOTES[now.timetuple().tm_yday % len(OFFLINE_QUOTES)])
+    if mode == "custom":
+        items = [item for item in (custom or []) if (item.get("text") or "").strip()]
+        if items:
+            picked = items[now.timetuple().tm_yday % len(items)]
+            return {"text": picked["text"].strip(), "from": (picked.get("from") or "").strip()}
+        return dict(OFFLINE_QUOTES[now.timetuple().tm_yday % len(OFFLINE_QUOTES)])
+
     key = now.strftime("%Y-%m-%d")
     cached = _day_cache.get(key)
     if cached is not None:

@@ -40,14 +40,14 @@ class AirQuality:
     level: str
 
 
-def fetch_aqi(latitude: float, longitude: float) -> AirQuality | None:
+def fetch_aqi(latitude: float, longitude: float, timeout: float = 10) -> AirQuality | None:
     """拉取 US AQI 现值；失败/越界返回 None（PRD FR-1 优雅降级）。"""
     _check_url(AIR_QUALITY_URL)
     try:
         resp = requests.get(
             AIR_QUALITY_URL,
             params={"latitude": latitude, "longitude": longitude, "current": "us_aqi", "timezone": "auto"},
-            timeout=10,
+            timeout=timeout,
             allow_redirects=False,
         )
         resp.raise_for_status()

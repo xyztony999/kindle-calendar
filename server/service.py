@@ -20,6 +20,15 @@ from zoneinfo import ZoneInfo
 
 from server import data as data_mod
 from server.aqi import AirQuality, fetch_aqi
+from server.settings import (
+    HeartbeatLog,
+    SettingsStore,
+    copy_settings,
+    enabled_pages,
+    location_changed,
+    settings_path,
+    settings_version as content_version,
+)
 from server.render import (
     PAGE_REGION_LISTS,
     PAGES,
@@ -83,6 +92,91 @@ class DashboardService:
         self._month_offset_cache: dict[tuple, RegionRender] = {}  # (region, offset, fingerprint)
         self._glyphs: dict[str, bytes] = {}
         self._glyphs_key: tuple | None = None
+
+        self.heartbeat = HeartbeatLog()
+        deploy = {
+            "location_name": config["location_name"],
+            "latitude": config["latitude"],
+            "longitude": config["longitude"],
+            "timezone": config["timezone"],
+        }
+        self.store = SettingsStore(settings_path(), deploy, on_change=self._on_settings_changed)
+        loaded = self.store.load()
+        self._settings = loaded.settings
+        self._degraded = loaded.degraded
+        self._overlay_location(self._settings)
+        log.info("台历配置 version=%s degraded=%s", content_version(self._settings), self._degraded)
+
+    def _overlay_location(self, settings: dict) -> None:
+        loc = settings["location"]
+        self.config["location_name"] = loc["name"]
+        self.config["latitude"] = float(loc["latitude"])
+        self.config["longitude"] = float(loc["longitude"])
+        self.config["timezone"] = loc["timezone"]
+
+    def _on_settings_changed(self, old: dict, new: dict) -> bool:
+        return self.apply_settings(new, location_changed(old, new))
+
+    def apply_settings(self, new: dict, location_was_changed: bool) -> bool:
+        """写入运行中的城市与缓存失效。城市变化时同步重拉天气，失败保留旧数据。"""
+        self._overlay_location(new)
+        with self._lock:
+            self._settings = new
+            self._degraded = False
+            self._regions.clear()
+            self._regions_fingerprint = ""
+            self._month_offset_cache.clear()
+            self._payload = None
+        if not location_was_changed:
+            return False
+        return self._sync_weather(timeout=8.0)
+
+    def _sync_weather(self, timeout: float = 8.0) -> bool:
+        deadline = time.monotonic() + timeout
+        with self._weather_cond:
+            self._refreshing = True
+        try:
+            weather = fetch_weather(
+                self.config["latitude"],
+                self.config["longitude"],
+                self.config["timezone"],
+                timeout=max(1.0, timeout),
+            )
+        except Exception as exc:
+            log.warning("城市变更后天气重拉失败，保留旧数据: %s", exc)
+            with self._weather_cond:
+                if self._weather is not None:
+                    self._weather_at = time.time() - self.refresh_seconds - 1
+                self._refreshing = False
+                self._weather_cond.notify_all()
+            return False
+        remaining = max(0.5, deadline - time.monotonic())
+        aqi = fetch_aqi(self.config["latitude"], self.config["longitude"], timeout=min(4.0, remaining))
+        with self._weather_cond:
+            self._weather = weather
+            self._aqi = aqi
+            self._weather_at = time.time()
+            self._last_error = None
+            self._refreshing = False
+            self._weather_cond.notify_all()
+        log.info("城市变更后天气已更新")
+        return True
+
+    def note_heartbeat(self, ip: str, ua: str) -> None:
+        self.heartbeat.record(ip, ua, self.settings_version(), self.regions_version())
+
+    def settings_version(self) -> str:
+        with self._lock:
+            return content_version(self._settings)
+
+    def regions_version(self) -> str:
+        with self._lock:
+            return self._regions_fingerprint
+
+    def device_status(self) -> dict:
+        with self._lock:
+            settings = self._settings
+        return self.heartbeat.snapshot(content_version(settings), settings["location"]["timezone"])
 
     # ── 天气（stale-while-revalidate，沿用 v1 DashboardCache 策略）──
 
@@ -154,7 +248,9 @@ class DashboardService:
         if weather is None:
             raise RuntimeError(self._last_error or "天气数据不可用")
 
-        payload = data_mod.build_payload(self.config, weather, now, aqi)
+        with self._lock:
+            settings = copy_settings(self._settings)
+        payload = data_mod.build_payload(self.config, weather, now, aqi, settings)
         fingerprint = data_mod.data_fingerprint(payload)
         with self._lock:
             self._payload = payload
@@ -244,6 +340,15 @@ class DashboardService:
         base = base_url.rstrip("/")
         regions = self._get_regions()
         payload = self._payload or {}
+        with self._lock:
+            settings = copy_settings(self._settings)
+        pages = enabled_pages(settings) or ["today"]
+        dwell = {item["page_id"]: int(item["dwell_s"]) for item in settings["pages"]}
+        other = 30
+        for page_id in pages:
+            if page_id != "today":
+                other = dwell.get(page_id, 30)
+                break
         metrics = clock_metrics(self.width, self.height)
         clock_rect = page_regions("today", self.width, self.height)["clock"]
 
@@ -262,7 +367,7 @@ class DashboardService:
             f"REGIONS_VERSION={self._regions_fingerprint}",
             f"SCREEN_W={self.width}",
             f"SCREEN_H={self.height}",
-            f'PAGES="{" ".join(PAGES)}"',
+            f'PAGES="{" ".join(pages)}"',
         ]
 
         # 每页分区清单 + 各分区变量（month 的 title/grid 统一三预裁键 PREV/CUR/NEXT）
@@ -287,10 +392,15 @@ class DashboardService:
             f"CLOCK_COLON_W={metrics.colon_w}",
             f"CLOCK_GAP={metrics.gap}",
             f'CLOCK_GLYPH_URL_PREFIX="{base}/r/today/clock/"',
-            # 轮播默认值（设备 config.sh 可覆盖）
-            "ROTATE_TODAY_S=120",
-            "ROTATE_OTHER_S=30",
-            "ROTATE_SUPPRESS_S=120",
+            # 轮播与配置版本来自台历配置；旧变量名保留给 v2.1 dash.sh
+            f"SETTINGS_VERSION={content_version(settings)}",
+            f"ROTATE_ENABLED={1 if settings['rotation']['enabled'] else 0}",
+            f"ROTATE_OTHER_S={other}",
+            f"ROTATE_SUPPRESS_S={int(settings['rotation']['suppress_s'])}",
+        ]
+        for page_id in pages:
+            lines.append(f"ROTATE_{page_id.upper()}_S={dwell.get(page_id, 30)}")
+        lines += [
             # 翻月范围（±N 月）：±1 用预裁资产零流量，超出经 TMPL 按需拉取
             "MONTH_LIMIT=24",
             f'R_MONTH_TITLE_TMPL="{base}/r/month/title.png?offset={{o}}"',
@@ -311,6 +421,10 @@ class DashboardService:
         return "\n".join(lines) + "\n"
 
     def health_info(self) -> dict:
+        with self._lock:
+            version = content_version(self._settings)
+            pages = enabled_pages(self._settings)
+            location = self.config["location_name"]
         with self._weather_cond:
             return {
                 "has_weather": self._weather is not None,
@@ -318,5 +432,7 @@ class DashboardService:
                 "refreshing": self._refreshing,
                 "last_error": self._last_error,
                 "screen": f"{self.width}x{self.height}",
-                "pages": list(PAGES),
+                "location": location,
+                "settings_version": version,
+                "pages": pages,
             }

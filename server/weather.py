@@ -88,7 +88,7 @@ class WeatherData:
     hourly: list[HourlyPoint]
 
 
-def fetch_weather(latitude: float, longitude: float, timezone: str) -> WeatherData:
+def fetch_weather(latitude: float, longitude: float, timezone: str, timeout: float = 15) -> WeatherData:
     params = {
         "latitude": latitude,
         "longitude": longitude,
@@ -100,7 +100,7 @@ def fetch_weather(latitude: float, longitude: float, timezone: str) -> WeatherDa
         "forecast_hours": 24,
     }
     _check_url(OPEN_METEO_URL)
-    resp = requests.get(OPEN_METEO_URL, params=params, timeout=15, allow_redirects=False)
+    resp = requests.get(OPEN_METEO_URL, params=params, timeout=timeout, allow_redirects=False)
     resp.raise_for_status()
     data: dict[str, Any] = resp.json()
 

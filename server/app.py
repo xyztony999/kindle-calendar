@@ -5,14 +5,18 @@ from __future__ import annotations
 import logging
 import os
 import re
+import secrets
+from datetime import timedelta
 from pathlib import Path
 
 import yaml
 from flask import Flask, Response, jsonify, request
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+from server.admin import create_admin_blueprint
 from server.render import PAGES
 from server.service import DashboardService
+from server.settings import env_int
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = ROOT / "config.yaml"
@@ -89,6 +93,16 @@ def create_app() -> Flask:
     service = DashboardService(config)
 
     app = Flask(__name__)
+    app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
+    app.config["SESSION_COOKIE_HTTPONLY"] = True
+    app.config["SESSION_COOKIE_SAMESITE"] = "Strict"
+    app.permanent_session_lifetime = timedelta(days=max(1, env_int("ADMIN_SESSION_DAYS", 7)))
+    app.register_blueprint(create_admin_blueprint(service))
+
+    @app.before_request
+    def _secure_session_cookie():
+        if request.is_secure:
+            app.config["SESSION_COOKIE_SECURE"] = True
 
     @app.get("/")
     def index():
@@ -102,6 +116,7 @@ def create_app() -> Flask:
                     "/r/<page>/<region>.png": "页面分区图（today/week/month/detail/almanac）",
                     "/r/today/clock/<glyph>.png": "时钟字形（0-9 与冒号）",
                     "/dashboard.png?page=": "整页合成图（v1 兼容，默认 today）",
+                    "/admin": "管理端（口令登录）",
                     "/weather": "当前天气 JSON",
                     "/health": "健康检查",
                 },
@@ -119,6 +134,7 @@ def create_app() -> Flask:
     @app.get("/api/v1/dashboard.env")
     def dashboard_env():
         env = service.build_env(request.host_url)
+        service.note_heartbeat(request.remote_addr or "", request.headers.get("User-Agent", ""))
         return Response(env, mimetype="text/plain")
 
     @app.get("/r/<page>/<region>.png")

@@ -138,6 +138,7 @@ git push
 
 - **改代码后**：`git push` 即可，约 2~3 分钟自动上线（构建有缓存会更快）
 - **只改配置**（城市/分辨率等）：SSH 到服务器改 `.env`，然后 `docker compose -f docker-compose.acr.yml up -d`
+- **管理端口令**：写在服务器 `/www/wwwroot/kindle-calendar/.env` 的 `ADMIN_PASSWORD`（可另加 `SECRET_KEY`）。Actions 只构建镜像并 `pull` / `up -d`，不会覆盖这份 `.env`，也不会把口令打进镜像。改完执行一次 `mkdir -p data && docker compose -f docker-compose.acr.yml up -d`。`data/` 挂进容器，页面和城市设置在重新部署后还在。编排文件本身不随镜像更新，这次需把仓库里新的 `docker-compose.acr.yml` 同步到服务器一次。
 - **手动重新部署**：Actions → Deploy to Aliyun → Run workflow
 - **查看日志**：宝塔 → Docker → 容器日志，或 `docker logs -f kindle-calendar`
 

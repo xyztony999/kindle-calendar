@@ -6,10 +6,17 @@ from datetime import datetime
 
 from server import almanac, astro, holidays, quotes
 from server.aqi import AirQuality
+from server.settings import PAGE_IDS, enabled_pages, settings_version
 from server.weather import WeatherData
 
 
-def build_payload(config: dict, weather: WeatherData, now: datetime, aqi: AirQuality | None = None) -> dict:
+def build_payload(
+    config: dict,
+    weather: WeatherData,
+    now: datetime,
+    aqi: AirQuality | None = None,
+    settings: dict | None = None,
+) -> dict:
     lat, lon = config["latitude"], config["longitude"]
 
     hourly = [
@@ -27,10 +34,20 @@ def build_payload(config: dict, weather: WeatherData, now: datetime, aqi: AirQua
     window = [h for h in hourly if h["time"] >= cutoff][:6]
     precip_prob = max((h["precip"] for h in window), default=0)
 
+    if settings:
+        pages = enabled_pages(settings) or ["today"]
+        version = settings_version(settings)
+        quote = quotes.get_quote(now, settings["quote"]["mode"], settings["quote"].get("custom"))
+    else:
+        pages = list(PAGE_IDS)
+        version = ""
+        quote = quotes.get_quote(now)
+
     return {
         "generated_at": now.isoformat(timespec="seconds"),
         "location": config["location_name"],
-        "pages": ["today"],
+        "pages": pages,
+        "settings_version": version,
         "clock": {
             "now": now.strftime("%H:%M"),
             "minutes": now.hour * 60 + now.minute,
@@ -61,7 +78,7 @@ def build_payload(config: dict, weather: WeatherData, now: datetime, aqi: AirQua
         },
         "sun": astro.day_summary(now, lat, lon),
         "aqi": None if aqi is None else {"us_aqi": aqi.us_aqi, "level_zh": aqi.level, "fetched_at": now.isoformat(timespec="seconds")},
-        "quote": quotes.get_quote(now),
+        "quote": quote,
     }
 
 

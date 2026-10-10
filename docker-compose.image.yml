@@ -17,6 +17,10 @@ services:
       SCREEN_WIDTH: ${SCREEN_WIDTH:-758}
       SCREEN_HEIGHT: ${SCREEN_HEIGHT:-1024}
       FONT_PATH: /usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      SECRET_KEY: ${SECRET_KEY:-}
+    volumes:
+      - ./data:/app/data
     restart: unless-stopped
     logging:
       driver: json-file

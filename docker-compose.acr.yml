@@ -19,6 +19,11 @@ services:
       SCREEN_WIDTH: ${SCREEN_WIDTH:-758}
       SCREEN_HEIGHT: ${SCREEN_HEIGHT:-1024}
       FONT_PATH: /usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc
+      # 只在服务器 .env 里填写；留空则管理端禁用。不要写进镜像或 GitHub
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      SECRET_KEY: ${SECRET_KEY:-}
+    volumes:
+      - ./data:/app/data
     restart: unless-stopped
     logging:
       driver: json-file

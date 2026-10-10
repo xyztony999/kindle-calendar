@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kindle 台历 · 管理端</title>
+<style>
+  :root {
+    --ink: #1c1c1c;
+    --mid: #5c5c5c;
+    --line: #d9d4cc;
+    --paper: #f6f3ee;
+    --card: #fff;
+    --ok: #1b7f4a;
+    --warn: #9a6b00;
+    --bad: #a33b32;
+    --neutral: #6b6560;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body {
+    margin: 0;
+    font: 15px/1.5 "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif;
+    color: var(--ink);
+    background: var(--paper);
+  }
+  button, input, select { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 20px 16px 32px; }
+  h1 { font-size: 22px; font-weight: 650; margin: 0; }
+  h2 { font-size: 16px; margin: 0 0 12px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 14px;
+    position: relative;
+  }
+  .top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
+  .muted { color: var(--mid); font-size: 13px; }
+  .link { background: none; border: 0; color: var(--mid); padding: 0; text-decoration: underline; }
+  .banner {
+    background: #fff6d8;
+    border: 1px solid #ead48a;
+    color: #6d5310;
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-bottom: 14px;
+  }
+  .dirty { color: var(--warn); font-weight: 650; }
+  .layout { display: flex; flex-direction: column; gap: 0; }
+  .col-side { min-width: 0; }
+  @media (min-width: 768px) {
+    .layout { flex-direction: row; align-items: flex-start; gap: 16px; }
+    .col-main { flex: 1.25; min-width: 0; }
+    .col-side { flex: 0.85; min-width: 280px; }
+  }
+  label.row, .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+  input[type="text"], input[type="password"], input[type="number"], input[type="search"] {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: #fff;
+    width: 100%;
+  }
+  input.bad, .bad { border-color: var(--bad) !important; }
+  .field-error { color: var(--bad); font-size: 12px; margin: -6px 0 8px; }
+  .btn {
+    border: 1px solid var(--line);
+    background: #fff;
+    border-radius: 8px;
+    padding: 8px 14px;
+  }
+  .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .btn.danger { color: var(--bad); border-color: #e3b2ad; background: #fff; }
+  .btn:disabled { opacity: 0.55; cursor: default; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  @media (max-width: 767px) {
+    .actions {
+      position: sticky;
+      bottom: 0;
+      background: rgba(246, 243, 238, 0.96);
+      padding: 10px 0 4px;
+      z-index: 3;
+    }
+  }
+  .page-row, .quote-row, .loc-grid {
+    display: grid;
+    gap: 8px;
+    align-items: center;
+  }
+  .page-row {
+    grid-template-columns: 28px 28px 1fr 96px 64px;
+    margin-bottom: 8px;
+  }
+  .quote-row { grid-template-columns: 1fr 120px 28px; margin-bottom: 8px; }
+  .loc-grid { grid-template-columns: 1fr 1fr; }
+  .handle { color: var(--mid); text-align: center; user-select: none; }
+  .switch { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .radios label { display: block; margin-bottom: 6px; }
+  .badge {
+    display: inline-block;
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 12px;
+    background: #eee;
+    color: var(--neutral);
+  }
+  .badge.ok { background: #e5f6ec; color: var(--ok); }
+  .badge.warn { background: #fff3d6; color: var(--warn); }
+  .badge.bad { background: #fdeceb; color: var(--bad); }
+  .previews { display: flex; flex-wrap: wrap; gap: 10px; }
+  .shot { width: 148px; cursor: pointer; }
+  .shot img { width: 100%; max-width: 240px; height: auto; background: #fff; border: 1px solid var(--line); display: block; }
+  .shot figcaption { font-size: 12px; color: var(--mid); margin-top: 4px; }
+  .placeholder { font-size: 12px; color: var(--mid); padding: 28px 8px; text-align: center; border: 1px dashed var(--line); }
+  .candidates {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+    margin-top: 4px;
+    max-height: 240px;
+    overflow: auto;
+  }
+  .candidates button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: #fff;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    padding: 8px 10px;
+  }
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    background: var(--ink);
+    color: #fff;
+    border-radius: 8px;
+    padding: 10px 14px;
+    max-width: min(520px, calc(100% - 24px));
+    z-index: 6;
+  }
+  .toast.bad { background: var(--bad); }
+  .lightbox {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.72);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 7;
+    padding: 16px;
+  }
+  .lightbox img { max-width: 100%; max-height: 100%; background: #fff; }
+  .summary { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+  .summary button { text-align: left; color: var(--bad); background: none; border: 0; padding: 0; }
+  .login-card { max-width: 420px; margin: 48px auto; }
+  .dim { opacity: 0.45; }
+  .counter { font-size: 12px; color: var(--mid); }
+  .search-line { display: flex; gap: 8px; }
+  .corner { position: absolute; top: 12px; right: 12px; font-size: 12px; color: var(--warn); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <section id="view-disabled" hidden>
+    <div class="card login-card">
+      <h1>管理端未启用</h1>
+      <p>请在服务端设置环境变量 <code>ADMIN_PASSWORD</code> 后重启服务。</p>
+      <p class="muted">Docker：<code>.env</code> 增加 <code>ADMIN_PASSWORD=…</code>；Render：Environment 面板添加。</p>
+    </div>
+  </section>
+
+  <section id="view-login" hidden>
+    <form class="card login-card" id="login-form">
+      <h1>Kindle 台历 · 管理端</h1>
+      <p class="muted">请输入管理员口令</p>
+      <label class="field">口令
+        <input id="password" type="password" autocomplete="off" autofocus>
+      </label>
+      <div id="login-error" class="field-error"></div>
+      <button class="btn primary" id="login-btn" type="submit">登录</button>
+    </form>
+  </section>
+
+  <section id="view-settings" hidden>
+    <div class="top">
+      <div>
+        <h1>Kindle 台历 · 管理端</h1>
+        <div class="muted">版本 <span id="version-label">—</span> <span id="dirty-flag" class="dirty" hidden>● 未保存</span></div>
+      </div>
+      <button class="link" id="logout-btn" type="button">退出登录</button>
+    </div>
+    <div id="degraded-banner" class="banner" hidden>配置文件缺失或损坏，当前为默认值运行；保存后将重新创建</div>
+    <div id="error-summary" class="summary"></div>
+    <div class="layout">
+      <div class="col-main">
+        <section class="card" id="card-pages">
+          <h2>页面与轮播</h2>
+          <label class="switch"><input id="rotate-enabled" type="checkbox"> 自动轮播</label>
+          <div id="page-list"></div>
+          <p id="only-today" class="muted" hidden>仅今日页：不轮播、无翻页</p>
+          <label class="field">触摸后暂停轮播的秒数
+            <input id="suppress" type="number" min="0" max="3600" step="1" data-field="rotation.suppress_s">
+          </label>
+        </section>
+        <section class="card" id="card-location">
+          <span id="loc-flag" class="corner" hidden>保存后天气将重新拉取</span>
+          <h2>城市</h2>
+          <div class="search-line">
+            <input id="geo-q" type="search" placeholder="搜索城市，例如杭州" maxlength="50">
+            <button class="btn" id="geo-btn" type="button">搜索</button>
+          </div>
+          <div id="geo-status" class="muted"></div>
+          <div id="geo-list"></div>
+          <div class="loc-grid">
+            <label class="field">城市名
+              <input id="loc-name" type="text" maxlength="20" data-field="location.name">
+            </label>
+            <label class="field">时区
+              <input id="loc-tz" type="text" list="tz-list" data-field="location.timezone">
+            </label>
+            <label class="field">纬度
+              <input id="loc-lat" type="number" min="-90" max="90" step="0.0001" data-field="location.latitude">
+            </label>
+            <label class="field">经度
+              <input id="loc-lon" type="number" min="-180" max="180" step="0.0001" data-field="location.longitude">
+            </label>
+          </div>
+          <datalist id="tz-list">
+            <option value="Asia/Shanghai"><option value="Asia/Hong_Kong"><option value="Asia/Taipei">
+            <option value="Asia/Tokyo"><option value="Asia/Seoul"><option value="Asia/Singapore">
+            <option value="Asia/Bangkok"><option value="Asia/Dubai"><option value="Asia/Kolkata">
+            <option value="Europe/London"><option value="Europe/Paris"><option value="Europe/Berlin">
+            <option value="Europe/Moscow"><option value="America/New_York"><option value="America/Chicago">
+            <option value="America/Denver"><option value="America/Los_Angeles"><option value="America/Sao_Paulo">
+            <option value="Australia/Sydney"><option value="Pacific/Auckland"><option value="UTC">
+          </datalist>
+        </section>
+        <section class="card" id="card-quote">
+          <h2>一言</h2>
+          <div class="radios" id="quote-modes"></div>
+          <div id="custom-box" hidden>
+            <div id="quote-list"></div>
+            <button class="btn" id="add-quote" type="button">添加一条</button>
+            <p id="quote-preview" class="muted"></p>
+          </div>
+        </section>
+      </div>
+      <div class="col-side">
+        <section class="card" id="card-device">
+          <h2>设备状态</h2>
+          <div id="device-body" class="muted">—</div>
+        </section>
+        <section class="card">
+          <h2>预览</h2>
+          <p id="preview-hint" class="muted" hidden>预览反映已保存配置，保存后更新</p>
+          <div id="previews" class="previews"></div>
+        </section>
+        <section class="card">
+          <div class="actions">
+            <button class="btn primary" id="save-btn" type="button">保存</button>
+            <button class="btn danger" id="reset-btn" type="button">恢复默认</button>
+            <a class="btn" id="export-link" href="/admin/api/settings/export">导出</a>
+            <button class="btn" id="import-btn" type="button">导入</button>
+            <input id="import-file" type="file" accept=".json,application/json" hidden>
+          </div>
+        </section>
+      </div>
+    </div>
+  </section>
+</div>
+<div id="toast" class="toast" hidden></div>
+<div id="lightbox" class="lightbox" hidden><img id="lightbox-img" alt=""></div>
+<script id="boot" type="application/json">{{ boot|tojson }}</script>
+<script>
+(function () {
+  const PAGE_LABEL = {today: "今日", week: "一周", month: "月历", detail: "详情", almanac: "黄历"};
+  const QUOTE_LABEL = {
+    online: "在线一言（失败回退离线诗词）",
+    offline: "离线诗词",
+    custom: "自定义文案"
+  };
+  const DELIVERY = {pending: "待下发", delivered: "已下发", unknown: "未知"};
+  const ONLINE = {online: "在线", offline: "离线", unknown: "未知"};
+  const boot = JSON.parse(document.getElementById("boot").textContent);
+  let state = null;
+  let saved = null;
+  let limits = {dwell_min: 5, dwell_max: 3600, suppress_max: 3600, custom_max: 100, text_max: 32, from_max: 16};
+  let version = "";
+  let defaults = null;
+  let dirty = false;
+  let draft = null;
+  let pollTimer = null;
+  let geoTimer = null;
+  let toastTimer = null;
+  let lockTimer = null;
+
+  const $ = (id) => document.getElementById(id);
+
+  function showView(name) {
+    ["disabled", "login", "settings"].forEach((view) => {
+      $("view-" + view).hidden = view !== name;
+    });
+    if (name !== "settings") stopPoll();
+    if (name === "login") {
+      const input = $("password");
+      input.value = "";
+      setTimeout(() => input.focus(), 0);
+    }
+  }
+
+  function toast(text, bad) {
+    const el = $("toast");
+    el.textContent = text;
+    el.classList.toggle("bad", !!bad);
+    el.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.hidden = true; }, 3000);
+  }
+
+  function snapshot(data) {
+    const copy = JSON.parse(JSON.stringify(data));
+    delete copy.updated_at;
+    delete copy.schema_version;
+    return JSON.stringify(copy);
+  }
+
+  function markDirty() {
+    dirty = snapshot(state) !== snapshot(saved);
+    $("dirty-flag").hidden = !dirty;
+    $("preview-hint").hidden = !dirty;
+    $("loc-flag").hidden = !locationDirty();
+    window.onbeforeunload = dirty ? (() => "") : null;
+  }
+
+  function locationDirty() {
+    if (!state || !saved) return false;
+    const a = state.location, b = saved.location;
+    return a.name !== b.name || a.timezone !== b.timezone ||
+      Number(a.latitude) !== Number(b.latitude) || Number(b.longitude) !== Number(a.longitude);
+  }
+
+  async function api(method, url, body, opts) {
+    opts = opts || {};
+    const headers = {"X-Requested-With": "kindle-admin"};
+    let payload;
+    if (body && !opts.form) {
+      headers["Content-Type"] = "application/json";
+      payload = JSON.stringify(body);
+    } else {
+      payload = body;
+    }
+    const resp = await fetch(url, {
+      method: method,
+      headers: headers,
+      body: method === "GET" ? undefined : payload,
+      credentials: "same-origin"
+    });
+    const kind = resp.headers.get("content-type") || "";
+    const data = kind.indexOf("json") >= 0 ? await resp.json() : null;
+    if (resp.status === 401 && !opts.login) {
+      draft = state ? JSON.parse(JSON.stringify(state)) : draft;
+      showView("login");
+      toast("登录已过期，请重新登录", true);
+      const err = new Error("auth");
+      err.handled = true;
+      throw err;
+    }
+    if (resp.status === 503 && data && data.error && data.error.code === "ADMIN_DISABLED") {
+      showView("disabled");
+      const err = new Error("disabled");
+      err.handled = true;
+      throw err;
+    }
+    if (!resp.ok || (data && data.ok === false)) {
+      const err = new Error("api");
+      err.status = resp.status;
+      err.data = data;
+      throw err;
+    }
+    return data;
+  }
+
+  function clearErrors() {
+    document.querySelectorAll(".bad").forEach((el) => el.classList.remove("bad"));
+    document.querySelectorAll(".field-error").forEach((el) => el.remove());
+    $("error-summary").replaceChildren();
+  }
+
+  function showErrors(details) {
+    clearErrors();
+    (details || []).forEach((item) => {
+      const jump = document.createElement("button");
+      jump.type = "button";
+      jump.textContent = item.message || item.code;
+      jump.addEventListener("click", () => {
+        const el = document.querySelector('[data-field="' + CSS.escape(item.field) + '"]');
+        if (el) {
+          el.scrollIntoView({behavior: "smooth", block: "center"});
+          if (el.focus) el.focus();
+        }
+      });
+      $("error-summary").appendChild(jump);
+      const el = item.field ? document.querySelector('[data-field="' + CSS.escape(item.field) + '"]') : null;
+      if (el) {
+        el.classList.add("bad");
+        const msg = document.createElement("div");
+        msg.className = "field-error";
+        msg.textContent = item.message || "";
+        el.insertAdjacentElement("afterend", msg);
+      }
+    });
+  }
+
+  function dayOfYearIn(tz) {
+    try {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: tz || "Asia/Shanghai", year: "numeric", month: "numeric", day: "numeric"
+      }).formatToParts(new Date());
+      const pick = (type) => Number(parts.find((part) => part.type === type).value);
+      const year = pick("year");
+      const utc = Date.UTC(year, pick("month") - 1, pick("day"));
+      return Math.floor((utc - Date.UTC(year, 0, 0)) / 86400000);
+    } catch (err) {
+      const now = new Date();
+      return Math.floor((Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) - Date.UTC(now.getFullYear(), 0, 0)) / 86400000);
+    }
+  }
+
+  function renderPages() {
+    const list = $("page-list");
+    list.replaceChildren();
+    const rotateOn = state.rotation.enabled;
+    state.pages.forEach((page, index) => {
+      const row = document.createElement("div");
+      row.className = "page-row" + ((!page.enabled || !rotateOn) ? " dim" : "");
+      row.dataset.field = "pages[" + index + "]";
+      row.draggable = page.page_id !== "today";
+      const handle = document.createElement("span");
+      handle.className = "handle";
+      handle.textContent = page.page_id === "today" ? "" : "⋮⋮";
+      const enabled = document.createElement("input");
+      enabled.type = "checkbox";
+      enabled.checked = page.enabled;
+      enabled.disabled = page.page_id === "today";
+      enabled.addEventListener("change", () => {
+        page.enabled = enabled.checked;
+        renderPages();
+        markDirty();
+        renderPreviews();
+      });
+      const name = document.createElement("span");
+      name.textContent = PAGE_LABEL[page.page_id] || page.page_id;
+      const dwell = document.createElement("input");
+      dwell.type = "number";
+      dwell.min = String(limits.dwell_min);
+      dwell.max = String(limits.dwell_max);
+      dwell.step = "5";
+      dwell.value = page.dwell_s;
+      dwell.dataset.field = "pages[" + index + "].dwell_s";
+      dwell.disabled = !page.enabled || !rotateOn;
+      dwell.addEventListener("input", () => {
+        const value = parseInt(dwell.value, 10);
+        if (!Number.isNaN(value)) page.dwell_s = value;
+        markDirty();
+      });
+      const moves = document.createElement("span");
+      if (page.page_id !== "today") {
+        const up = document.createElement("button");
+        up.type = "button";
+        up.className = "btn";
+        up.textContent = "↑";
+        up.disabled = index <= 1;
+        up.addEventListener("click", () => movePage(index, -1));
+        const down = document.createElement("button");
+        down.type = "button";
+        down.className = "btn";
+        down.textContent = "↓";
+        down.disabled = index >= state.pages.length - 1;
+        down.addEventListener("click", () => movePage(index, 1));
+        moves.append(up, down);
+      }
+      row.addEventListener("dragstart", (event) => {
+        event.dataTransfer.setData("text/plain", String(index));
+      });
+      row.addEventListener("dragover", (event) => {
+        if (index === 0) return;
+        event.preventDefault();
+      });
+      row.addEventListener("drop", (event) => {
+        event.preventDefault();
+        const from = parseInt(event.dataTransfer.getData("text/plain"), 10);
+        if (Number.isNaN(from) || from === 0 || index === 0) return;
+        const [item] = state.pages.splice(from, 1);
+        state.pages.splice(index, 0, item);
+        renderPages();
+        markDirty();
+      });
+      row.append(handle, enabled, name, dwell, moves);
+      list.appendChild(row);
+    });
+    const othersOff = state.pages.every((page) => page.page_id === "today" || !page.enabled);
+    $("only-today").hidden = !othersOff;
+  }
+
+  function movePage(index, delta) {
+    const next = index + delta;
+    if (index <= 0 || next <= 0 || next >= state.pages.length) return;
+    const [item] = state.pages.splice(index, 1);
+    state.pages.splice(next, 0, item);
+    renderPages();
+    markDirty();
+  }
+
+  function renderQuoteModes() {
+    const box = $("quote-modes");
+    box.replaceChildren();
+    Object.keys(QUOTE_LABEL).forEach((mode) => {
+      const label = document.createElement("label");
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = "quote-mode";
+      input.value = mode;
+      input.checked = state.quote.mode === mode;
+      input.addEventListener("change", () => {
+        state.quote.mode = mode;
+        renderCustom();
+        markDirty();
+      });
+      label.append(input, " " + QUOTE_LABEL[mode]);
+      box.appendChild(label);
+    });
+  }
+
+  function renderCustom() {
+    const visible = state.quote.mode === "custom";
+    $("custom-box").hidden = !visible;
+    const list = $("quote-list");
+    list.replaceChildren();
+    if (!visible) return;
+    state.quote.custom.forEach((item, index) => {
+      const row = document.createElement("div");
+      row.className = "quote-row";
+      const text = document.createElement("input");
+      text.type = "text";
+      text.maxLength = limits.text_max;
+      text.value = item.text;
+      text.dataset.field = "quote.custom[" + index + "].text";
+      text.addEventListener("input", () => {
+        item.text = text.value;
+        renderQuotePreview();
+        markDirty();
+      });
+      const from = document.createElement("input");
+      from.type = "text";
+      from.maxLength = limits.from_max;
+      from.placeholder = "出处";
+      from.value = item.from || "";
+      from.dataset.field = "quote.custom[" + index + "].from";
+      from.addEventListener("input", () => {
+        item.from = from.value;
+        markDirty();
+      });
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "btn";
+      del.textContent = "×";
+      del.addEventListener("click", () => {
+        state.quote.custom.splice(index, 1);
+        renderCustom();
+        markDirty();
+      });
+      const counter = document.createElement("div");
+      counter.className = "counter";
+      counter.textContent = (item.text || "").length + "/" + limits.text_max;
+      text.addEventListener("input", () => {
+        counter.textContent = text.value.length + "/" + limits.text_max;
+      });
+      row.append(text, from, del);
+      list.append(row, counter);
+    });
+    $("add-quote").disabled = state.quote.custom.length >= limits.custom_max;
+    renderQuotePreview();
+  }
+
+  function renderQuotePreview() {
+    const items = state.quote.custom.filter((item) => (item.text || "").trim());
+    const el = $("quote-preview");
+    if (!items.length) {
+      el.textContent = "自定义模式至少需要一条文案";
+      return;
+    }
+    const yday = dayOfYearIn(state.location.timezone);
+    const index = yday % items.length;
+    el.textContent = "今日将显示：第 " + (index + 1) + " 条「" + items[index].text.trim() + "」";
+  }
+
+  function fillLocation() {
+    $("loc-name").value = state.location.name;
+    $("loc-lat").value = state.location.latitude;
+    $("loc-lon").value = state.location.longitude;
+    $("loc-tz").value = state.location.timezone;
+    $("suppress").value = state.rotation.suppress_s;
+    $("rotate-enabled").checked = state.rotation.enabled;
+  }
+
+  function readLocation() {
+    state.location.name = $("loc-name").value.trim();
+    const lat = parseFloat($("loc-lat").value);
+    const lon = parseFloat($("loc-lon").value);
+    if (!Number.isNaN(lat)) state.location.latitude = lat;
+    if (!Number.isNaN(lon)) state.location.longitude = lon;
+    state.location.timezone = $("loc-tz").value.trim();
+    const suppress = parseInt($("suppress").value, 10);
+    if (!Number.isNaN(suppress)) state.rotation.suppress_s = suppress;
+    state.rotation.enabled = $("rotate-enabled").checked;
+  }
+
+  function renderPreviews() {
+    const box = $("previews");
+    box.replaceChildren();
+    const pages = (saved ? saved.pages : state.pages).filter((page) => page.enabled);
+    pages.forEach((page) => {
+      const fig = document.createElement("figure");
+      fig.className = "shot";
+      const img = document.createElement("img");
+      const url = "/dashboard.png?page=" + encodeURIComponent(page.page_id) + "&v=" + encodeURIComponent(version);
+      img.alt = PAGE_LABEL[page.page_id] || page.page_id;
+      img.loading = "lazy";
+      let retried = false;
+      const placeholder = document.createElement("div");
+      placeholder.className = "placeholder";
+      placeholder.textContent = "渲染中…";
+      img.addEventListener("error", () => {
+        if (retried) {
+          if (img.isConnected) img.replaceWith(placeholder);
+          return;
+        }
+        retried = true;
+        img.replaceWith(placeholder);
+        setTimeout(() => {
+          placeholder.replaceWith(img);
+          img.src = url + "&retry=1";
+        }, 5000);
+      });
+      img.src = url;
+      img.addEventListener("click", () => {
+        $("lightbox-img").src = url;
+        $("lightbox").hidden = false;
+      });
+      const cap = document.createElement("figcaption");
+      cap.textContent = PAGE_LABEL[page.page_id] || page.page_id;
+      fig.append(img, cap);
+      box.appendChild(fig);
+    });
+  }
+
+  function badge(code, map) {
+    const span = document.createElement("span");
+    const kind = code === "delivered" || code === "online" ? "ok"
+      : code === "pending" ? "warn"
+      : code === "offline" ? "bad" : "";
+    span.className = "badge" + (kind ? " " + kind : "");
+    span.textContent = (map && map[code]) || code || "—";
+    return span;
+  }
+
+  function renderDevice(data) {
+    const body = $("device-body");
+    body.replaceChildren();
+    if (!data || data.online_state === "unknown") {
+      body.replaceChildren();
+      ["在线 —", "最近拉取 —", "下发状态 未知", "版本 —"].forEach((line) => {
+        const row = document.createElement("div");
+        row.textContent = line;
+        body.appendChild(row);
+      });
+      return;
+    }
+    const line1 = document.createElement("div");
+    line1.append("在线 ", badge(data.online_state, ONLINE));
+    const seen = document.createElement("div");
+    seen.textContent = "最近拉取 " + relTime(data.last_seen_at);
+    if (data.last_seen_at) seen.title = data.last_seen_at;
+    const line2 = document.createElement("div");
+    line2.append("下发 ", badge(data.delivery_state, DELIVERY));
+    if (data.delivery_state === "pending") {
+      line2.append(" 预计最迟 " + (data.eta_minutes || 0) + " 分钟后生效");
+    }
+    const same = data.delivered_settings_version && data.delivered_settings_version === data.current_settings_version;
+    const ver = document.createElement("div");
+    ver.textContent = same || !data.delivered_settings_version
+      ? ("版本 " + (data.current_settings_version || "—"))
+      : ("设备 " + data.delivered_settings_version + " · 当前 " + data.current_settings_version);
+    const src = document.createElement("div");
+    src.className = "muted";
+    const ua = (data.last_user_agent || "").slice(0, 40);
+    src.textContent = [data.last_ip, ua].filter(Boolean).join(" · ") || "—";
+    body.append(line1, seen, line2, ver, src);
+  }
+
+  function relTime(iso) {
+    if (!iso) return "—";
+    const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+    if (Number.isNaN(diff)) return iso;
+    if (diff < 60) return "刚刚";
+    if (diff < 3600) return Math.floor(diff / 60) + " 分钟前";
+    if (diff < 86400) return Math.floor(diff / 3600) + " 小时前";
+    return Math.floor(diff / 86400) + " 天前";
+  }
+
+  function applySettings(payload, keepDraft) {
+    limits = payload.limits || limits;
+    defaults = payload.defaults;
+    version = payload.settings_version || "";
+    $("version-label").textContent = version || "—";
+    $("degraded-banner").hidden = !payload.degraded;
+    saved = payload.settings;
+    if (keepDraft && draft) {
+      state = draft;
+      draft = null;
+      dirty = true;
+    } else {
+      state = JSON.parse(JSON.stringify(payload.settings));
+      dirty = false;
+    }
+    fillLocation();
+    renderPages();
+    renderQuoteModes();
+    renderCustom();
+    renderPreviews();
+    markDirty();
+  }
+
+  async function refreshDevice() {
+    try {
+      const data = await api("GET", "/admin/api/device");
+      renderDevice(data.data);
+      return data.data;
+    } catch (err) {
+      if (!err.handled) $("device-body").textContent = "状态暂不可用";
+      return null;
+    }
+  }
+
+  function startPoll() {
+    stopPoll();
+    pollTimer = setInterval(() => {
+      if (!document.hidden) refreshDevice();
+    }, 30000);
+  }
+
+  function stopPoll() {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = null;
+  }
+
+  function clientErrors() {
+    readLocation();
+    const details = [];
+    state.pages.forEach((page, index) => {
+      if (!Number.isInteger(page.dwell_s) || page.dwell_s < limits.dwell_min || page.dwell_s > limits.dwell_max) {
+        details.push({field: "pages[" + index + "].dwell_s", message: "停留须为 " + limits.dwell_min + "–" + limits.dwell_max + " 秒"});
+      }
+    });
+    if (!Number.isInteger(state.rotation.suppress_s) || state.rotation.suppress_s < 0 || state.rotation.suppress_s > limits.suppress_max) {
+      details.push({field: "rotation.suppress_s", message: "让位秒数须为 0–" + limits.suppress_max});
+    }
+    if (!state.location.name || state.location.name.length > 20) {
+      details.push({field: "location.name", message: "城市名须为 1–20 字"});
+    }
+    if (typeof state.location.latitude !== "number" || state.location.latitude < -90 || state.location.latitude > 90) {
+      details.push({field: "location.latitude", message: "纬度超出范围"});
+    }
+    if (typeof state.location.longitude !== "number" || state.location.longitude < -180 || state.location.longitude > 180) {
+      details.push({field: "location.longitude", message: "经度超出范围"});
+    }
+    if (!state.location.timezone) {
+      details.push({field: "location.timezone", message: "请填写时区"});
+    }
+    if (state.quote.mode === "custom") {
+      const usable = state.quote.custom.filter((item) => (item.text || "").trim());
+      if (!usable.length) details.push({field: "quote.custom", message: "自定义模式至少需要一条文案"});
+      state.quote.custom.forEach((item, index) => {
+        const text = (item.text || "").trim();
+        if (!text || text.length > limits.text_max) {
+          details.push({field: "quote.custom[" + index + "].text", message: "文案须为 1–" + limits.text_max + " 字"});
+        }
+      });
+    }
+    return details;
+  }
+
+  function payloadOf() {
+    readLocation();
+    const body = JSON.parse(JSON.stringify(state));
+    delete body.updated_at;
+    delete body.schema_version;
+    body.quote.custom = body.quote.custom.map((item) => ({text: (item.text || "").trim(), from: (item.from || "").trim()}));
+    return body;
+  }
+
+  async function afterWrite(data, extra) {
+    version = data.settings_version;
+    saved = data.settings;
+    state = JSON.parse(JSON.stringify(data.settings));
+    draft = null;
+    $("version-label").textContent = version;
+    $("degraded-banner").hidden = true;
+    fillLocation();
+    renderPages();
+    renderQuoteModes();
+    renderCustom();
+    renderPreviews();
+    clearErrors();
+    markDirty();
+    const device = await refreshDevice();
+    const minutes = device && typeof device.eta_minutes === "number" ? device.eta_minutes : 15;
+    let message = "已保存，设备最迟 " + minutes + " 分钟后生效";
+    if (data.location_changed && data.weather_refreshed === false) message += "。天气暂未更新，将稍后重试";
+    if (extra) message += extra;
+    toast(message);
+  }
+
+  async function loadSettings(keepDraft) {
+    const data = await api("GET", "/admin/api/settings");
+    applySettings(data.data, keepDraft);
+    await refreshDevice();
+    startPoll();
+  }
+
+  $("login-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const password = $("password").value;
+    const err = $("login-error");
+    err.textContent = "";
+    if (!password) {
+      err.textContent = "请填写口令";
+      return;
+    }
+    $("login-btn").disabled = true;
+    try {
+      await api("POST", "/admin/api/login", {password: password}, {login: true});
+      $("password").value = "";
+      showView("settings");
+      await loadSettings(!!draft);
+    } catch (error) {
+      const body = error.data && error.data.error;
+      if (body && body.code === "ADMIN_AUTH_LOCKED") {
+        const seconds = (body.details && body.details[0] && body.details[0].retry_after_s) || 60;
+        startLock(seconds);
+      } else if (body && body.code === "ADMIN_AUTH_INVALID") {
+        err.textContent = "口令错误";
+        $("login-btn").disabled = false;
+      } else if (!error.handled) {
+        err.textContent = (body && body.message) || "登录失败";
+        $("login-btn").disabled = false;
+      }
+    }
+  });
+
+  function startLock(seconds) {
+    clearInterval(lockTimer);
+    let left = seconds;
+    const tick = () => {
+      const minutes = Math.max(1, Math.ceil(left / 60));
+      $("login-error").textContent = "失败次数过多，请 " + minutes + " 分钟后再试";
+      $("login-btn").disabled = true;
+      if (left <= 0) {
+        clearInterval(lockTimer);
+        $("login-error").textContent = "";
+        $("login-btn").disabled = false;
+        return;
+      }
+      left -= 1;
+    };
+    tick();
+    lockTimer = setInterval(tick, 1000);
+  }
+
+  $("logout-btn").addEventListener("click", async () => {
+    try { await api("POST", "/admin/api/logout"); } catch (err) { if (err.handled) return; }
+    state = null;
+    draft = null;
+    dirty = false;
+    window.onbeforeunload = null;
+    showView("login");
+  });
+
+  $("rotate-enabled").addEventListener("change", () => {
+    state.rotation.enabled = $("rotate-enabled").checked;
+    renderPages();
+    markDirty();
+  });
+  ["loc-name", "loc-lat", "loc-lon", "loc-tz", "suppress"].forEach((id) => {
+    $(id).addEventListener("input", () => {
+      readLocation();
+      markDirty();
+    });
+  });
+
+  $("add-quote").addEventListener("click", () => {
+    if (state.quote.custom.length >= limits.custom_max) return;
+    state.quote.custom.push({text: "", from: ""});
+    renderCustom();
+    markDirty();
+  });
+
+  $("save-btn").addEventListener("click", async () => {
+    const details = clientErrors();
+    if (details.length) {
+      showErrors(details);
+      return;
+    }
+    $("save-btn").disabled = true;
+    try {
+      const data = await api("POST", "/admin/api/settings/save", payloadOf());
+      await afterWrite(data.data);
+    } catch (err) {
+      if (!err.handled) {
+        const body = err.data && err.data.error;
+        if (body && body.details) showErrors(body.details);
+        toast((body && body.message) || "保存失败", true);
+      }
+    } finally {
+      $("save-btn").disabled = false;
+    }
+  });
+
+  $("reset-btn").addEventListener("click", async () => {
+    const city = defaults && defaults.location ? defaults.location.name : "";
+    if (!confirm("恢复默认？\n城市：" + city + "\n五页全启用 120/30")) return;
+    $("reset-btn").disabled = true;
+    try {
+      const data = await api("POST", "/admin/api/settings/reset");
+      await afterWrite(data.data);
+    } catch (err) {
+      if (!err.handled) toast("恢复失败", true);
+    } finally {
+      $("reset-btn").disabled = false;
+    }
+  });
+
+  $("import-btn").addEventListener("click", () => $("import-file").click());
+  $("import-file").addEventListener("change", async () => {
+    const file = $("import-file").files && $("import-file").files[0];
+    $("import-file").value = "";
+    if (!file) return;
+    const form = new FormData();
+    form.append("file", file);
+    try {
+      const data = await api("POST", "/admin/api/settings/import", form, {form: true});
+      await afterWrite(data.data);
+    } catch (err) {
+      if (!err.handled) {
+        const body = err.data && err.data.error;
+        toast((body && body.message) || "导入失败", true);
+      }
+    }
+  });
+
+  async function runGeocode() {
+    const q = $("geo-q").value.trim();
+    $("geo-list").replaceChildren();
+    if (!q || q.length > 50) {
+      $("geo-status").textContent = q ? "查询须为 1–50 字" : "";
+      return;
+    }
+    $("geo-status").textContent = "搜索中…";
+    try {
+      const data = await api("GET", "/admin/api/geocode?q=" + encodeURIComponent(q));
+      $("geo-status").textContent = "";
+      const list = document.createElement("div");
+      list.className = "candidates";
+      (data.data.candidates || []).forEach((item) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = [item.name, item.admin1, item.country].filter(Boolean).join(" · ")
+          + " ／ " + item.latitude + ", " + item.longitude + " ／ " + item.timezone;
+        btn.addEventListener("click", () => {
+          state.location.name = (item.name || "").slice(0, 20);
+          state.location.latitude = item.latitude;
+          state.location.longitude = item.longitude;
+          state.location.timezone = item.timezone || state.location.timezone;
+          fillLocation();
+          $("geo-list").replaceChildren();
+          markDirty();
+        });
+        list.appendChild(btn);
+      });
+      if (!(data.data.candidates || []).length) $("geo-status").textContent = "没有匹配的城市";
+      else $("geo-list").appendChild(list);
+    } catch (err) {
+      if (err.handled) return;
+      const body = err.data && err.data.error;
+      $("geo-status").textContent = (body && body.message) || "搜索服务暂不可用，请手动填写";
+    }
+  }
+
+  $("geo-q").addEventListener("input", () => {
+    clearTimeout(geoTimer);
+    geoTimer = setTimeout(runGeocode, 400);
+  });
+  $("geo-q").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      clearTimeout(geoTimer);
+      runGeocode();
+    }
+  });
+  $("geo-btn").addEventListener("click", () => {
+    clearTimeout(geoTimer);
+    runGeocode();
+  });
+
+  $("lightbox").addEventListener("click", () => { $("lightbox").hidden = true; });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") $("lightbox").hidden = true;
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && !$("view-settings").hidden) refreshDevice();
+  });
+
+  showView(boot.view === "settings" ? "settings" : boot.view === "disabled" ? "disabled" : "login");
+  if (boot.view === "settings") {
+    loadSettings(false).catch((err) => {
+      if (!err.handled) toast("加载配置失败", true);
+    });
+  }
+})();
+</script>
+</body>
+</html>

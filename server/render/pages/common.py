@@ -40,12 +40,19 @@ def render_header(payload: dict, rect: Rect, font_path: str, page: str) -> Image
         weekday_line += " · " + " · ".join(notes[:2])
     draw.text((4, 42), weekday_line, fill=style.INK, font=f_small)
 
-    # 右：页指示（最上）+ 农历干支（其下），两行右对齐、互不侵入
+    # 右：页指示（最上）+ 农历干支（其下）。顺序与已启用页一致，默认五页时与原先相同。
+    order = payload.get("pages")
+    if not isinstance(order, list):
+        order = list(PAGES)
+    else:
+        order = [p for p in order if p in PAGE_LABELS]
+        if not order:
+            order = list(PAGES)
     dot_r = 4
     dot_gap = int(46 * sx)
-    labels_w = sum(style.tracked_width(draw, PAGE_LABELS[p], f_page, 2) + dot_gap for p in PAGES)
+    labels_w = sum(style.tracked_width(draw, PAGE_LABELS[p], f_page, 2) + dot_gap for p in order)
     x = rect.w - labels_w
-    for p in PAGES:
+    for p in order:
         cx = x + dot_r
         cy = 14 + dot_r
         if p == page:

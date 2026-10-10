@@ -38,10 +38,7 @@ TOUCH_DEAD_S=0        # 沉浸后无触摸事件自动恢复的秒数；0=关闭
 
 [ -f "$CONFIG" ] && . "$CONFIG"
 
-# config.sh 本地覆盖值（env 下发默认值后以此恢复）
-LOCAL_ROTATE_ENABLED="$ROTATE_ENABLED"
-LOCAL_ROTATE_TODAY_S="$ROTATE_TODAY_S"
-LOCAL_ROTATE_OTHER_S="$ROTATE_OTHER_S"
+# config.sh 的 ROTATE_* 只在 env 拉取失败时保留；拉取成功后以云端值为准。
 
 if [ -f "$LIB" ]; then
     . "$LIB"
@@ -89,10 +86,6 @@ env_sync() {
     if fetch_url "$CACHE_DIR/dashboard.env" "$API_URL"; then
         # shellcheck disable=SC1090
         . "$CACHE_DIR/dashboard.env"
-        # 恢复 config.sh 本地轮播覆盖
-        [ "$LOCAL_ROTATE_ENABLED" != "1" ] && ROTATE_ENABLED="$LOCAL_ROTATE_ENABLED"
-        [ -n "$LOCAL_ROTATE_TODAY_S" ] && [ "$LOCAL_ROTATE_TODAY_S" != "120" ] && ROTATE_TODAY_S="$LOCAL_ROTATE_TODAY_S"
-        [ -n "$LOCAL_ROTATE_OTHER_S" ] && [ "$LOCAL_ROTATE_OTHER_S" != "30" ] && ROTATE_OTHER_S="$LOCAL_ROTATE_OTHER_S"
         return 0
     fi
     # 诊断：非静默重试一次，把 wget 的真实报错记进日志（DNS/TLS/路由）
@@ -298,6 +291,7 @@ do_fetch() {
             done
         done
         sync_glyphs || log "字形同步失败"
+        ensure_cur_page
     else
         log "env 拉取失败"
     fi
@@ -487,12 +481,29 @@ manual_refresh() {
     do_fetch
 }
 
-rotate_arm() {
-    if [ "$CUR_PAGE" = "today" ]; then
-        ROTATE_DEADLINE=$(( $(date +%s) + ROTATE_TODAY_S ))
-    else
-        ROTATE_DEADLINE=$(( $(date +%s) + ROTATE_OTHER_S ))
+# 当前页被禁用（不在新 PAGES 中）时回 today 并重绘
+ensure_cur_page() {
+    found=0
+    for p in ${PAGES:-today}; do
+        [ "$p" = "$CUR_PAGE" ] && found=1
+    done
+    if [ "$found" = "0" ]; then
+        log "当前页不在页序中，回 today"
+        CUR_PAGE=today
+        MONTH_OFFSET=0
+        goto_page today && READY_DRAWN=1
+        rm -f "$STATE_DIR/clock.last"
+        draw_clock
+        rotate_arm
     fi
+}
+
+rotate_arm() {
+    upper=$(printf '%s' "$CUR_PAGE" | tr '[:lower:]' '[:upper:]')
+    eval "s=\$ROTATE_${upper}_S"
+    [ -n "$s" ] || s="${ROTATE_OTHER_S:-}"
+    [ -n "$s" ] || s=30
+    ROTATE_DEADLINE=$(( $(date +%s) + s ))
 }
 
 # ───────── v2.1 主循环 ─────────
@@ -596,8 +607,13 @@ v21_loop() {
         fi
 
         if [ "$ROTATE_ENABLED" = "1" ] && [ "$READY_DRAWN" = "1" ] && [ "$now" -ge "$ROTATE_DEADLINE" ] && [ "$now" -gt "$ROTATE_UNTIL" ]; then
-            # 轮播回到今日页 = 一圈结束：全刷清屏一次，清掉整圈累积的残影
-            if [ "$CUR_PAGE" = "almanac" ]; then
+            # 一圈终点是 PAGES 最后一项；仅一页时不轮播
+            set -- ${PAGES:-today}
+            last=today
+            for p in "$@"; do last=$p; done
+            if [ "$#" -le 1 ]; then
+                rotate_arm
+            elif [ "$CUR_PAGE" = "$last" ]; then
                 clear_screen
                 CUR_PAGE=today
                 MONTH_OFFSET=0

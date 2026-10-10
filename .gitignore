@@ -6,5 +6,6 @@ preview.png
 config.yaml
 kindle/config.sh
 .env
+data/
 .mimosa/
 .claude/.profile-mounts.json

@@ -5,10 +5,11 @@ from __future__ import annotations
 from datetime import datetime
 
 from server import almanac, astro, holidays, quotes
+from server.aqi import AirQuality
 from server.weather import WeatherData
 
 
-def build_payload(config: dict, weather: WeatherData, now: datetime) -> dict:
+def build_payload(config: dict, weather: WeatherData, now: datetime, aqi: AirQuality | None = None) -> dict:
     lat, lon = config["latitude"], config["longitude"]
 
     hourly = [
@@ -59,6 +60,7 @@ def build_payload(config: dict, weather: WeatherData, now: datetime) -> dict:
             "precip_prob": precip_prob,
         },
         "sun": astro.day_summary(now, lat, lon),
+        "aqi": None if aqi is None else {"us_aqi": aqi.us_aqi, "level_zh": aqi.level, "fetched_at": now.isoformat(timespec="seconds")},
         "quote": quotes.get_quote(now),
     }
 

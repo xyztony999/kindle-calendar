@@ -130,11 +130,29 @@ def render_sun(payload: dict, rect: Rect, font_path: str) -> Image.Image:
     draw.text((x0, 2), f"日出 {sun['sunrise']}", fill=style.MID, font=f_label)
     style.draw_text_right(draw, x1 + 8, 2, f"日落 {sun['sunset']}", f_label, style.MID)
 
-    # 月相盘：8 档相位图标，完整居中（右侧留足边距，盘心与标签对齐）
-    mcx, mcy, mr = int(rect.w - 46 * sx), int(rect.h * 0.42), int(30 * sx)
-    illum = int(sun.get("illumination", 50))
-    render_moon_disk(draw, mcx, mcy, mr, sun.get("phase", 0.5), illum)
-    style.draw_text_center(draw, mcx, int(rect.h * 0.78), f"{sun['name']} {illum}%", f_label, style.MID)
+    # AQI 卡（原月相盘位置）：数值 + 等级 + 六段刻度条（PageSpec §1）
+    aqi = payload.get("aqi")
+    ax = int(rect.w * 0.68)
+    f_aqi_label = _font(sx, 22, font_path)
+    f_aqi_val = _font(sx, 40, font_path)
+    draw.text((ax, int(rect.h * 0.10)), "AQI", fill=style.MID, font=f_aqi_label)
+    if aqi:
+        draw.text((ax + int(52 * sx), int(rect.h * 0.04)), str(aqi["us_aqi"]), fill=style.INK, font=f_aqi_val)
+        draw.text((ax, int(rect.h * 0.42)), aqi["level_zh"], fill=style.MID, font=f_aqi_label)
+        # 六段刻度条：当前段实心
+        seg_w = int(26 * sx)
+        seg_h = max(5, int(6 * sx))
+        bar_y = int(rect.h * 0.72)
+        cur_level = ["优", "良", "轻度敏感", "中度", "重度", "严重"].index(aqi["level_zh"])
+        for i in range(6):
+            bx = ax + i * seg_w
+            if i == cur_level:
+                draw.rectangle((bx, bar_y, bx + seg_w - 2, bar_y + seg_h), fill=style.INK)
+            else:
+                draw.rectangle((bx, bar_y, bx + seg_w - 2, bar_y + seg_h), outline=style.LIGHT, width=1)
+    else:
+        draw.text((ax + int(52 * sx), int(rect.h * 0.04)), "--", fill=style.INK, font=f_aqi_val)
+        draw.text((ax, int(rect.h * 0.42)), "暂无", fill=style.MID, font=f_aqi_label)
     return img
 
 

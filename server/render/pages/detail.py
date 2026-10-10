@@ -66,13 +66,15 @@ def render_indices(payload: dict, rect: Rect, font_path: str) -> Image.Image:
 
     cur = payload["weather"]["current"]
     sun = payload["sun"]
+    aqi = payload.get("aqi")
+    aqi_val = f"{aqi['us_aqi']} {aqi['level_zh']}" if aqi else "暂无数据"
     cards = [
         ("湿度", f"{cur['humidity']}%"),
         ("风速", f"{cur['wind_speed']:.0f} km/h"),
         ("降水概率", f"{payload['weather'].get('precip_prob', 0)}%"),
         ("日出", sun["sunrise"]),
         ("日落", sun["sunset"]),
-        ("月相", f"{sun['name']} {sun.get('illumination', 0)}%"),
+        ("AQI", aqi_val),
     ]
 
     f_key = _font(sx, 22, font_path)

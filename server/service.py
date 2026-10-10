@@ -19,6 +19,7 @@ from PIL import Image
 from zoneinfo import ZoneInfo
 
 from server import data as data_mod
+from server.aqi import AirQuality, fetch_aqi
 from server.render import (
     PAGE_REGION_LISTS,
     PAGES,
@@ -69,6 +70,7 @@ class DashboardService:
 
         self._lock = threading.Lock()  # 保护 payload / regions / glyphs
         self._weather: WeatherData | None = None
+        self._aqi: AirQuality | None = None
         self._weather_at = 0.0
         self._last_error: str | None = None
         self._refreshing = False
@@ -100,11 +102,14 @@ class DashboardService:
                 self._last_error = str(exc)
             return
         now = time.time()
+        # AQI 独立 try（PRD FR-1：失败不阻塞天气）
+        aqi = fetch_aqi(self.config["latitude"], self.config["longitude"])
         with self._weather_cond:
             self._weather = weather
+            self._aqi = aqi
             self._weather_at = now
             self._last_error = None
-        log.info("天气已更新")
+        log.info("天气已更新 (aqi=%s)", aqi.us_aqi if aqi else "无")
 
     def _ensure_weather(self) -> None:
         with self._weather_cond:
@@ -145,10 +150,11 @@ class DashboardService:
         now = datetime.now(ZoneInfo(self.config["timezone"]))
         with self._weather_cond:
             weather = self._weather
+            aqi = self._aqi
         if weather is None:
             raise RuntimeError(self._last_error or "天气数据不可用")
 
-        payload = data_mod.build_payload(self.config, weather, now)
+        payload = data_mod.build_payload(self.config, weather, now, aqi)
         fingerprint = data_mod.data_fingerprint(payload)
         with self._lock:
             self._payload = payload

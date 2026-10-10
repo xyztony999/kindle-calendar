@@ -62,6 +62,48 @@ def render_weather(payload: dict, rect: Rect, font_path: str) -> Image.Image:
     return img
 
 
+def render_moon_disk(draw: ImageDraw.ImageDraw, cx: int, cy: int, r: int, phase: float, illum: int) -> None:
+    """月相盘：8 档相位图标，全部完整居中（ink=暗面 / paper=亮面）。
+
+    北半球视觉：娥眉/上弦亮面在右（盈），亏凸/下弦/残月亮面在左（亏）。
+    牙形用「扇形 + 压扁椭圆蚀刻」近似，蚀圆不越出盘界。
+    """
+    outline = dict(outline=style.MID, width=2)
+    if illum <= 1:
+        draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=style.INK, **outline)
+        return
+    if illum >= 99:
+        draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=style.PAPER, outline=style.INK, width=2)
+        return
+
+    waxing = phase < 0.5  # 盈月亮右、亏月亮左
+    inner = (cx - r + 2, cy - r + 2, cx + r - 2, cy + r - 2)
+    # 牙宽随照度：照度越低牙越细（弦月档忽略）
+    w = max(4, int(r * (1 - illum / 100) * 0.6))
+
+    if illum <= 40:  # 娥眉/残月：整盘暗，一侧留弧缘亮牙
+        draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=style.INK, **outline)
+        start, end = (-90, 90) if waxing else (90, 270)
+        draw.pieslice(inner, start=start, end=end, fill=style.PAPER)
+        # 蚀圆盖住扇形中部：亮牙在右→蚀圆左移；在左→右移
+        if waxing:
+            draw.ellipse((cx - r, cy - int(r * 0.62), cx + r - w, cy + int(r * 0.62)), fill=style.INK)
+        else:
+            draw.ellipse((cx - r + w, cy - int(r * 0.62), cx + r, cy + int(r * 0.62)), fill=style.INK)
+    elif illum <= 60:  # 上弦/下弦：精确半圆
+        draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=style.PAPER, **dict(outline=style.INK, width=2))
+        start, end = (90, 270) if waxing else (-90, 90)  # 暗面：盈在左、亏在右
+        draw.pieslice(inner, start=start, end=end, fill=style.INK)
+    else:  # 盈凸/亏凸：整盘亮，一侧留暗牙
+        draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=style.PAPER, **dict(outline=style.INK, width=2))
+        start, end = (90, 270) if waxing else (-90, 90)
+        draw.pieslice(inner, start=start, end=end, fill=style.INK)
+        if waxing:
+            draw.ellipse((cx - r, cy - int(r * 0.62), cx + r - w, cy + int(r * 0.62)), fill=style.PAPER)
+        else:
+            draw.ellipse((cx - r + w, cy - int(r * 0.62), cx + r, cy + int(r * 0.62)), fill=style.PAPER)
+
+
 def render_sun(payload: dict, rect: Rect, font_path: str) -> Image.Image:
     img = Image.new("L", (rect.w, rect.h), style.PAPER)
     draw = ImageDraw.Draw(img)
@@ -90,18 +132,10 @@ def render_sun(payload: dict, rect: Rect, font_path: str) -> Image.Image:
     draw.text((x0, 2), f"日出 {sun['sunrise']}", fill=style.MID, font=f_label)
     style.draw_text_right(draw, x1 + 8, 2, f"日落 {sun['sunset']}", f_label, style.MID)
 
-    # 月相盘：按照亮比例画盈亏（错位圆 carve 法，与场景图 _moon 一致）——
-    # 原 pieslice 写死半圆，2% 的残月也显示成半盘灰
-    mcx, mcy, mr = int(rect.w - 52 * sx), int(rect.h * 0.46), int(34 * sx)
-    phase = sun.get("phase", 0.5)
-    illum = sun.get("illumination", 50)
-    draw.ellipse((mcx - mr, mcy - mr, mcx + mr, mcy + mr), fill=style.INK, outline=style.MID, width=2)
-    # 亮面比例 0→全暗 1→全亮：遮挡圆位移量随 |2*illum-1| 变化；
-    # 上限 1.7r 而非 2r——保证极低照度（如 2% 残月）仍留一弯可见月牙
-    shift = int(mr * 1.7 * abs(2 * min(max(illum, 0), 100) / 100 - 1))
-    dx = -shift if phase < 0.5 else shift
-    draw.ellipse((mcx - mr + dx, mcy - mr, mcx + mr + dx, mcy + mr), fill=style.PAPER)
-    style.draw_text_center(draw, mcx, int(rect.h * 0.82), f"{sun['name']} {illum}%", f_label, style.MID)
+    # 月相盘：8 档相位图标，完整居中（右侧留足边距，盘心与标签对齐）
+    mcx, mcy, mr = int(rect.w - 46 * sx), int(rect.h * 0.42), int(30 * sx)
+    render_moon_disk(draw, mcx, mcy, mr, sun.get("phase", 0.5), int(sun.get("illumination", 50)))
+    style.draw_text_center(draw, mcx, int(rect.h * 0.78), f"{sun['name']} {illum}%", f_label, style.MID)
     return img
 
 

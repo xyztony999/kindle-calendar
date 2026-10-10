@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kindle 电子天气台历</title>
+<meta name="description" content="把闲置 Kindle 变成常亮的电子翻页天气台历。云端渲染，设备自行拉取。">
+<style>
+  :root {
+    --ink: #1a1814;
+    --mid: #5e584f;
+    --faint: #8a8378;
+    --line: #ddd6cb;
+    --paper: #f3efe7;
+    --card: #fffdf9;
+    --accent: #8c3b2a;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    color: var(--ink);
+    background:
+      radial-gradient(1200px 500px at 80% -10%, #efe6d4 0%, transparent 55%),
+      var(--paper);
+    font: 16px/1.55 "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif;
+  }
+  a { color: inherit; }
+  .nav, .hero, .band, .foot {
+    width: min(1120px, calc(100% - 32px));
+    margin: 0 auto;
+  }
+  .nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 22px 0 8px;
+  }
+  .mark {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    text-decoration: none;
+  }
+  .mark strong { font-family: "Palatino Linotype", "Songti SC", "Noto Serif SC", serif; font-size: 18px; letter-spacing: 0.02em; }
+  .mark span { color: var(--faint); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; }
+  .nav-links { display: flex; gap: 8px; align-items: center; }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--card);
+    text-decoration: none;
+    font-size: 14px;
+  }
+  .btn.solid { background: var(--ink); color: #f7f3ec; border-color: var(--ink); }
+  .hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
+    gap: 48px;
+    align-items: center;
+    padding: 36px 0 28px;
+  }
+  .kicker {
+    margin: 0 0 12px;
+    color: var(--accent);
+    font-size: 13px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+  h1 {
+    margin: 0 0 14px;
+    font-family: "Palatino Linotype", "Songti SC", "Noto Serif SC", serif;
+    font-size: clamp(40px, 6vw, 68px);
+    font-weight: 500;
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+  }
+  .lede { margin: 0 0 22px; max-width: 38em; color: var(--mid); font-size: 17px; }
+  .cta { display: flex; flex-wrap: wrap; gap: 10px; }
+  .status {
+    margin-top: 18px;
+    color: var(--faint);
+    font-size: 13px;
+    min-height: 1.2em;
+  }
+  .stage {
+    display: grid;
+    grid-template-columns: 72px 1fr;
+    gap: 14px;
+    align-items: start;
+  }
+  .pages { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; }
+  .pages button {
+    border: 0;
+    background: transparent;
+    text-align: left;
+    padding: 8px 0;
+    color: var(--faint);
+    cursor: pointer;
+    font: inherit;
+    border-left: 2px solid transparent;
+    padding-left: 10px;
+  }
+  .pages button[aria-pressed="true"] {
+    color: var(--ink);
+    border-left-color: var(--ink);
+  }
+  .device {
+    background: #221f1b;
+    border-radius: 28px;
+    padding: 14px 14px 18px;
+    box-shadow: 0 24px 60px rgba(40, 32, 20, 0.18);
+  }
+  .device figcaption {
+    color: #c8bfb2;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-align: center;
+    margin-bottom: 10px;
+  }
+  .screen {
+    position: relative;
+    background: #f7f4ee;
+    border-radius: 4px;
+    overflow: hidden;
+    aspect-ratio: 758 / 1024;
+  }
+  .screen img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+    background: #fff;
+  }
+  .screen .wait {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: var(--mid);
+    font-size: 14px;
+    background: #f7f4ee;
+  }
+  .band { padding: 18px 0 8px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 18px 18px 16px;
+  }
+  .card h2 {
+    margin: 0 0 8px;
+    font-family: "Palatino Linotype", "Songti SC", "Noto Serif SC", serif;
+    font-size: 22px;
+    font-weight: 500;
+  }
+  .card p { margin: 0; color: var(--mid); font-size: 14px; }
+  .dev { padding-bottom: 28px; }
+  .dev h2 {
+    margin: 28px 0 10px;
+    font-size: 13px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--faint);
+    font-weight: 600;
+  }
+  .endpoints { display: grid; gap: 8px; }
+  .endpoints a {
+    display: grid;
+    grid-template-columns: minmax(180px, 280px) 1fr;
+    gap: 12px;
+    text-decoration: none;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px 14px;
+  }
+  .endpoints code { font-size: 13px; }
+  .endpoints span { color: var(--mid); font-size: 14px; }
+  .foot {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 8px 0 28px;
+    color: var(--faint);
+    font-size: 13px;
+  }
+  .foot a { color: var(--mid); }
+  @media (max-width: 860px) {
+    .hero, .grid { grid-template-columns: 1fr; }
+    .stage { grid-template-columns: 1fr; }
+    .pages { flex-direction: row; flex-wrap: wrap; padding-top: 0; }
+    .pages button { border-left: 0; border-bottom: 2px solid transparent; padding: 6px 10px; }
+    .pages button[aria-pressed="true"] { border-bottom-color: var(--ink); }
+    .endpoints a { grid-template-columns: 1fr; gap: 4px; }
+    .device { max-width: 360px; }
+  }
+</style>
+</head>
+<body>
+  <header class="nav">
+    <a class="mark" href="/">
+      <strong>Kindle 台历</strong>
+      <span>v{{ version }}</span>
+    </a>
+    <nav class="nav-links">
+      <a class="btn" href="https://github.com/xyztony999/kindle-calendar">GitHub</a>
+      <a class="btn solid" href="/admin">管理端</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div>
+        <p class="kicker">Cloud render · Kindle pull</p>
+        <h1>把闲置 Kindle<br>变成常亮台历</h1>
+        <p class="lede">云端把天气、农历和节假日画成灰度图，Kindle 只在画面变化时拉取。五页可翻：今日、一周、月历、详情、黄历。城市、页序和轮播在管理端改，设备下次拉取即生效。</p>
+        <div class="cta">
+          <a class="btn solid" href="#preview">看实机画面</a>
+          <a class="btn" href="/admin">配置页面与城市</a>
+        </div>
+        <p class="status" id="status">正在读取服务状态…</p>
+      </div>
+
+      <div class="stage" id="preview">
+        <div class="pages" role="tablist" aria-label="台历页面">
+          <button type="button" role="tab" data-page="today" aria-pressed="true">今日</button>
+          <button type="button" role="tab" data-page="week" aria-pressed="false">一周</button>
+          <button type="button" role="tab" data-page="month" aria-pressed="false">月历</button>
+          <button type="button" role="tab" data-page="detail" aria-pressed="false">详情</button>
+          <button type="button" role="tab" data-page="almanac" aria-pressed="false">黄历</button>
+        </div>
+        <figure class="device">
+          <figcaption id="caption">TODAY</figcaption>
+          <div class="screen">
+            <div class="wait" id="wait">正在渲染今日页…</div>
+            <img id="shot" alt="今日页预览" hidden>
+          </div>
+        </figure>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="grid">
+        <article class="card">
+          <h2>五页一轮</h2>
+          <p>今日看天气和时钟，一周看趋势，月历找假期，详情看逐时变化，黄历看宜忌。无触摸时按停留时间轮播。</p>
+        </article>
+        <article class="card">
+          <h2>分钟时钟不联网</h2>
+          <p>数字在设备上本地拼装，每分钟只刷新时钟区域。天气分区按内容指纹变化才重新拉取。</p>
+        </article>
+        <article class="card">
+          <h2>浏览器里改配置</h2>
+          <p>管理端可以调整启用的页面、每页停留、城市和页脚一言。口令只放在服务器环境变量里。</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="band dev">
+      <h2>接口</h2>
+      <div class="endpoints">
+        {% for path, desc in endpoints.items() %}
+        {% set href = '/r/today/header.png' if path.startswith('/r/<') else ('/r/today/clock/0.png' if 'clock' in path else path.split('?')[0]) %}
+        <a href="{{ href }}">
+          <code>{{ path }}</code>
+          <span>{{ desc }}</span>
+        </a>
+        {% endfor %}
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span>GPL-3.0 · Xinyi Zhang</span>
+    <a href="/?format=json">原始 JSON</a>
+  </footer>
+
+<script>
+(function () {
+  var labels = { today: "TODAY", week: "WEEK", month: "MONTH", detail: "DETAIL", almanac: "ALMANAC" };
+  var names = { today: "今日页", week: "一周页", month: "月历页", detail: "详情页", almanac: "黄历页" };
+  var shot = document.getElementById("shot");
+  var wait = document.getElementById("wait");
+  var caption = document.getElementById("caption");
+  var buttons = Array.prototype.slice.call(document.querySelectorAll(".pages button"));
+
+  function show(page) {
+    buttons.forEach(function (btn) {
+      btn.setAttribute("aria-pressed", btn.getAttribute("data-page") === page ? "true" : "false");
+    });
+    caption.textContent = labels[page] || page;
+    wait.hidden = false;
+    wait.textContent = "正在渲染" + (names[page] || "") + "…";
+    shot.hidden = true;
+    shot.alt = (names[page] || page) + "预览";
+    shot.src = "/dashboard.png?page=" + encodeURIComponent(page) + "&v=" + Date.now();
+  }
+
+  shot.addEventListener("load", function () {
+    wait.hidden = true;
+    shot.hidden = false;
+  });
+  shot.addEventListener("error", function () {
+    wait.hidden = false;
+    wait.textContent = "这一页暂时渲染不出来";
+  });
+  buttons.forEach(function (btn) {
+    btn.addEventListener("click", function () { show(btn.getAttribute("data-page")); });
+  });
+  show("today");
+
+  fetch("/health").then(function (res) { return res.json(); }).then(function (data) {
+    var line = "服务在线";
+    if (data.screen) line += " · 画面 " + data.screen;
+    if (data.has_weather) line += " · 天气已更新";
+    else if (data.last_error) line += " · 天气暂不可用";
+    document.getElementById("status").textContent = line;
+  }).catch(function () {
+    document.getElementById("status").textContent = "";
+  });
+})();
+</script>
+</body>
+</html>

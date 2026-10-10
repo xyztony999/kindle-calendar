@@ -10,7 +10,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import yaml
-from flask import Flask, Response, jsonify, request
+from flask import Flask, Response, jsonify, render_template, request
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from server.admin import create_admin_blueprint
@@ -106,22 +106,26 @@ def create_app() -> Flask:
 
     @app.get("/")
     def index():
-        return jsonify(
-            {
-                "name": "kindle-calendar",
-                "version": 2.1,
-                "endpoints": {
-                    "/api/v1/dashboard.json": "台历数据 JSON",
-                    "/api/v1/dashboard.env": "设备端 POSIX env 配置（五页分区+轮播参数）",
-                    "/r/<page>/<region>.png": "页面分区图（today/week/month/detail/almanac）",
-                    "/r/today/clock/<glyph>.png": "时钟字形（0-9 与冒号）",
-                    "/dashboard.png?page=": "整页合成图（v1 兼容，默认 today）",
-                    "/admin": "管理端（口令登录）",
-                    "/weather": "当前天气 JSON",
-                    "/health": "健康检查",
-                },
-            }
+        payload = {
+            "name": "kindle-calendar",
+            "version": 2.1,
+            "endpoints": {
+                "/api/v1/dashboard.json": "台历数据 JSON",
+                "/api/v1/dashboard.env": "设备端 POSIX env 配置（五页分区+轮播参数）",
+                "/r/<page>/<region>.png": "页面分区图（today/week/month/detail/almanac）",
+                "/r/today/clock/<glyph>.png": "时钟字形（0-9 与冒号）",
+                "/dashboard.png?page=": "整页合成图（v1 兼容，默认 today）",
+                "/admin": "管理端（口令登录）",
+                "/weather": "当前天气 JSON",
+                "/health": "健康检查",
+            },
+        }
+        wants_json = request.args.get("format") == "json" or (
+            request.accept_mimetypes.best_match(["text/html", "application/json"]) == "application/json"
         )
+        if wants_json:
+            return jsonify(payload)
+        return render_template("index.html", version=payload["version"], endpoints=payload["endpoints"])
 
     @app.get("/health")
     def health():

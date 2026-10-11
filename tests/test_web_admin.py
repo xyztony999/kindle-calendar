@@ -295,6 +295,58 @@ class AdminApiTests(unittest.TestCase):
         example = Path("kindle/config.sh.example").read_text(encoding="utf-8")
         self.assertIn("兜底", example)
 
+    def _assert_home_link(self, body, label):
+        nav_at = body.index('class="lang-switch"')
+        nav = body[nav_at:body.index("</nav>", nav_at)]
+        self.assertIn(f'<a id="back-home" href="/">{label}</a>', nav)
+        self.assertLess(nav.index('href="/"'), nav.index("?lang="))
+        self.assertNotIn("history.back", body)
+        self.assertLess(nav_at, body.index('id="view-disabled"'))
+
+    def test_back_home_link_on_every_view(self):
+        login = self.client.get("/admin")
+        login_body = login.get_data(as_text=True)
+        self.assertEqual(login.status_code, 200)
+        self.assertIn('"view": "login"', login_body)
+        self.assertIn("请输入管理员口令", login_body)
+        self._assert_home_link(login_body, "返回首页")
+
+        english = self.client.get("/admin?lang=en")
+        english_body = english.get_data(as_text=True)
+        self.assertIn("Enter the admin password", english_body)
+        self._assert_home_link(english_body, "Back to home")
+        self.assertIn("onbeforeunload = null", english_body)
+
+        self.assertEqual(self._login().status_code, 200)
+        settings = self.client.get("/admin?lang=zh")
+        settings_body = settings.get_data(as_text=True)
+        self.assertIn('"view": "settings"', settings_body)
+        self._assert_home_link(settings_body, "返回首页")
+        before = self.client.get("/admin/api/settings")
+        version = before.get_json()["data"]["settings_version"]
+        home = self.client.get("/")
+        self.assertEqual(home.status_code, 200)
+        self.assertIn("<html", home.get_data(as_text=True).lower())
+        after = self.client.get("/admin/api/settings")
+        self.assertEqual(after.status_code, 200)
+        self.assertEqual(after.get_json()["data"]["settings_version"], version)
+
+        os.environ["ADMIN_PASSWORD"] = ""
+        try:
+            client = create_app().test_client()
+            disabled = client.get("/admin")
+            disabled_body = disabled.get_data(as_text=True)
+            self.assertEqual(disabled.status_code, 503)
+            self.assertIn('"view": "disabled"', disabled_body)
+            self.assertIn("管理端未启用", disabled_body)
+            self._assert_home_link(disabled_body, "返回首页")
+            disabled_en = client.get("/admin?lang=en")
+            en_body = disabled_en.get_data(as_text=True)
+            self.assertIn("Admin is off", en_body)
+            self._assert_home_link(en_body, "Back to home")
+        finally:
+            os.environ["ADMIN_PASSWORD"] = PASSWORD
+
 
 if __name__ == "__main__":
     unittest.main()

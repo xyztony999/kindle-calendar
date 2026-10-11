@@ -187,7 +187,8 @@
 </head>
 <body>
 <div class="wrap">
-  <nav class="lang-switch" style="display:flex;gap:8px;justify-content:flex-end;margin:0 0 8px">
+  <nav class="lang-switch" style="display:flex;justify-content:space-between;align-items:center;margin:0 0 8px">
+    <a id="back-home" href="/">{{ ui.back_home }}</a>
     {% if ui.lang == 'en' %}
     <a href="/admin?lang=zh">中文</a>
     {% else %}
@@ -1048,6 +1049,10 @@
   });
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden && !$("view-settings").hidden) refreshDevice();
+  });
+
+  $("back-home").addEventListener("click", () => {
+    window.onbeforeunload = null;
   });
 
   showView(boot.view === "settings" ? "settings" : boot.view === "disabled" ? "disabled" : "login");

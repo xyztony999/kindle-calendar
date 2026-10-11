@@ -100,10 +100,10 @@ pipeline:
     stages:
       design:
         status: complete
-        note: "2026-10-11 增量。D0 按现有首页与管理端定范围。Gate 1 PASS，等待用户确认。未写业务代码。不改 api-view。"
+        note: "2026-10-11 增量。Gate 1 PASS，用户已确认五条范围。"
       code:
-        status: todo
-        note: "用户确认 Gate 1 之后才进入代码。不要提前改 admin.html。"
+        status: complete
+        note: "2026-10-11 已实现。Gate 2 PASS，报告 05-reports/gate2-admin-back.md。须用户确认后才算交付。未提交。"
     artifacts:
       architecture:
         - 00-architecture/business-arch.md (v1.6)
@@ -117,6 +117,7 @@ pipeline:
         - 02-detailed/interaction/interaction-admin-back.md (v1.0)
       reports:
         - 05-reports/gate1-admin-back.md
+        - 05-reports/gate2-admin-back.md
 reference: []
 modules:
   - name: onboarding

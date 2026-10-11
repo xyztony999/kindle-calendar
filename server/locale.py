@@ -270,6 +270,7 @@ def admin_ui(lang: str) -> dict:
         text = {
             "html_lang": "en",
             "title": "Kindle Calendar · Admin",
+            "back_home": "Back to home",
             "disabled_h1": "Admin is off",
             "disabled_p": "Set the ADMIN_PASSWORD environment variable and restart.",
             "disabled_hint": "Docker: add ADMIN_PASSWORD to .env. Render: add it in Environment.",
@@ -353,6 +354,7 @@ def admin_ui(lang: str) -> dict:
         text = {
             "html_lang": "zh-CN",
             "title": "Kindle 台历 · 管理端",
+            "back_home": "返回首页",
             "disabled_h1": "管理端未启用",
             "disabled_p": "请在服务端设置环境变量 ADMIN_PASSWORD 后重启服务。",
             "disabled_hint": "Docker：.env 增加 ADMIN_PASSWORD=…；Render：Environment 面板添加。",

@@ -201,8 +201,19 @@ def badge_en(note: str) -> str:
     return note
 
 
-def localize_payload(payload: dict) -> dict:
-    """英文载荷只改天气描述和语言标记。历法专名与一言保持原文。"""
+def localize_payload(
+    payload: dict,
+    quote_mode: str = "online",
+    custom: list | None = None,
+    now=None,
+    width: int = 758,
+) -> dict:
+    """英文载荷改天气描述、历法专名和一言。中文原文留在调用方的那一份里。"""
+    from datetime import datetime
+
+    from server.almanac_en import festival_en, ganzhi_pinyin, lunar_phrase, solar_term_en, wuhou_en, yiji_en
+    from server.quotes import english_quote
+
     out = copy.deepcopy(payload)
     out["ui_lang"] = "en"
     weather = out.get("weather") or {}
@@ -212,6 +223,31 @@ def localize_payload(payload: dict) -> dict:
     for day in weather.get("daily") or []:
         if isinstance(day, dict) and "code" in day:
             day["description"] = describe_weather(int(day["code"]), "en")
+
+    date = out.get("date")
+    if isinstance(date, dict):
+        date["lunar"] = lunar_phrase(date.get("lunar") or "")
+        date["ganzhi_year"] = ganzhi_pinyin(date.get("ganzhi_year") or "")
+        term = date.get("solar_term")
+        if isinstance(term, dict):
+            term["name"] = solar_term_en(term.get("name") or "")
+        if date.get("next_solar_term"):
+            date["next_solar_term"] = solar_term_en(date["next_solar_term"])
+        date["yi"] = yiji_en(date.get("yi") or [])
+        date["ji"] = yiji_en(date.get("ji") or [])
+        if date.get("wuhou"):
+            date["wuhou"] = wuhou_en(date["wuhou"])
+        date["festivals"] = [festival_en(name) for name in (date.get("festivals") or [])]
+
+    holiday = out.get("holiday")
+    if isinstance(holiday, dict) and holiday.get("name"):
+        holiday["name"] = festival_en(holiday["name"])
+
+    when = now
+    if when is None:
+        iso = (date or {}).get("iso") if isinstance(date, dict) else None
+        when = datetime.fromisoformat(iso) if iso else datetime.now()
+    out["quote"] = english_quote(when, quote_mode, custom, width)
     return out
 
 

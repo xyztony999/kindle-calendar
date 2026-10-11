@@ -76,7 +76,7 @@ def render_header(payload: dict, rect: Rect, font_path: str, page: str) -> Image
         x += style.tracked_width(draw, labels[p], f_page, 2) + dot_gap
 
     if english:
-        lunar_line = f"Lunar {date['lunar']} · {date['ganzhi_year']} {zodiac_en(date['zodiac'])}"
+        lunar_line = f"{date['lunar']} · {date['ganzhi_year']} {zodiac_en(date['zodiac'])}"
     else:
         lunar_line = f"{date['lunar']} · {date['ganzhi_year']}{date['zodiac']}年"
     style.draw_text_right(draw, rect.w, 46, lunar_line, f_small, style.MID)

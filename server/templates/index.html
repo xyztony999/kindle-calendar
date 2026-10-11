@@ -17,7 +17,7 @@
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
-  html { scroll-behavior: smooth; }
+  html { scroll-behavior: smooth; color-scheme: light dark; }
   body {
     margin: 0;
     color: var(--ink);
@@ -208,6 +208,25 @@
     .endpoints a { grid-template-columns: 1fr; gap: 4px; }
     .device { max-width: 360px; }
   }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #f3efe7;
+      --mid: #c8bfb2;
+      --faint: #9a9186;
+      --line: #3c362e;
+      --paper: #1c1915;
+      --card: #2a261f;
+      --accent: #e08a72;
+    }
+    body {
+      background:
+        radial-gradient(1200px 500px at 80% -10%, #2a241c 0%, transparent 55%),
+        var(--paper);
+    }
+    .btn.solid { color: #1c1915; }
+    .screen, .screen .wait { background: #f7f4ee; }
+    .screen img { background: #fff; }
+  }
 </style>
 </head>
 <body>
@@ -217,13 +236,7 @@
       <span>v{{ version }}</span>
     </a>
     <nav class="nav-links">
-      {% if copy.lang == 'zh' %}
-      <span class="btn" aria-current="true">中文</span>
-      <a class="btn" href="/?lang=en">English</a>
-      {% else %}
-      <a class="btn" href="/?lang=zh">中文</a>
-      <span class="btn" aria-current="true">English</span>
-      {% endif %}
+      <a class="btn" href="{{ copy.switch_href }}">{{ copy.switch_label }}</a>
       <a class="btn" href="https://github.com/xyztony999/kindle-calendar">GitHub</a>
       <a class="btn solid" href="/admin">{{ copy.admin }}</a>
     </nav>

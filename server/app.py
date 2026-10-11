@@ -15,7 +15,15 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from server.admin import create_admin_blueprint
 from server.landing import endpoint_rows, landing_copy, resolve_landing_lang
-from server.locale import LANG_COOKIE, LANG_MAX_AGE, device_lang, explicit_lang
+from server.locale import LANG_COOKIE, LANG_MAX_AGE, device_lang, explicit_lang, web_lang
+from server.reading import (
+    prefer_html,
+    render_dashboard,
+    render_env,
+    render_health,
+    render_unavailable,
+    render_weather,
+)
 from server.render import PAGES
 from server.service import DashboardService
 from server.settings import env_int
@@ -96,6 +104,34 @@ def _apply_lang_cookie(resp: Response) -> Response:
     return resp
 
 
+def _machine_json(payload: dict) -> Response:
+    resp = jsonify(payload)
+    resp.headers["Vary"] = "Accept"
+    return resp
+
+
+def _machine_text(body: str) -> Response:
+    resp = Response(body, mimetype="text/plain")
+    resp.headers["Vary"] = "Accept"
+    return resp
+
+
+def _html_page(body: str, status: int = 200) -> Response:
+    resp = Response(body, status=status, mimetype="text/html")
+    resp.headers["Vary"] = "Accept"
+    return _apply_lang_cookie(resp)
+
+
+def _reading_lang(html: bool) -> str:
+    if html:
+        return web_lang(
+            request.args.get("lang"),
+            request.cookies.get(LANG_COOKIE),
+            request.headers.get("Accept-Language"),
+        )
+    return device_lang(request.args.get("lang"))
+
+
 def _png_response(png: bytes, etag: str | None = None, max_age: int = 300) -> Response:
     if etag is not None and request.headers.get("If-None-Match") == etag:
         resp = Response(status=304)
@@ -161,17 +197,39 @@ def create_app() -> Flask:
 
     @app.get("/health")
     def health():
-        return jsonify({"status": "ok", **service.health_info()})
+        info = {"status": "ok", **service.health_info()}
+        if prefer_html(request.args.get("format"), request.headers.get("Accept")):
+            return _html_page(render_health(info, _reading_lang(True)))
+        return _machine_json(info)
 
     @app.get("/api/v1/dashboard.json")
     def dashboard_json():
-        return jsonify(service.get_payload(device_lang(request.args.get("lang"))))
+        html = prefer_html(request.args.get("format"), request.headers.get("Accept"))
+        try:
+            payload = service.get_payload(_reading_lang(html))
+        except Exception:
+            if html:
+                log.exception("台历阅读页暂时读不到")
+                return _html_page(render_unavailable(_reading_lang(True), "dashboard"), 500)
+            raise
+        if html:
+            return _html_page(render_dashboard(payload, _reading_lang(True)))
+        return _machine_json(payload)
 
     @app.get("/api/v1/dashboard.env")
     def dashboard_env():
-        env = service.build_env(request.host_url, device_lang(request.args.get("lang")))
+        html = prefer_html(request.args.get("format"), request.headers.get("Accept"))
+        try:
+            env = service.build_env(request.host_url, _reading_lang(html))
+        except Exception:
+            if html:
+                log.exception("设备清单阅读页暂时读不到")
+                return _html_page(render_unavailable(_reading_lang(True), "env"), 500)
+            raise
         service.note_heartbeat(request.remote_addr or "", request.headers.get("User-Agent", ""))
-        return Response(env, mimetype="text/plain")
+        if html:
+            return _html_page(render_env(env, _reading_lang(True)))
+        return _machine_text(env)
 
     @app.get("/r/<page>/<region>.png")
     def region_png(page: str, region: str):
@@ -202,15 +260,22 @@ def create_app() -> Flask:
 
     @app.get("/weather")
     def weather_json():
-        payload = service.get_payload(device_lang(request.args.get("lang")))
-        cur = payload["weather"]["current"]
-        return jsonify(
-            {
-                "current": cur,
-                "daily": payload["weather"]["daily"],
-                "hourly": payload["weather"]["hourly"],
-            }
-        )
+        html = prefer_html(request.args.get("format"), request.headers.get("Accept"))
+        try:
+            payload = service.get_payload(_reading_lang(html))
+        except Exception:
+            if html:
+                log.exception("天气阅读页暂时读不到")
+                return _html_page(render_unavailable(_reading_lang(True), "weather"), 500)
+            raise
+        body = {
+            "current": payload["weather"]["current"],
+            "daily": payload["weather"]["daily"],
+            "hourly": payload["weather"]["hourly"],
+        }
+        if html:
+            return _html_page(render_weather(payload, _reading_lang(True)))
+        return _machine_json(body)
 
     return app
 

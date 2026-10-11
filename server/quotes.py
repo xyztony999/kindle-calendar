@@ -13,6 +13,8 @@ log = logging.getLogger(__name__)
 # 固定常量地址，无动态拼接；请求前仍做协议/主机校验并禁止重定向
 HITOKOTO_URL = "https://v1.hitokoto.cn/?c=i&c=d&max_length=28&encode=json"
 ALLOWED_HOSTS = {"v1.hitokoto.cn"}
+ZENQUOTES_URL = "https://zenquotes.io/api/today"
+ZENQUOTES_HOSTS = {"zenquotes.io"}
 
 # 公有领域古诗词摘句（离线兜底，按当年第几天轮换）
 OFFLINE_QUOTES: list[dict[str, str]] = [
@@ -49,12 +51,103 @@ OFFLINE_QUOTES: list[dict[str, str]] = [
     {"text": "逢人问道归何处，笑指船儿是此家。", "from": "杨万里《舟过谢潭》"},
 ]
 
+# 公有领域英文短句。在线失败、过宽，或英文离线模式时使用。
+EN_QUOTES: list[dict[str, str]] = [
+    {"text": "To be, or not to be.", "from": "Shakespeare"},
+    {"text": "All the world's a stage.", "from": "Shakespeare"},
+    {"text": "Parting is such sweet sorrow.", "from": "Shakespeare"},
+    {"text": "I wandered lonely as a cloud.", "from": "Wordsworth"},
+    {"text": "The child is father of the man.", "from": "Wordsworth"},
+    {"text": "If Winter comes, can Spring be far behind?", "from": "Shelley"},
+    {"text": "A thing of beauty is a joy for ever.", "from": "Keats"},
+    {"text": "Beauty is truth, truth beauty.", "from": "Keats"},
+    {"text": "Tyger, tyger, burning bright.", "from": "Blake"},
+    {"text": "Hope is the thing with feathers.", "from": "Dickinson"},
+    {"text": "I celebrate myself.", "from": "Whitman"},
+    {"text": "I am the master of my fate.", "from": "Henley"},
+]
+
 _day_cache: dict[str, dict] = {}
+_en_cache: dict[str, dict] = {}
 
 
-def _check_url(url: str) -> bool:
+def _check_url(url: str, hosts: set[str] | None = None) -> bool:
     parts = urlsplit(url)
-    return parts.scheme == "https" and parts.hostname in ALLOWED_HOSTS
+    return parts.scheme == "https" and parts.hostname in (hosts or ALLOWED_HOSTS)
+
+
+def local_en_quote(now: datetime) -> dict:
+    return dict(EN_QUOTES[now.timetuple().tm_yday % len(EN_QUOTES)])
+
+
+def footer_fits(text: str, source: str, width: int = 758) -> bool:
+    """页脚缩到基准 16px 后是否还放得下。过宽则改用本地短句。"""
+    from PIL import Image, ImageDraw
+
+    from server.render import style
+
+    img = Image.new("L", (max(width, 1), 52), 255)
+    draw = ImageDraw.Draw(img)
+    line = f"「{text}」"
+    if source:
+        line += f" ——{source}"
+    sx = width / 646
+    font = style.get_font(max(15, round(16 * sx)), "")
+    return style.tracked_width(draw, line, font) <= width - 12
+
+
+def _fetch_zenquotes() -> dict | None:
+    if not _check_url(ZENQUOTES_URL, ZENQUOTES_HOSTS):
+        return None
+    try:
+        resp = requests.get(ZENQUOTES_URL, timeout=8, allow_redirects=False)
+        resp.raise_for_status()
+        data = resp.json()
+        if isinstance(data, list):
+            data = data[0] if data else {}
+        if not isinstance(data, dict):
+            return None
+        text = (data.get("q") or "").strip()
+        if not text:
+            return None
+        return {"text": text, "from": (data.get("a") or "").strip()}
+    except Exception as exc:
+        log.warning("zenquotes 拉取失败: %s", exc)
+        return None
+
+
+def english_quote(
+    now: datetime,
+    mode: str = "online",
+    custom: list | None = None,
+    width: int = 758,
+) -> dict:
+    """英文页脚。在线用 ZenQuotes 当日一句；失败或过宽用本地短句。自定义原样。"""
+    if mode == "custom":
+        items = [item for item in (custom or []) if (item.get("text") or "").strip()]
+        if items:
+            picked = items[now.timetuple().tm_yday % len(items)]
+            return {"text": picked["text"].strip(), "from": (picked.get("from") or "").strip()}
+        return local_en_quote(now)
+    if mode == "offline":
+        return local_en_quote(now)
+
+    key = now.strftime("%Y-%m-%d")
+    cached = _en_cache.get(key)
+    if cached is not None:
+        return dict(cached)
+
+    quote = _fetch_zenquotes()
+    if quote is not None and not footer_fits(quote["text"], quote["from"], width):
+        quote = None
+    if quote is None:
+        quote = local_en_quote(now)
+
+    stale = [item for item in _en_cache if not item.startswith(key)]
+    for item in stale:
+        _en_cache.pop(item, None)
+    _en_cache[key] = quote
+    return dict(quote)
 
 
 def get_quote(now: datetime, mode: str = "online", custom: list | None = None) -> dict:

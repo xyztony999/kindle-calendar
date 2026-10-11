@@ -32,7 +32,7 @@ Open `https://your-host/admin`. You can set:
 - Which of Week / Month / Detail / Almanac are enabled, and their order (Today stays first)
 - Carousel on/off, dwell seconds per enabled page, and how long a touch pauses the carousel
 - City: search by name (Open-Meteo) to fill coordinates and timezone, or type them
-- Footer quote: online Hitokoto, the built-in offline poems, or your own list
+- Footer quote: an online line, built-in offline text, or your own list. Chinese online text comes from Hitokoto. English online text comes from [ZenQuotes](https://zenquotes.io/) (the picture shows only the author). If that line fails or does not fit, the footer uses a built-in public-domain sentence
 - Page previews, import / export, restore defaults, and whether the device has fetched the latest settings
 
 The password is the `ADMIN_PASSWORD` environment variable. If it is unset, `/admin` only says the admin is disabled. `SECRET_KEY` signs the session; set a stable random value or every container recreate logs you out. Settings are stored in `data/settings.json`. Mount `./data:/app/data` or they disappear when the container is recreated. Keep both values in the server `.env` only — not in the image and not in GitHub. See [DEPLOY.md](DEPLOY.md).

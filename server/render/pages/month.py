@@ -7,6 +7,7 @@ from datetime import date
 from PIL import Image, ImageDraw
 
 from server import almanac
+from server.almanac_en import festival_en, lunar_cell, solar_term_en
 from server.locale import badge_en, is_en, month_title, weekday_en
 from server.render import style
 from server.render.regions import Rect
@@ -116,8 +117,16 @@ def render_grid(payload: dict, rect: Rect, font_path: str, offset: int = 0) -> I
                 r = max(dw, dh) // 2 + int(9 * sx)
                 draw.ellipse((ncx - r, ncy - r, ncx + r, ncy + r), outline=style.INK, width=3)
 
-            # 角标文本：节气 > 节日 > 农历
-            sub = info["jieqi"] or info["fest"] or info["lunar"]
+            # 角标文本：节气 > 节日 > 农历。英文按同一优先级换词。
+            if is_en(payload):
+                if info["jieqi"]:
+                    sub = solar_term_en(info["jieqi"])
+                elif info["fest"]:
+                    sub = festival_en(info["fest"])
+                else:
+                    sub = lunar_cell(info["lunar"])
+            else:
+                sub = info["jieqi"] or info["fest"] or info["lunar"]
             sub_fill = style.INK if (info["jieqi"] or info["fest"]) else style.MID
             style.draw_text_center(draw, cx, y0 + row_h - int(34 * sx), sub, f_sub, sub_fill)
 

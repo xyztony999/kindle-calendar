@@ -16,6 +16,7 @@
     --bad: #a33b32;
     --neutral: #6b6560;
   }
+  html { color-scheme: light dark; }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
   body {
@@ -163,6 +164,25 @@
   .counter { font-size: 12px; color: var(--mid); }
   .search-line { display: flex; gap: 8px; }
   .corner { position: absolute; top: 12px; right: 12px; font-size: 12px; color: var(--warn); }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #f4f1ea;
+      --mid: #c2bbb2;
+      --line: #3d3832;
+      --paper: #1b1916;
+      --card: #262320;
+      --ok: #8fd4ae;
+      --warn: #e0b84a;
+      --bad: #e07a72;
+      --neutral: #b0a89f;
+    }
+    .banner { background: #3a3218; border-color: #6d5a28; color: #f0e2b8; }
+    input, select, textarea { background: #1f1c19; }
+    .btn.primary { color: #1b1916; }
+    .btn.danger { background: transparent; }
+    .badge.ok, .badge.warn, .badge.bad { background: #2c2824; }
+    .shot img, .lightbox img { background: #f7f4ee; }
+  }
 </style>
 </head>
 <body>
@@ -170,9 +190,7 @@
   <nav class="lang-switch" style="display:flex;gap:8px;justify-content:flex-end;margin:0 0 8px">
     {% if ui.lang == 'en' %}
     <a href="/admin?lang=zh">中文</a>
-    <span aria-current="true">English</span>
     {% else %}
-    <span aria-current="true">中文</span>
     <a href="/admin?lang=en">English</a>
     {% endif %}
   </nav>

@@ -52,26 +52,71 @@ pipeline:
     stages:
       design:
         status: complete
-        note: "冷启动新模块，D1 走架构变更管理。D0–D4 + Gate 1 PASS（2026-10-10）。不重做 v2-pages、v2-aqi、web-admin。较早的窄范围（不翻译画面和管理端）已作废。报告 05-reports/gate1-en-locale.md"
+        note: "2026-10-11 增量 Gate 1 PASS，用户已确认后进入代码。方案丁 + 语言单按钮 + 系统深色 + 英文农历/干支。英文一言为 ZenQuotes 当日一句，失败或过宽用本地短句（API v1.3）。"
       code:
         status: complete
-        note: "2026-10-10 按已确认设计实现。Gate 2 WARN：单测 23 项与浏览器中英文切换、lang=en 画面已通过；Kindle 真机未验证。报告 05-reports/gate2-en-locale.md"
+        note: "2026-10-11 增量已实现。Gate 2 WARN：单测 26 项、浏览器单按钮与系统深色、英文农历/黄历/页脚已通过；Kindle 真机未验证。报告 05-reports/gate2-en-locale.md。"
     artifacts:
       architecture:
-        - 00-architecture/business-arch.md (v1.3)
-        - 00-architecture/application-arch.md (v1.3)
-        - 00-architecture/function-list.md (v1.2)
+        - 00-architecture/business-arch.md (v1.4)
+        - 00-architecture/application-arch.md (v1.4)
+        - 00-architecture/function-list.md (v1.3)
       prd:
-        - 02-detailed/prd/prd-en-locale.md (v1.1)
+        - 02-detailed/prd/prd-en-locale.md (v1.2)
       api:
-        - 02-detailed/api/api-en-locale.md (v1.1)
+        - 02-detailed/api/api-en-locale.md (v1.2)
       interaction:
-        - 02-detailed/interaction/interaction-en-locale.md (v1.1)
+        - 02-detailed/interaction/interaction-en-locale.md (v1.2)
       conventions:
         - 01-solution/common-spec/enum-pool.md (v1.1, §3 ui_lang)
       reports:
         - 05-reports/gate1-en-locale.md
         - 05-reports/gate2-en-locale.md
+  - module: api-view
+    title: "接口阅读页（首页上的数据接口在浏览器里显示阅读页，设备与脚本仍取原来的 JSON、env 和 PNG）"
+    stages:
+      design:
+        status: complete
+        note: "2026-10-11 冷启动。Gate 1 PASS，用户已确认四条范围。BA/AA/FL v1.5/v1.5/v1.4。"
+      code:
+        status: complete
+        note: "2026-10-11 已实现。Gate 2 PASS，报告 05-reports/gate2-api-view.md。须用户确认后才算交付。未提交。"
+    artifacts:
+      architecture:
+        - 00-architecture/business-arch.md (v1.5)
+        - 00-architecture/application-arch.md (v1.5)
+        - 00-architecture/function-list.md (v1.4)
+      prd:
+        - 02-detailed/prd/prd-api-view.md (v1.0)
+      api:
+        - 02-detailed/api/api-api-view.md (v1.0)
+      interaction:
+        - 02-detailed/interaction/interaction-api-view.md (v1.0)
+      reports:
+        - 05-reports/gate1-api-view.md
+        - 05-reports/gate2-api-view.md
+  - module: admin-back
+    title: "管理端返回首页（页顶链接回网站首页，三种版面都可见）"
+    stages:
+      design:
+        status: complete
+        note: "2026-10-11 增量。D0 按现有首页与管理端定范围。Gate 1 PASS，等待用户确认。未写业务代码。不改 api-view。"
+      code:
+        status: todo
+        note: "用户确认 Gate 1 之后才进入代码。不要提前改 admin.html。"
+    artifacts:
+      architecture:
+        - 00-architecture/business-arch.md (v1.6)
+        - 00-architecture/application-arch.md (v1.6)
+        - 00-architecture/function-list.md (v1.5)
+      prd:
+        - 02-detailed/prd/prd-admin-back.md (v1.0)
+      api:
+        - 02-detailed/api/api-admin-back.md (v1.0)
+      interaction:
+        - 02-detailed/interaction/interaction-admin-back.md (v1.0)
+      reports:
+        - 05-reports/gate1-admin-back.md
 reference: []
 modules:
   - name: onboarding

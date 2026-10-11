@@ -34,18 +34,35 @@ def render_main(payload: dict, rect: Rect, font_path: str) -> Image.Image:
     f_item = _font(sx, 26, font_path)
     f_note = _font(sx, 24, font_path)
 
-    # 左栏：竖排日期 + 农历。英文只改公历和生肖，农历与干支保持原文。
+    # 左栏：中文竖排日期。英文改为横排农历序数和干支拼音。
     left_w = int(170 * sx)
     draw.line((left_w, 8, left_w, rect.h - 8), fill=style.RULE, width=1)
     english = is_en(payload)
     if english:
-        draw.text((int(16 * sx), int(20 * sx)), short_date(date["iso"]), fill=style.INK, font=f_col)
+        draw.text((int(8 * sx), int(16 * sx)), short_date(date["iso"]), fill=style.INK, font=f_col)
+        max_w = left_w - int(16 * sx)
+        y = int(64 * sx)
+        line = ""
+        for word in date["lunar"].split(" "):
+            trial = word if not line else f"{line} {word}"
+            if line and style.tracked_width(draw, trial, f_note) > max_w:
+                draw.text((int(8 * sx), y), line, fill=style.MID, font=f_note)
+                y += int(32 * sx)
+                line = word
+            else:
+                line = trial
+        if line:
+            draw.text((int(8 * sx), y), line, fill=style.MID, font=f_note)
+            y += int(36 * sx)
         year_line = f"{date['ganzhi_year']} {zodiac_en(date['zodiac'])}"
+        draw.text((int(8 * sx), y), year_line, fill=style.MID, font=f_note)
     else:
         _draw_vertical(draw, int(28 * sx), int(20 * sx), date["month_day_cn"], f_big, style.INK)
         year_line = f"{date['ganzhi_year']}{date['zodiac']}年"
-    _draw_vertical(draw, int(112 * sx), int(26 * sx), date["lunar"], f_col, style.MID)
-    _draw_vertical(draw, int(112 * sx), int(26 * sx) + (len(date["lunar"]) + 1) * int(44 * sx), year_line, f_note, style.MID)
+        _draw_vertical(draw, int(112 * sx), int(26 * sx), date["lunar"], f_col, style.MID)
+        _draw_vertical(
+            draw, int(112 * sx), int(26 * sx) + (len(date["lunar"]) + 1) * int(44 * sx), year_line, f_note, style.MID
+        )
 
     # 右栏：宜 / 忌
     rx0 = left_w + int(24 * sx)
@@ -73,7 +90,7 @@ def render_main(payload: dict, rect: Rect, font_path: str) -> Image.Image:
     draw_items(rx0, yi_title, date.get("yi") or [], style.INK)
     draw_items(rx0 + col_w + int(16 * sx), ji_title, date.get("ji") or [], style.MID)
 
-    # 底部：节气物候。专名保持中文。
+    # 底部：节气与物候。英文名已经在载荷里换好。
     y0 = rect.h - int(150 * sx)
     style.hairline(draw, rx0, y0 - int(16 * sx), rect.w - int(16 * sx))
     draw.text((rx0, y0), term_line, fill=style.INK, font=f_note)

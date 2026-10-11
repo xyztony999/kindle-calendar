@@ -260,7 +260,13 @@ class DashboardService:
             settings = copy_settings(self._settings)
         payload = data_mod.build_payload(self.config, weather, now, aqi, settings)
         if lang == "en":
-            payload = localize_payload(payload)
+            mode = "online"
+            custom = None
+            if settings:
+                mode = settings["quote"]["mode"]
+                custom = settings["quote"].get("custom")
+            width = int((self.config.get("screen") or {}).get("width") or 758)
+            payload = localize_payload(payload, mode, custom, now, width)
         fingerprint = data_mod.data_fingerprint(payload)
         with self._lock:
             self._payloads[lang] = payload

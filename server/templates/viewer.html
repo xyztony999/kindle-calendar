@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="{{ view.html_lang }}" {% if view.theme %}data-theme="{{ view.theme }}"{% endif %}>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ view.title }}</title>
+<style>
+  :root {
+    --ink: #1a1814;
+    --mid: #5e584f;
+    --line: #ddd6cb;
+    --paper: #f3efe7;
+    --card: #fffdf9;
+  }
+  html { color-scheme: light; }
+  html[data-theme="dark"] { color-scheme: dark; }
+  @media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]) { color-scheme: dark; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    color: var(--ink);
+    background: var(--paper);
+    font: 16px/1.55 "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif;
+  }
+  a { color: inherit; }
+  .nav, main { width: min(860px, calc(100% - 32px)); margin: 0 auto; }
+  .nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 22px 0 8px;
+    flex-wrap: wrap;
+  }
+  .mark {
+    font-family: "Palatino Linotype", "Songti SC", "Noto Serif SC", serif;
+    font-size: 18px;
+    text-decoration: none;
+    margin-right: auto;
+  }
+  .nav-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    padding: 0 12px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--card);
+    text-decoration: none;
+    font-size: 13px;
+    color: inherit;
+  }
+  button.btn { cursor: pointer; font: inherit; width: 34px; padding: 0; }
+  .btn:focus-visible, .mark:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  h1 {
+    margin: 12px 0 8px;
+    font-family: "Palatino Linotype", "Songti SC", "Noto Serif SC", serif;
+    font-size: clamp(28px, 4vw, 40px);
+    font-weight: 500;
+  }
+  .frame {
+    margin: 12px 0 28px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 16px;
+  }
+  .frame img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin: 0 auto;
+    background: #f7f4ee;
+    filter: none;
+  }
+  figcaption {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+    color: var(--mid);
+    font-size: 14px;
+  }
+  figcaption .btn { margin-left: auto; }
+  html[data-theme="dark"] {
+    --ink: #f3efe7;
+    --mid: #c8bfb2;
+    --line: #3a342c;
+    --paper: #1a1814;
+    --card: #242019;
+  }
+  @media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]) {
+      --ink: #f3efe7;
+      --mid: #c8bfb2;
+      --line: #3a342c;
+      --paper: #1a1814;
+      --card: #242019;
+    }
+  }
+</style>
+</head>
+<body>
+  <header class="nav">
+    <a class="mark" href="/">{{ view.mark }}</a>
+    <div class="nav-actions">
+      <button class="btn" id="theme-btn" type="button" title="{{ view.theme_to_dark }}">☾</button>
+      <a class="btn" href="{{ view.switch_href }}">{{ view.switch_label }}</a>
+      <a class="btn" href="/">{{ view.home_label }}</a>
+    </div>
+  </header>
+  <main>
+    <h1>{{ view.title }}</h1>
+    {% if view.missing %}
+    <p>{{ view.note }}</p>
+    {% else %}
+    <figure class="frame">
+      <img src="{{ view.img_src }}" alt="{{ view.title }}">
+      <figcaption>
+        <span>{{ view.note }}</span>
+        <a class="btn" href="{{ view.raw_link }}" target="_blank" rel="noopener">{{ view.raw_label }}</a>
+      </figcaption>
+    </figure>
+    {% endif %}
+  </main>
+  <script>
+  (function () {
+    var btn = document.getElementById("theme-btn");
+    var toDark = {{ view.theme_to_dark|tojson }};
+    var toLight = {{ view.theme_to_light|tojson }};
+    function effective() {
+      var v = document.documentElement.getAttribute("data-theme");
+      if (v === "light" || v === "dark") return v;
+      return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    function paint() {
+      var now = effective();
+      btn.textContent = now === "dark" ? "☀" : "☾";
+      btn.title = now === "dark" ? toLight : toDark;
+    }
+    btn.addEventListener("click", function () {
+      var next = effective() === "dark" ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", next);
+      document.cookie = "kc_theme=" + next + ";path=/;max-age=31536000;samesite=lax";
+      paint();
+    });
+    paint();
+  })();
+  </script>
+</body>
+</html>

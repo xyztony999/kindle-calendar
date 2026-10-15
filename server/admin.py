@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 import requests
 from flask import Blueprint, Response, jsonify, render_template, request, session
 
-from server.locale import LANG_COOKIE, LANG_MAX_AGE, admin_ui, explicit_lang, translate_message, web_lang
+from server.locale import LANG_COOKIE, LANG_MAX_AGE, THEME_COOKIE, admin_ui, explicit_lang, translate_message, web_lang, web_theme
 from server.settings import SettingsError, env_int, limits
 
 log = logging.getLogger(__name__)
@@ -213,7 +213,7 @@ def create_admin_blueprint(service) -> Blueprint:
             boot = {"view": "login"}
             status = 200
         lang = _request_lang()
-        html = render_template("admin.html", boot=boot, ui=admin_ui(lang))
+        html = render_template("admin.html", boot=boot, ui=admin_ui(lang, web_theme(request.cookies.get(THEME_COOKIE))))
         resp = Response(html, status=status, mimetype="text/html; charset=utf-8")
         resp.headers["Cache-Control"] = "no-store"
         chosen = explicit_lang(request.args.get("lang"))

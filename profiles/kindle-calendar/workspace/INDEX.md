@@ -118,6 +118,31 @@ pipeline:
       reports:
         - 05-reports/gate1-admin-back.md
         - 05-reports/gate2-admin-back.md
+  - module: web-chrome
+    title: "网页外观（登录卡与顶栏按钮、图片承载页、深色控件、深浅色切换）"
+    stages:
+      design:
+        status: complete
+        note: "2026-10-15 冷启动。D0–D4 完成。Gate 1 PASS，用户已确认六条。报告 05-reports/gate1-web-chrome.md"
+      code:
+        status: complete
+        note: "2026-10-15 已实现。Gate 2 PASS，报告 05-reports/gate2-web-chrome.md。须用户确认后才算交付。未提交。"
+    artifacts:
+      architecture:
+        - 00-architecture/business-arch.md (v1.7)
+        - 00-architecture/application-arch.md (v1.7)
+        - 00-architecture/function-list.md (v1.6)
+      prd:
+        - 02-detailed/prd/prd-web-chrome.md (v1.0)
+      api:
+        - 02-detailed/api/api-web-chrome.md (v1.0)
+      interaction:
+        - 02-detailed/interaction/interaction-web-chrome.md (v1.0)
+      conventions:
+        - 01-solution/common-spec/enum-pool.md (v1.2, §4 ui_theme)
+      reports:
+        - 05-reports/gate1-web-chrome.md
+        - 05-reports/gate2-web-chrome.md
 reference: []
 modules:
   - name: onboarding

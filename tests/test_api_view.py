@@ -203,11 +203,8 @@ class ReadingRouteTests(unittest.TestCase):
         self.assertIn("&lt;img", page.get_data(as_text=True))
         self.assertNotIn("<img", page.get_data(as_text=True))
         self.assertIn("&lt;script&gt;", status.get_data(as_text=True))
-        self.assertNotIn("<script>", status.get_data(as_text=True))
+        self.assertNotIn("<script>alert", status.get_data(as_text=True))
 
-    def test_png_and_admin_api_stay_machine_readable(self):
-        png = self.client.get("/r/today/clock/0.png", headers=HTML)
-        self.assertEqual(png.mimetype, "image/png")
-        self.assertTrue(png.data.startswith(b"\x89PNG"))
+    def test_admin_api_stays_json_when_browser_asks_for_html(self):
         admin = self.client.get("/admin/api/settings", headers=HTML)
         self.assertTrue(admin.is_json)

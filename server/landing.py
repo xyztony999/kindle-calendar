@@ -102,6 +102,8 @@ def landing_copy(lang: str) -> dict:
         "html_lang": "en" if english else "zh-CN",
         "switch_href": "/?lang=zh" if english else "/?lang=en",
         "switch_label": "中文" if english else "English",
+        "theme_to_dark": "Switch to dark" if english else "切换到深色",
+        "theme_to_light": "Switch to light" if english else "切换到浅色",
         "preview_query": "&lang=en" if english else "",
         "pages": pages,
         "wait_today": text["rendering"].format(name=today["name"]),

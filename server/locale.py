@@ -8,6 +8,7 @@ import re
 from server.weather import describe_weather
 
 LANG_COOKIE = "kc_lang"
+THEME_COOKIE = "kc_theme"
 LANG_MAX_AGE = 31_536_000
 
 _MONTHS = (
@@ -144,6 +145,12 @@ def lang_from_accept(header: str | None) -> str:
     return best if seen else "zh"
 
 
+def web_theme(cookie: str | None) -> str:
+    """点过明暗按钮后记住的外观。只有 light / dark。其它值（含空、auto）表示跟随系统。"""
+    value = (cookie or "").strip().lower()
+    return value if value in ("light", "dark") else ""
+
+
 def web_lang(explicit: str | None, cookie: str | None, accept_language: str | None) -> str:
     """地址里的 zh/en 优先，其次 Cookie，再是浏览器语言，最后中文。"""
     chosen = explicit_lang(explicit)
@@ -264,11 +271,20 @@ def translate_message(lang: str, message: str) -> str:
     return message
 
 
-def admin_ui(lang: str) -> dict:
+def admin_ui(lang: str, theme: str = "") -> dict:
+    if theme not in ("light", "dark"):
+        theme = ""
     english = lang == "en"
     if english:
         text = {
             "html_lang": "en",
+            "theme": theme,
+            "site_name": "Kindle Calendar",
+            "theme_title": "Theme",
+            "theme_to_dark": "Switch to dark",
+            "theme_to_light": "Switch to light",
+            "switch_label": "中文",
+            "login_title": "Admin Console",
             "title": "Kindle Calendar · Admin",
             "back_home": "Back to home",
             "disabled_h1": "Admin is off",
@@ -353,6 +369,13 @@ def admin_ui(lang: str) -> dict:
     else:
         text = {
             "html_lang": "zh-CN",
+            "theme": theme,
+            "site_name": "Kindle 台历",
+            "theme_title": "主题",
+            "theme_to_dark": "切换到深色",
+            "theme_to_light": "切换到浅色",
+            "switch_label": "English",
+            "login_title": "管理端",
             "title": "Kindle 台历 · 管理端",
             "back_home": "返回首页",
             "disabled_h1": "管理端未启用",

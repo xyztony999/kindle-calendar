@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-from flask import render_template
+from flask import render_template, request
 
-from server.locale import page_label
+from server.locale import THEME_COOKIE, page_label, web_theme
 
 _ZH = {
     "html_lang": "zh-CN",
     "mark": "Kindle 台历",
+    "theme_title": "主题",
+    "theme_to_dark": "切换到深色",
+    "theme_to_light": "切换到浅色",
+    "foot_note": "数据每 15 分钟左右更新一次",
     "switch_label": "English",
     "raw": "原始数据",
     "home": "返回首页",
@@ -77,6 +81,10 @@ _ZH = {
 _EN = {
     "html_lang": "en",
     "mark": "Kindle Calendar",
+    "theme_title": "Theme",
+    "theme_to_dark": "Switch to dark",
+    "theme_to_light": "Switch to light",
+    "foot_note": "Data refreshes roughly every 15 minutes",
     "switch_label": "中文",
     "raw": "Raw data",
     "home": "Back to home",
@@ -182,6 +190,7 @@ def _copy(lang: str) -> dict[str, str]:
 
 
 def _chrome(lang: str, path: str, *, raw: bool) -> dict:
+    theme = web_theme(request.cookies.get(THEME_COOKIE))
     text = _copy(lang)
     other = "zh" if lang == "en" else "en"
     if not raw:
@@ -194,6 +203,11 @@ def _chrome(lang: str, path: str, *, raw: bool) -> dict:
         raw_href = f"{path}?format=json"
     return {
         "html_lang": text["html_lang"],
+        "theme": theme,
+        "theme_title": text["theme_title"],
+        "theme_to_dark": text["theme_to_dark"],
+        "theme_to_light": text["theme_to_light"],
+        "foot_note": text["foot_note"],
         "mark": text["mark"],
         "switch_href": f"{path}?lang={other}",
         "switch_label": text["switch_label"],

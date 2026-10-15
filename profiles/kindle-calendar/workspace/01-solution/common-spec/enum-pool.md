@@ -24,9 +24,16 @@
 |--------|------|------|--------|
 | `ui_lang` | zh / en | 界面语言。zh 为默认。设备请求缺省或无法识别时按 zh，且中文响应与现在一致。网页另有浏览器语言与 Cookie，仍只落在这两个值 | api-en-locale.md 3.4 / interaction-en-locale.md |
 
+## §4 web-chrome（网页明暗）
+
+| 枚举名 | 取值 | 说明 | 引用方 |
+|--------|------|------|--------|
+| `ui_theme` | light / dark | 使用者点过明暗按钮之后记住的外观。只有这两个值会写入 Cookie `kc_theme`。没有这枚 Cookie，或值不是这两个，页面跟随系统，不另设第三态 | api-web-chrome.md 3.4 / interaction-web-chrome.md |
+
 ## 更新记录
 
 | 版本 | 日期 | 更新说明 |
 |------|------|---------|
+| v1.2 | 2026-10-15 | 新增 §4 `ui_theme`（light / dark）。跟随系统是缺省，不入库、不入枚举值 |
 | v1.1 | 2026-10-10 | 新增 §3 `ui_lang`（zh / en），供设备画面与网页共用 |
 | v1.0 | 2026-10-10 | 初始填充：web-admin 四枚举；回填 v2-pages 两枚举（page_id 与 web-admin 共用） |

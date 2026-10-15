@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{{ view.html_lang }}">
+<html lang="{{ view.html_lang }}" {% if view.theme %}data-theme="{{ view.theme }}"{% endif %}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -14,7 +14,12 @@
     --card: #fffdf9;
     --accent: #8c3b2a;
   }
-  * { box-sizing: border-box; }
+  html { color-scheme: light; }
+  html[data-theme="dark"] { color-scheme: dark; }
+  @media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]) { color-scheme: dark; }
+  }
+  * { box-sizing: border-box; accent-color: var(--ink); }
   body {
     margin: 0;
     color: var(--ink);
@@ -34,12 +39,14 @@
     justify-content: space-between;
     gap: 12px;
   }
-  .nav { padding: 22px 0 8px; }
+  .nav { padding: 22px 0 8px; flex-wrap: wrap; }
   .mark {
     font-family: "Palatino Linotype", "Songti SC", "Noto Serif SC", serif;
     font-size: 18px;
     text-decoration: none;
+    margin-right: auto;
   }
+  .nav-actions { display: flex; align-items: center; gap: 8px; }
   .btn {
     display: inline-flex;
     align-items: center;
@@ -50,7 +57,11 @@
     background: var(--card);
     text-decoration: none;
     font-size: 14px;
+    gap: 6px;
   }
+  .btn.compact { min-height: 34px; padding: 0 12px; font-size: 13px; }
+  button.btn { cursor: pointer; font: 13px/1 inherit; color: inherit; }
+  .btn:focus-visible, .mark:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
   h1 {
     margin: 12px 0 8px;
     font-family: "Palatino Linotype", "Songti SC", "Noto Serif SC", serif;
@@ -102,8 +113,18 @@
   @media (max-width: 640px) {
     .row, .pair { grid-template-columns: 1fr; gap: 4px; }
   }
+  /* dark：手动选择与系统跟随共用同一组值 */
+  html[data-theme="dark"] {
+    --ink: #f3efe7;
+    --mid: #c8bfb2;
+    --faint: #9a9186;
+    --line: #3a342c;
+    --paper: #1a1814;
+    --card: #242019;
+    --accent: #e0a090;
+  }
   @media (prefers-color-scheme: dark) {
-    :root {
+    html:not([data-theme="light"]) {
       --ink: #f3efe7;
       --mid: #c8bfb2;
       --faint: #9a9186;
@@ -112,14 +133,22 @@
       --card: #242019;
       --accent: #e0a090;
     }
-    body { background: var(--paper); }
+  }
+  html[data-theme="dark"] body { background: var(--paper); }
+  @media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]) body { background: var(--paper); }
   }
 </style>
 </head>
 <body>
   <header class="nav">
     <a class="mark" href="/">{{ view.mark }}</a>
-    <a class="btn" href="{{ view.switch_href }}">{{ view.switch_label }}</a>
+    <div class="nav-actions">
+      <button class="btn compact" id="theme-btn" type="button" title="{{ view.theme_to_dark }}">☾</button>
+      <a class="btn compact" href="{{ view.switch_href }}">{{ view.switch_label }}</a>
+      {% if view.raw_href %}<a class="btn compact" href="{{ view.raw_href }}">⤓ {{ view.raw_label }}</a>{% endif %}
+      <a class="btn compact" href="/">← {{ view.home_label }}</a>
+    </div>
   </header>
   <main>
     <h1>{{ view.title }}</h1>
@@ -189,8 +218,32 @@
     {% endif %}
   </main>
   <footer class="foot">
-    <a href="/">{{ view.home_label }}</a>
-    {% if view.raw_href %}<a href="{{ view.raw_href }}">{{ view.raw_label }}</a>{% endif %}
+    <span>{{ view.foot_note }}</span>
+    <span>{{ view.mark }}</span>
   </footer>
+  <script>
+  (function () {
+    var btn = document.getElementById("theme-btn");
+    var toDark = {{ view.theme_to_dark|tojson }};
+    var toLight = {{ view.theme_to_light|tojson }};
+    function effective() {
+      var v = document.documentElement.getAttribute("data-theme");
+      if (v === "light" || v === "dark") return v;
+      return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    function paint() {
+      var now = effective();
+      btn.textContent = now === "dark" ? "☀" : "☾";
+      btn.title = now === "dark" ? toLight : toDark;
+    }
+    btn.addEventListener("click", function () {
+      var next = effective() === "dark" ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", next);
+      document.cookie = "kc_theme=" + next + ";path=/;max-age=31536000;samesite=lax";
+      paint();
+    });
+    paint();
+  })();
+  </script>
 </body>
 </html>

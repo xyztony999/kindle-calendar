@@ -15,7 +15,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from server.admin import create_admin_blueprint
 from server.landing import endpoint_rows, landing_copy, resolve_landing_lang
-from server.locale import LANG_COOKIE, LANG_MAX_AGE, device_lang, explicit_lang, web_lang
+from server.locale import LANG_COOKIE, LANG_MAX_AGE, THEME_COOKIE, device_lang, explicit_lang, web_lang, web_theme
 from server.reading import (
     prefer_html,
     render_dashboard,
@@ -24,9 +24,10 @@ from server.reading import (
     render_unavailable,
     render_weather,
 )
-from server.render import PAGES
+from server.render import PAGES, page_region_names
 from server.service import DashboardService
 from server.settings import env_int
+from server.viewer import render_viewer, render_viewer_missing, viewer_wants_html
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = ROOT / "config.yaml"
@@ -139,6 +140,7 @@ def _png_response(png: bytes, etag: str | None = None, max_age: int = 300) -> Re
         resp = Response(png, mimetype="image/png")
     resp.headers["ETag"] = etag or ""
     resp.headers["Cache-Control"] = f"public, max-age={max_age}"
+    resp.headers["Vary"] = "Accept"
     return resp
 
 
@@ -191,6 +193,7 @@ def create_app() -> Flask:
                 version=payload["version"],
                 endpoints=endpoint_rows(lang, payload["endpoints"]),
                 copy=copy,
+                theme=web_theme(request.cookies.get(THEME_COOKIE)),
             )
         )
         return _apply_lang_cookie(resp)
@@ -231,21 +234,30 @@ def create_app() -> Flask:
             return _html_page(render_env(env, _reading_lang(True)))
         return _machine_text(env)
 
+    def _image_missing():
+        if viewer_wants_html():
+            return _html_page(render_viewer_missing(), 404)
+        return Response("not found", status=404)
+
     @app.get("/r/<page>/<region>.png")
     def region_png(page: str, region: str):
-        if page not in PAGES or not _REGION_RE.match(region):
-            return Response("not found", status=404)
+        if page not in PAGES or not _REGION_RE.match(region) or region not in page_region_names(page):
+            return _image_missing()
         # 月历 title/grid 支持任意月偏移（跨月浏览）
         offset = request.args.get("offset", type=int) or 0
+        if viewer_wants_html():
+            return _html_page(render_viewer("region", page=page, region=region, offset=offset))
         rendered = service.get_region(page, region, offset, device_lang(request.args.get("lang")))
         if rendered is None:
-            return Response("not found", status=404)
+            return _image_missing()
         return _png_response(rendered.png, f"{rendered.etag}-{offset}" if offset else rendered.etag)
 
     @app.get("/r/<page>/clock/<glyph>.png")
     def clock_glyph_png(page: str, glyph: str):
         if page != "today" or not _GLYPH_RE.match(glyph):
-            return Response("not found", status=404)
+            return _image_missing()
+        if viewer_wants_html():
+            return _html_page(render_viewer("clock", glyph=glyph))
         glyphs = service.get_glyphs()
         return _png_response(glyphs[glyph], f"glyph-{glyph}")
 
@@ -255,6 +267,9 @@ def create_app() -> Flask:
         if page not in PAGES:
             log.warning("未知页面参数 page=%s，回退 today", page)
             page = "today"
+        offset = request.args.get("offset", type=int) or 0
+        if viewer_wants_html():
+            return _html_page(render_viewer("page", page=page, offset=offset))
         png = service.get_composite(page, device_lang(request.args.get("lang")))
         return _png_response(png, max_age=60)
 

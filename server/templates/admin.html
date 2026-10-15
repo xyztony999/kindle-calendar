@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{{ ui.html_lang }}">
+<html lang="{{ ui.html_lang }}" {% if ui.theme %}data-theme="{{ ui.theme }}"{% endif %}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -16,8 +16,13 @@
     --bad: #a33b32;
     --neutral: #6b6560;
   }
-  html { color-scheme: light dark; }
-  * { box-sizing: border-box; }
+  /* 主题：默认跟随系统；data-theme=light/dark 为手动选择（cookie 持久化） */
+  html { color-scheme: light; }
+  html[data-theme="dark"] { color-scheme: dark; }
+  @media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]) { color-scheme: dark; }
+  }
+  * { box-sizing: border-box; accent-color: var(--ink); }
   [hidden] { display: none !important; }
   body {
     margin: 0;
@@ -27,6 +32,7 @@
   }
   button, input, select { font: inherit; color: inherit; }
   button { cursor: pointer; }
+  ::placeholder { color: var(--mid); opacity: 0.8; }
   .wrap { max-width: 1080px; margin: 0 auto; padding: 20px 16px 32px; }
   h1 { font-size: 22px; font-weight: 650; margin: 0; }
   h2 { font-size: 16px; margin: 0 0 12px; }
@@ -38,7 +44,53 @@
     margin-bottom: 14px;
     position: relative;
   }
-  .top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
+  /* ── 顶栏：站点标识 + 主题/语言/首页 一等按钮 ── */
+  .topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin: 0 0 18px;
+    flex-wrap: wrap;
+  }
+  .topbar .mark {
+    font-size: 16px;
+    font-weight: 650;
+    color: var(--ink);
+    text-decoration: none;
+    letter-spacing: 0.5px;
+  }
+  .topbar .mark .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--ink); margin-right: 8px; vertical-align: baseline; }
+  .nav-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .topbar .btn {
+    border-radius: 999px;
+    min-height: 34px;
+    padding: 0 12px;
+  }
+  .topbar .btn.icon-btn {
+    width: 34px; height: 34px;
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 0;
+    font-size: 16px;
+    line-height: 1;
+  }
+  .seg {
+    display: inline-flex;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--card);
+  }
+  .seg a {
+    padding: 6px 12px;
+    font-size: 13px;
+    text-decoration: none;
+    color: var(--mid);
+  }
+  .seg a + a { border-left: 1px solid var(--line); }
+  .seg a.on { background: var(--ink); color: var(--card); font-weight: 600; }
+  a.btn { text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+  .top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom:  14px; }
   .muted { color: var(--mid); font-size: 13px; }
   .link { background: none; border: 0; color: var(--mid); padding: 0; text-decoration: underline; }
   .banner {
@@ -62,19 +114,23 @@
     border: 1px solid var(--line);
     border-radius: 8px;
     padding: 8px 10px;
-    background: #fff;
+    background: var(--card);
     width: 100%;
+  }
+  input:focus-visible, .btn:focus-visible, .seg a:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 1px;
   }
   input.bad, .bad { border-color: var(--bad) !important; }
   .field-error { color: var(--bad); font-size: 12px; margin: -6px 0 8px; }
   .btn {
     border: 1px solid var(--line);
-    background: #fff;
+    background: var(--card);
     border-radius: 8px;
     padding: 8px 14px;
   }
-  .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
-  .btn.danger { color: var(--bad); border-color: #e3b2ad; background: #fff; }
+  .btn.primary { background: var(--ink); color: var(--card); border-color: var(--ink); }
+  .btn.danger { color: var(--bad); border-color: #e3b2ad; background: var(--card); }
   .btn:disabled { opacity: 0.55; cursor: default; }
   .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   @media (max-width: 767px) {
@@ -82,6 +138,8 @@
       position: sticky;
       bottom: 0;
       background: rgba(246, 243, 238, 0.96);
+      background: color-mix(in srgb, var(--paper) 96%, transparent);
+      backdrop-filter: blur(4px);
       padding: 10px 0 4px;
       z-index: 3;
     }
@@ -99,13 +157,14 @@
   .loc-grid { grid-template-columns: 1fr 1fr; }
   .handle { color: var(--mid); text-align: center; user-select: none; }
   .switch { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .switch input { width: 16px; height: 16px; }
   .radios label { display: block; margin-bottom: 6px; }
   .badge {
     display: inline-block;
     border-radius: 999px;
     padding: 2px 8px;
     font-size: 12px;
-    background: #eee;
+    background: var(--line);
     color: var(--neutral);
   }
   .badge.ok { background: #e5f6ec; color: var(--ok); }
@@ -119,7 +178,7 @@
   .candidates {
     border: 1px solid var(--line);
     border-radius: 8px;
-    background: #fff;
+    background: var(--card);
     margin-top: 4px;
     max-height: 240px;
     overflow: auto;
@@ -128,7 +187,7 @@
     display: block;
     width: 100%;
     text-align: left;
-    background: #fff;
+    background: var(--card);
     border: 0;
     border-bottom: 1px solid var(--line);
     padding: 8px 10px;
@@ -139,13 +198,13 @@
     bottom: 24px;
     transform: translateX(-50%);
     background: var(--ink);
-    color: #fff;
+    color: var(--paper);
     border-radius: 8px;
     padding: 10px 14px;
     max-width: min(520px, calc(100% - 24px));
     z-index: 6;
   }
-  .toast.bad { background: var(--bad); }
+  .toast.bad { background: var(--bad); color: #fff; }
   .lightbox {
     position: fixed;
     inset: 0;
@@ -159,13 +218,43 @@
   .lightbox img { max-width: 100%; max-height: 100%; background: #fff; }
   .summary { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
   .summary button { text-align: left; color: var(--bad); background: none; border: 0; padding: 0; }
-  .login-card { max-width: 420px; margin: 48px auto; }
+  /* ── 登录卡：品牌符 + 居中大输入 + 主按钮 ── */
+  .login-card { max-width: 400px; margin: 8vh auto 0; padding: 28px 24px 20px; text-align: center; }
+  .login-mark {
+    width: 44px; height: 44px;
+    margin: 0 auto 14px;
+    border-radius: 12px;
+    background: var(--ink);
+    color: var(--card);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; font-weight: 700;
+  }
+  .login-card h1 { font-size: 20px; margin-bottom: 4px; }
+  .login-card .muted { margin: 0 0 18px; }
+  .login-card .field { text-align: left; }
+  .login-card input { padding: 11px 12px; font-size: 15px; }
+  .login-card .btn.primary { width: 100%; padding: 11px; margin-top: 4px; font-size: 15px; }
+  .login-foot { margin: 16px 0 0; font-size: 13px; }
+  .login-foot a { color: var(--mid); text-decoration: none; }
+  .login-foot a:hover { text-decoration: underline; }
   .dim { opacity: 0.45; }
   .counter { font-size: 12px; color: var(--mid); }
   .search-line { display: flex; gap: 8px; }
   .corner { position: absolute; top: 12px; right: 12px; font-size: 12px; color: var(--warn); }
+  /* dark：变量驱动（手动选择或系统跟随，两处共用同一组值） */
+  html[data-theme="dark"] {
+    --ink: #f4f1ea;
+    --mid: #c2bbb2;
+    --line: #3d3832;
+    --paper: #1b1916;
+    --card: #262320;
+    --ok: #8fd4ae;
+    --warn: #e0b84a;
+    --bad: #e07a72;
+    --neutral: #b0a89f;
+  }
   @media (prefers-color-scheme: dark) {
-    :root {
+    html:not([data-theme="light"]) {
       --ink: #f4f1ea;
       --mid: #c2bbb2;
       --line: #3d3832;
@@ -176,24 +265,85 @@
       --bad: #e07a72;
       --neutral: #b0a89f;
     }
-    .banner { background: #3a3218; border-color: #6d5a28; color: #f0e2b8; }
-    input, select, textarea { background: #1f1c19; }
-    .btn.primary { color: #1b1916; }
-    .btn.danger { background: transparent; }
-    .badge.ok, .badge.warn, .badge.bad { background: #2c2824; }
-    .shot img, .lightbox img { background: #f7f4ee; }
   }
+  html[data-theme="dark"] .banner { background: #3a3218; border-color: #6d5a28; color: #f0e2b8; }
+  html[data-theme="dark"] .badge.ok { background: #243529; }
+  html[data-theme="dark"] .badge.warn { background: #3a3218; }
+  html[data-theme="dark"] .badge.bad { background: #3d2622; }
+  html[data-theme="dark"] .btn.danger { background: transparent; }
+  html[data-theme="dark"] input[type="text"],
+  html[data-theme="dark"] input[type="password"],
+  html[data-theme="dark"] input[type="search"],
+  html[data-theme="dark"] input[type="number"],
+  html[data-theme="dark"] input[type="text"]:disabled,
+  html[data-theme="dark"] input[type="password"]:disabled,
+  html[data-theme="dark"] input[type="search"]:disabled,
+  html[data-theme="dark"] input[type="number"]:disabled {
+    background: #2a2622;
+    color: #f4f1ea;
+    border: 1px solid #8a8175;
+    color-scheme: dark;
+    opacity: 1;
+  }
+  html[data-theme="dark"] input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: #7eb6ff;
+  }
+  html[data-theme="dark"] .dim { opacity: 0.75; }
+  html[data-theme="dark"] .dim input,
+  html[data-theme="dark"] .btn:disabled {
+    background: #2a2622;
+    color: #c8bfb4;
+    border-color: #8a8175;
+    opacity: 1;
+  }
+  @media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]) .banner { background: #3a3218; border-color: #6d5a28; color: #f0e2b8; }
+    html:not([data-theme="light"]) .badge.ok { background: #243529; }
+    html:not([data-theme="light"]) .badge.warn { background: #3a3218; }
+    html:not([data-theme="light"]) .badge.bad { background: #3d2622; }
+    html:not([data-theme="light"]) .btn.danger { background: transparent; }
+    html:not([data-theme="light"]) input[type="text"],
+    html:not([data-theme="light"]) input[type="password"],
+    html:not([data-theme="light"]) input[type="search"],
+    html:not([data-theme="light"]) input[type="number"],
+    html:not([data-theme="light"]) input[type="text"]:disabled,
+    html:not([data-theme="light"]) input[type="password"]:disabled,
+    html:not([data-theme="light"]) input[type="search"]:disabled,
+    html:not([data-theme="light"]) input[type="number"]:disabled {
+      background: #2a2622;
+      color: #f4f1ea;
+      border: 1px solid #8a8175;
+      color-scheme: dark;
+      opacity: 1;
+    }
+    html:not([data-theme="light"]) input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: #7eb6ff;
+    }
+    html:not([data-theme="light"]) .dim { opacity: 0.75; }
+    html:not([data-theme="light"]) .dim input,
+    html:not([data-theme="light"]) .btn:disabled {
+      background: #2a2622;
+      color: #c8bfb4;
+      border-color: #8a8175;
+      opacity: 1;
+    }
+  }
+  .shot img, .lightbox img { background: #f7f4ee; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <nav class="lang-switch" style="display:flex;justify-content:space-between;align-items:center;margin:0 0 8px">
-    <a id="back-home" href="/">{{ ui.back_home }}</a>
-    {% if ui.lang == 'en' %}
-    <a href="/admin?lang=zh">中文</a>
-    {% else %}
-    <a href="/admin?lang=en">English</a>
-    {% endif %}
+  <nav class="topbar">
+    <a class="mark" href="/"><span class="dot"></span>{{ ui.site_name }}</a>
+    <div class="nav-actions">
+      <button class="btn icon-btn" id="theme-btn" type="button" title="{{ ui.theme_to_dark }}">☾</button>
+      <a class="btn" id="lang-link" href="/admin?lang={{ 'zh' if ui.lang == 'en' else 'en' }}">{{ ui.switch_label }}</a>
+      <a class="btn" id="back-home" href="/">{{ ui.back_home }}</a>
+    </div>
   </nav>
   <section id="view-disabled" hidden>
     <div class="card login-card">
@@ -205,7 +355,8 @@
 
   <section id="view-login" hidden>
     <form class="card login-card" id="login-form">
-      <h1>{{ ui.h1 }}</h1>
+      <div class="login-mark">历</div>
+      <h1>{{ ui.title }}</h1>
       <p class="muted">{{ ui.login_prompt }}</p>
       <label class="field">{{ ui.password }}
         <input id="password" type="password" autocomplete="off" autofocus>
@@ -654,7 +805,7 @@
       const fig = document.createElement("figure");
       fig.className = "shot";
       const img = document.createElement("img");
-      const url = "/dashboard.png?page=" + encodeURIComponent(page.page_id) + (T.lang === "en" ? "&lang=en" : "") + "&v=" + encodeURIComponent(version);
+      const url = "/dashboard.png?page=" + encodeURIComponent(page.page_id) + (T.lang === "en" ? "&lang=en" : "") + "&format=png&v=" + encodeURIComponent(version);
       img.alt = PAGE_LABEL[page.page_id] || page.page_id;
       img.loading = "lazy";
       let retried = false;
@@ -1054,6 +1205,26 @@
   $("back-home").addEventListener("click", () => {
     window.onbeforeunload = null;
   });
+  // 语言切换同样清未保存守卫（避免确认弹窗打断；草稿仅 401 重登路径保留）
+  $("lang-link").addEventListener("click", () => { window.onbeforeunload = null; });
+
+  function effectiveTheme() {
+    const v = document.documentElement.getAttribute("data-theme");
+    if (v === "light" || v === "dark") return v;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  function renderThemeBtn() {
+    const now = effectiveTheme();
+    $("theme-btn").textContent = now === "dark" ? "☀" : "☾";
+    $("theme-btn").title = now === "dark" ? T.theme_to_light : T.theme_to_dark;
+  }
+  $("theme-btn").addEventListener("click", () => {
+    const next = effectiveTheme() === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    document.cookie = "kc_theme=" + next + ";path=/;max-age=31536000;samesite=lax";
+    renderThemeBtn();
+  });
+  renderThemeBtn();
 
   showView(boot.view === "settings" ? "settings" : boot.view === "disabled" ? "disabled" : "login");
   if (boot.view === "settings") {

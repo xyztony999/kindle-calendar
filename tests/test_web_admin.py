@@ -296,9 +296,9 @@ class AdminApiTests(unittest.TestCase):
         self.assertIn("兜底", example)
 
     def _assert_home_link(self, body, label):
-        nav_at = body.index('class="lang-switch"')
+        nav_at = body.index('class="topbar"')
         nav = body[nav_at:body.index("</nav>", nav_at)]
-        self.assertIn(f'<a id="back-home" href="/">{label}</a>', nav)
+        self.assertIn(f'id="back-home" href="/">{label}</a>', nav)
         self.assertLess(nav.index('href="/"'), nav.index("?lang="))
         self.assertNotIn("history.back", body)
         self.assertLess(nav_at, body.index('id="view-disabled"'))

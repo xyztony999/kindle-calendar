@@ -104,3 +104,20 @@ def clock_metrics(width: int, height: int) -> ClockMetrics:
         colon_w=round(58 * sx),
         gap=round(14 * sx),
     )
+
+
+def metrics_in(rect: Rect) -> ClockMetrics:
+    """把四位时钟放进给定矩形，返回的 x/y 已是字形左上角。"""
+    gap = max(2, rect.w // 40)
+    colon_w = max(8, rect.w // 12)
+    digit_w = max(8, (rect.w - colon_w - 4 * gap) // 4)
+    digit_h = min(rect.h, max(16, round(digit_w * 196 / 118)))
+    total = 4 * digit_w + colon_w + 4 * gap
+    return ClockMetrics(
+        x=rect.x + max(0, (rect.w - total) // 2),
+        y=rect.y + max(0, (rect.h - digit_h) // 2),
+        digit_w=digit_w,
+        digit_h=digit_h,
+        colon_w=colon_w,
+        gap=gap,
+    )

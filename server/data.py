@@ -38,15 +38,22 @@ def build_payload(
         pages = enabled_pages(settings) or ["today"]
         version = settings_version(settings)
         quote = quotes.get_quote(now, settings["quote"]["mode"], settings["quote"].get("custom"))
+        page_names = {
+            item["page_id"]: item["name"]
+            for item in settings.get("pages") or []
+            if item.get("name")
+        }
     else:
         pages = list(PAGE_IDS)
         version = ""
         quote = quotes.get_quote(now)
+        page_names = {}
 
     return {
         "generated_at": now.isoformat(timespec="seconds"),
         "location": config["location_name"],
         "pages": pages,
+        "page_names": page_names,
         "settings_version": version,
         "clock": {
             "now": now.strftime("%H:%M"),

@@ -150,9 +150,43 @@
     align-items: center;
   }
   .page-row {
-    grid-template-columns: 28px 28px 1fr 96px 64px;
+    grid-template-columns: 28px 28px minmax(0, 1fr) 88px auto;
     margin-bottom: 8px;
+    cursor: pointer;
   }
+  .page-row.on { outline: 1px solid var(--ink); }
+  .canvas-tools { margin-top: 14px; }
+  .palette { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+  .stage-wrap { width: min(100%, 320px); }
+  #stage {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 758 / 1024;
+    background: #fff;
+    border: 1px solid var(--line);
+    touch-action: none;
+  }
+  .block {
+    position: absolute;
+    box-sizing: border-box;
+    border: 1px solid var(--mid);
+    background: rgba(255,255,255,0.72);
+    font-size: 11px;
+    overflow: hidden;
+    padding: 2px;
+  }
+  .block.bad { border-color: var(--bad); }
+  .block .resize {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 12px;
+    height: 12px;
+    background: var(--ink);
+    cursor: nwse-resize;
+  }
+  .def-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+  .field-checks { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 8px 0; font-size: 13px; }
   .quote-row { grid-template-columns: 1fr 120px 28px; margin-bottom: 8px; }
   .loc-grid { grid-template-columns: 1fr 1fr; }
   .handle { color: var(--mid); text-align: center; user-select: none; }
@@ -382,6 +416,33 @@
           <h2>{{ ui.pages_h2 }}</h2>
           <label class="switch"><input id="rotate-enabled" type="checkbox"> {{ ui.rotate }}</label>
           <div id="page-list"></div>
+          <button class="btn" id="add-page" type="button">{{ ui.add_page }}</button>
+          <div class="canvas-tools" id="canvas-tools">
+            <p class="muted" id="canvas-page"></p>
+            <div class="palette" id="palette-system"></div>
+            <div class="palette" id="palette-mine"></div>
+            <div class="palette" id="palette-center"></div>
+            <div class="stage-wrap"><div id="stage"></div></div>
+            <p id="clock-warn" class="muted" hidden>{{ ui.clock_overlap }}</p>
+            <button class="btn" id="draft-preview" type="button">{{ ui.draft_preview }}</button>
+            <img id="draft-img" alt="" hidden>
+            <input id="image-file" type="file" accept="image/png,image/jpeg" hidden>
+            <div id="def-editor">
+              <h3>{{ ui.new_data }}</h3>
+              <label class="field">{{ ui.widget_name }}
+                <input id="def-name" type="text" maxlength="20">
+              </label>
+              <label class="field">{{ ui.style_hero }}
+                <input id="def-hero" type="radio" name="def-style" value="hero" checked>
+              </label>
+              <label class="field">{{ ui.style_rows }}
+                <input id="def-rows" type="radio" name="def-style" value="rows">
+              </label>
+              <div id="def-fields" class="field-checks"></div>
+              <button class="btn" id="def-save" type="button">{{ ui.save_widget }}</button>
+              <div id="def-list"></div>
+            </div>
+          </div>
           <p id="only-today" class="muted" hidden>{{ ui.only_today }}</p>
           <label class="field">{{ ui.suppress }}
             <input id="suppress" type="number" min="0" max="3600" step="1" data-field="rotation.suppress_s">
@@ -474,7 +535,9 @@
   let pollTimer = null;
   let geoTimer = null;
   let toastTimer = null;
-  let lockTimer = null;
+  let catalog = {system: [], mine: [], center: [], fields: []};
+  let selectedPageId = "today";
+  let editingDef = null;
 
   const $ = (id) => document.getElementById(id);
 
@@ -614,7 +677,13 @@
     const rotateOn = state.rotation.enabled;
     state.pages.forEach((page, index) => {
       const row = document.createElement("div");
-      row.className = "page-row" + ((!page.enabled || !rotateOn) ? " dim" : "");
+      row.className = "page-row" + ((!page.enabled || !rotateOn) ? " dim" : "") + (page.page_id === selectedPageId ? " on" : "");
+      row.addEventListener("click", (event) => {
+        if (event.target.closest("input, button")) return;
+        selectedPageId = page.page_id;
+        renderPages();
+        renderCanvas();
+      });
       row.dataset.field = "pages[" + index + "]";
       row.draggable = page.page_id !== "today";
       const handle = document.createElement("span");
@@ -630,8 +699,20 @@
         markDirty();
         renderPreviews();
       });
-      const name = document.createElement("span");
-      name.textContent = PAGE_LABEL[page.page_id] || page.page_id;
+      const name = document.createElement(page.name !== undefined || String(page.page_id).charAt(0) === "c" ? "input" : "span");
+      if (name.tagName === "INPUT") {
+        name.type = "text";
+        name.maxLength = 20;
+        name.placeholder = T.page_name_ph;
+        name.value = page.name || "";
+        name.addEventListener("input", () => {
+          page.name = name.value;
+          markDirty();
+          renderCanvas();
+        });
+      } else {
+        name.textContent = PAGE_LABEL[page.page_id] || page.page_id;
+      }
       const dwell = document.createElement("input");
       dwell.type = "number";
       dwell.min = String(limits.dwell_min);
@@ -660,6 +741,22 @@
         down.disabled = index >= state.pages.length - 1;
         down.addEventListener("click", () => movePage(index, 1));
         moves.append(up, down);
+        if (String(page.page_id).charAt(0) === "c") {
+          const del = document.createElement("button");
+          del.type = "button";
+          del.className = "btn";
+          del.textContent = "×";
+          del.title = T.delete_page;
+          del.addEventListener("click", () => {
+            state.pages = state.pages.filter((item) => item.page_id !== page.page_id);
+            if (selectedPageId === page.page_id) selectedPageId = "today";
+            renderPages();
+            renderCanvas();
+            markDirty();
+            renderPreviews();
+          });
+          moves.append(del);
+        }
       }
       row.addEventListener("dragstart", (event) => {
         event.dataTransfer.setData("text/plain", String(index));
@@ -905,11 +1002,15 @@
       state = JSON.parse(JSON.stringify(payload.settings));
       dirty = false;
     }
+    state.widget_defs = state.widget_defs || [];
+    state.assets = state.assets || [];
+    state.pages.forEach((page) => { if (!Array.isArray(page.layout)) page.layout = []; });
     fillLocation();
     renderPages();
     renderQuoteModes();
     renderCustom();
     renderPreviews();
+    loadCatalog();
     markDirty();
   }
 
@@ -1078,6 +1179,332 @@
       readLocation();
       markDirty();
     });
+  });
+
+  function selectedPage() {
+    return state.pages.find((page) => page.page_id === selectedPageId) || state.pages[0];
+  }
+
+  function hexId(prefix) {
+    const bytes = new Uint8Array(4);
+    crypto.getRandomValues(bytes);
+    return prefix + Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  function blockLabel(block) {
+    if (block.widget === "text") return block.text || T.add_text;
+    if (block.widget === "image") return block.asset || T.upload_image;
+    if (block.widget === "custom") {
+      const def = (state.widget_defs || []).find((item) => item.id === block.def);
+      return def ? def.name : block.def;
+    }
+    const sys = (catalog.system || []).find((item) => item.id === block.widget);
+    return sys ? sys.name : (PAGE_LABEL[block.widget] || block.widget);
+  }
+
+  function overlaps(a, b) {
+    return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+  }
+
+  function clockBad(layout) {
+    const clock = layout.find((block) => block.widget === "clock");
+    if (!clock) return false;
+    return layout.some((block) => block !== clock && overlaps(clock, block));
+  }
+
+  async function loadCatalog() {
+    try {
+      const data = await api("GET", "/admin/api/widget-catalog");
+      catalog = data.data;
+    } catch (err) {
+      if (!err.handled) catalog = {system: [], mine: [], center: [], fields: []};
+    }
+    renderCanvas();
+  }
+
+  function renderCanvas() {
+    if (!state) return;
+    const page = selectedPage();
+    if (!page) return;
+    $("canvas-page").textContent = page.name || PAGE_LABEL[page.page_id] || page.page_id;
+    $("clock-warn").hidden = !clockBad(page.layout || []);
+    const stage = $("stage");
+    stage.replaceChildren();
+    (page.layout || []).forEach((block) => {
+      const el = document.createElement("div");
+      el.className = "block" + (block.widget === "clock" && clockBad(page.layout) ? " bad" : "");
+      el.style.left = (block.x / 758 * 100) + "%";
+      el.style.top = (block.y / 1024 * 100) + "%";
+      el.style.width = (block.w / 758 * 100) + "%";
+      el.style.height = (block.h / 1024 * 100) + "%";
+      el.textContent = blockLabel(block);
+      const handle = document.createElement("span");
+      handle.className = "resize";
+      el.appendChild(handle);
+      bindBlock(el, handle, block, page);
+      stage.appendChild(el);
+    });
+    renderPalette(page);
+    renderDefEditor();
+  }
+
+  function bindBlock(el, handle, block, page) {
+    const design = (catalog.system || []).find((item) => item.id === block.widget);
+    const minW = design ? Math.max(1, Math.round(design.w * 0.4)) : 48;
+    const minH = design ? Math.max(1, Math.round(design.h * 0.4)) : 48;
+    function point(event) {
+      const box = $("stage").getBoundingClientRect();
+      return {
+        x: (event.clientX - box.left) / box.width * 758,
+        y: (event.clientY - box.top) / box.height * 1024
+      };
+    }
+    el.addEventListener("pointerdown", (event) => {
+      if (event.target === handle) return;
+      event.preventDefault();
+      const start = point(event);
+      const origin = {x: block.x, y: block.y};
+      function move(ev) {
+        const now = point(ev);
+        block.x = Math.round(Math.min(758 - block.w, Math.max(0, origin.x + now.x - start.x)));
+        block.y = Math.round(Math.min(1024 - block.h, Math.max(44, origin.y + now.y - start.y)));
+        el.style.left = (block.x / 758 * 100) + "%";
+        el.style.top = (block.y / 1024 * 100) + "%";
+        $("clock-warn").hidden = !clockBad(page.layout);
+        el.classList.toggle("bad", block.widget === "clock" && clockBad(page.layout));
+        markDirty();
+      }
+      function up() {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+      }
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+    });
+    handle.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const start = point(event);
+      const origin = {w: block.w, h: block.h};
+      function move(ev) {
+        const now = point(ev);
+        block.w = Math.round(Math.min(758 - block.x, Math.max(minW, origin.w + now.x - start.x)));
+        block.h = Math.round(Math.min(1024 - block.y, Math.max(minH, origin.h + now.y - start.y)));
+        el.style.width = (block.w / 758 * 100) + "%";
+        el.style.height = (block.h / 1024 * 100) + "%";
+        $("clock-warn").hidden = !clockBad(page.layout);
+        markDirty();
+      }
+      function up() {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+      }
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+    });
+    if (block.widget === "text") {
+      el.addEventListener("dblclick", () => {
+        const next = window.prompt(T.text_ph, block.text || "");
+        if (next === null) return;
+        block.text = next.replace(/\s+/g, " ").trim().slice(0, limits.block_text_max || 200);
+        markDirty();
+        renderCanvas();
+      });
+    }
+  }
+
+  function place(block) {
+    const page = selectedPage();
+    if (!page.layout) page.layout = [];
+    if (page.layout.length >= (limits.max_blocks || 24)) return;
+    if (block.widget !== "image" && block.widget !== "text" && block.widget !== "custom") {
+      if (page.layout.some((item) => item.widget === block.widget)) return;
+    }
+    const z = page.layout.reduce((max, item) => Math.max(max, item.z || 0), 0) + 1;
+    let x = 56;
+    let y = 160;
+    const clock = page.layout.find((item) => item.widget === "clock");
+    if (clock && overlaps({x: x, y: y, w: block.w, h: block.h}, clock)) {
+      y = Math.min(1024 - block.h, clock.y + clock.h + 8);
+    }
+    page.layout.push(Object.assign({x: x, y: y, z: z}, block));
+    markDirty();
+    renderCanvas();
+  }
+
+  function renderPalette(page) {
+    const system = $("palette-system");
+    const mine = $("palette-mine");
+    const center = $("palette-center");
+    system.replaceChildren();
+    mine.replaceChildren();
+    center.replaceChildren();
+    const sysTitle = document.createElement("span");
+    sysTitle.textContent = T.system_blocks;
+    system.appendChild(sysTitle);
+    (catalog.system || []).forEach((item) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn";
+      const used = (page.layout || []).some((block) => block.widget === item.id);
+      btn.textContent = item.name + (used ? " · " + T.used : "");
+      btn.disabled = used;
+      btn.addEventListener("click", () => place({
+        widget: item.id, id: item.id, w: item.w, h: item.h
+      }));
+      system.appendChild(btn);
+    });
+    const textBtn = document.createElement("button");
+    textBtn.type = "button";
+    textBtn.className = "btn";
+    textBtn.textContent = T.add_text;
+    textBtn.addEventListener("click", () => place({
+      widget: "text", id: hexId("b"), w: 280, h: 80, text: T.text_ph, align: "left"
+    }));
+    const imageBtn = document.createElement("button");
+    imageBtn.type = "button";
+    imageBtn.className = "btn";
+    imageBtn.textContent = T.upload_image;
+    imageBtn.addEventListener("click", () => $("image-file").click());
+    mine.append(document.createTextNode(T.my_blocks), textBtn, imageBtn);
+    (state.widget_defs || []).forEach((item) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn";
+      btn.textContent = item.name;
+      btn.addEventListener("click", () => place({widget: "custom", id: hexId("b"), def: item.id, w: 280, h: 160}));
+      mine.appendChild(btn);
+    });
+    (state.assets || []).forEach((asset) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn";
+      btn.textContent = asset.id;
+      btn.addEventListener("click", () => place({widget: "image", id: hexId("b"), asset: asset.id, w: 280, h: 180}));
+      mine.appendChild(btn);
+    });
+    if ((catalog.center || []).length) {
+      center.append(document.createTextNode(T.center_blocks));
+      catalog.center.forEach((item) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "btn";
+        btn.textContent = item.name + (item.placeable ? "" : " · " + T.center_wait);
+        btn.disabled = !item.placeable;
+        btn.addEventListener("click", () => place({widget: "custom", id: hexId("b"), def: item.id, w: 280, h: 160}));
+        center.appendChild(btn);
+      });
+    }
+  }
+
+  function renderDefEditor() {
+    const box = $("def-fields");
+    if (!box.dataset.ready) {
+      (catalog.fields || []).forEach((field) => {
+        const label = document.createElement("label");
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.value = field.id;
+        label.append(input, " " + field.label);
+        box.appendChild(label);
+      });
+      box.dataset.ready = "1";
+    }
+    const list = $("def-list");
+    list.replaceChildren();
+    (state.widget_defs || []).forEach((item) => {
+      const row = document.createElement("div");
+      row.className = "def-row";
+      const name = document.createElement("span");
+      name.textContent = item.name;
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "btn";
+      del.textContent = T.delete_widget;
+      del.addEventListener("click", () => {
+        state.widget_defs = state.widget_defs.filter((def) => def.id !== item.id);
+        state.pages.forEach((page) => {
+          page.layout = (page.layout || []).filter((block) => block.def !== item.id);
+        });
+        markDirty();
+        renderCanvas();
+      });
+      row.append(name, del);
+      list.appendChild(row);
+    });
+  }
+
+  $("add-page").addEventListener("click", () => {
+    if (!state || state.pages.length >= (limits.max_pages || 12)) {
+      toast(T.max_pages, true);
+      return;
+    }
+    const page = {page_id: hexId("c"), name: T.add_page, enabled: true, dwell_s: 30, layout: []};
+    state.pages.push(page);
+    selectedPageId = page.page_id;
+    renderPages();
+    renderCanvas();
+    markDirty();
+  });
+
+  $("def-save").addEventListener("click", () => {
+    const name = $("def-name").value.trim();
+    const style = $("def-rows").checked ? "rows" : "hero";
+    const fields = Array.from($("def-fields").querySelectorAll("input:checked")).map((input) => input.value);
+    const max = style === "hero" ? 3 : 6;
+    if (!name || fields.length < 1 || fields.length > max) {
+      toast(T.save_failed, true);
+      return;
+    }
+    if ((state.widget_defs || []).length >= (limits.max_defs || 12)) return;
+    state.widget_defs.push({id: hexId("w"), name: name, style: style, fields: fields});
+    $("def-name").value = "";
+    markDirty();
+    renderCanvas();
+  });
+
+  $("image-file").addEventListener("change", async () => {
+    const file = $("image-file").files && $("image-file").files[0];
+    $("image-file").value = "";
+    if (!file) return;
+    const body = new FormData();
+    body.append("file", file);
+    try {
+      const data = await api("POST", "/admin/api/assets", body, {form: true});
+      state.assets = state.assets || [];
+      state.assets.push(data.data.asset);
+      place({widget: "image", id: hexId("b"), asset: data.data.asset.id, w: 280, h: 180});
+    } catch (err) {
+      if (!err.handled) toast((err.data && err.data.error && err.data.error.message) || T.oss_missing, true);
+    }
+  });
+
+  $("draft-preview").addEventListener("click", async () => {
+    const page = selectedPage();
+    if (!page) return;
+    try {
+      const resp = await fetch("/admin/api/layout-preview", {
+        method: "POST",
+        headers: {"X-Requested-With": "kindle-admin", "Content-Type": "application/json"},
+        credentials: "same-origin",
+        body: JSON.stringify({
+          page_id: page.page_id,
+          name: page.name || "",
+          layout: page.layout || [],
+          widget_defs: state.widget_defs || []
+        })
+      });
+      if (!resp.ok) {
+        toast(T.save_failed, true);
+        return;
+      }
+      const blob = await resp.blob();
+      const img = $("draft-img");
+      img.src = URL.createObjectURL(blob);
+      img.hidden = false;
+    } catch (err) {
+      toast(T.save_failed, true);
+    }
   });
 
   $("add-quote").addEventListener("click", () => {

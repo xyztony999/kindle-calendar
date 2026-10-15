@@ -16,8 +16,12 @@ from zoneinfo import ZoneInfo
 import requests
 from flask import Blueprint, Response, jsonify, render_template, request, session
 
+from server.catalog import fetch_center_items
+from server.layout import DESIGN, FIELD_DEFS, SYSTEM_WIDGETS, field_label, system_label
 from server.locale import LANG_COOKIE, LANG_MAX_AGE, THEME_COOKIE, admin_ui, explicit_lang, translate_message, web_lang, web_theme
-from server.settings import SettingsError, env_int, limits
+from server.settings import SETTINGS_MAX_BYTES, SettingsError, env_int, limits
+from server.storage import AssetError
+from server import storage
 
 log = logging.getLogger(__name__)
 
@@ -186,12 +190,18 @@ def create_admin_blueprint(service) -> Blueprint:
             return _api_error("ADMIN_AUTH_REQUIRED", "请先登录", 401)
         return None
 
-    def save_body(payload: dict):
+    def save_body(payload: dict, *, gc_assets: bool = True):
+        current, _degraded, _version = service.store.current()
+        old_keys = {item.get("key") for item in current.get("assets") or [] if item.get("key")}
         try:
-            saved, version, changed, refreshed = service.store.save(payload)
+            saved, version, changed, refreshed = service.store.save(payload, gc_assets=gc_assets)
         except SettingsError as exc:
             status = 500 if exc.code == "SETTINGS_IO_FAILED" else 400
             return _api_error(exc.code, exc.message, status, exc.details)
+        if gc_assets:
+            new_keys = {item.get("key") for item in saved.get("assets") or [] if item.get("key")}
+            for key in old_keys - new_keys:
+                storage.delete_object(key)
         return _api_ok(
             {
                 "settings": saved,
@@ -338,13 +348,13 @@ def create_admin_blueprint(service) -> Blueprint:
             raw = upload.read()
         else:
             raw = request.get_data(cache=False) or b""
-        if len(raw) > 32 * 1024:
+        if len(raw) > SETTINGS_MAX_BYTES:
             return _api_error("SETTINGS_IMPORT_INVALID", "导入文件过大或不是受支持的配置", 400)
         try:
             payload = json.loads(raw.decode("utf-8"))
         except Exception:
             return _api_error("SETTINGS_IMPORT_INVALID", "导入文件不是有效的 JSON", 400)
-        if not isinstance(payload, dict) or payload.get("schema_version") != 1:
+        if not isinstance(payload, dict) or payload.get("schema_version") not in (1, 2):
             return _api_error("SETTINGS_IMPORT_INVALID", "导入文件的 schema_version 不受支持", 400)
         return save_body(payload)
 
@@ -366,5 +376,134 @@ def create_admin_blueprint(service) -> Blueprint:
         if blocked:
             return blocked
         return _api_ok(service.device_status())
+
+    @bp.get("/admin/api/widget-catalog")
+    def widget_catalog():
+        blocked = require_session()
+        if blocked:
+            return blocked
+        lang = _request_lang()
+        current, _degraded, _version = service.store.current()
+        system = [
+            {
+                "id": widget,
+                "kind": "system",
+                "source": "system",
+                "review": "approved",
+                "name": system_label(widget, lang),
+                "w": DESIGN[widget][0],
+                "h": DESIGN[widget][1],
+                "placeable": True,
+            }
+            for widget in SYSTEM_WIDGETS
+        ]
+        mine = []
+        for item in current.get("widget_defs") or []:
+            mine.append(
+                {
+                    "id": item["id"],
+                    "kind": "data",
+                    "source": "local",
+                    "review": "approved",
+                    "name": item["name"],
+                    "style": item["style"],
+                    "fields": item["fields"],
+                    "placeable": True,
+                }
+            )
+        for asset in current.get("assets") or []:
+            mine.append(
+                {
+                    "id": asset["id"],
+                    "kind": "image",
+                    "source": "local",
+                    "review": "approved",
+                    "name": asset["id"],
+                    "placeable": True,
+                }
+            )
+        center = []
+        for item in fetch_center_items():
+            copied = dict(item)
+            copied["source"] = "center"
+            center.append(copied)
+        fields = [{"id": field_id, "label": field_label(field_id, lang)} for field_id, _zh, _en in FIELD_DEFS]
+        return _api_ok({"system": system, "mine": mine, "center": center, "fields": fields})
+
+    @bp.post("/admin/api/assets")
+    def upload_asset():
+        blocked = require_write()
+        if blocked:
+            return blocked
+        upload = request.files.get("file")
+        raw = upload.read() if upload is not None else b""
+        try:
+            asset = storage.put_image(raw)
+        except AssetError as exc:
+            status = 400 if exc.code != "ASSET_STORE_FAILED" else 502
+            return _api_error(exc.code, exc.message, status)
+        current, _degraded, _version = service.store.current()
+        current.setdefault("assets", []).append(asset)
+        response = save_body(current, gc_assets=False)
+        if response.status_code != 200:
+            return response
+        body = response.get_json()
+        body["data"]["asset"] = asset
+        return jsonify(body)
+
+    @bp.post("/admin/api/layout-preview")
+    def layout_preview():
+        blocked = require_write()
+        if blocked:
+            return blocked
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            return _api_error("LAYOUT_INVALID", "请求体须为 JSON 对象", 400)
+        page_id = body.get("page_id")
+        layout = body.get("layout")
+        if not isinstance(page_id, str) or not isinstance(layout, list):
+            return _api_error("LAYOUT_INVALID", "预览需要页面和布局", 400)
+        from server.settings import normalize, validate
+
+        current, _degraded, _version = service.store.current()
+        draft = json.loads(json.dumps(current))
+        if isinstance(body.get("widget_defs"), list):
+            draft["widget_defs"] = body["widget_defs"]
+        pages = draft.get("pages") or []
+        target = None
+        for page in pages:
+            if page.get("page_id") == page_id:
+                page["layout"] = layout
+                if isinstance(body.get("name"), str) and page_id.startswith("c"):
+                    page["name"] = body["name"]
+                target = page
+                break
+        if target is None:
+            name = body.get("name") if isinstance(body.get("name"), str) else "自定义"
+            target = {"page_id": page_id, "name": name, "enabled": True, "dwell_s": 30, "layout": layout}
+            pages.append(target)
+            draft["pages"] = pages
+        details = validate(draft)
+        if details:
+            return _api_error("SETTINGS_VALIDATION_FAILED", "配置校验失败", 400, details)
+        normalized = normalize(draft)
+        page = next(item for item in normalized["pages"] if item["page_id"] == page_id)
+        lang = _request_lang()
+        try:
+            payload = service.get_payload(lang)
+            image = service.render_page_image(
+                page,
+                payload,
+                service._definitions(normalized),
+                service._asset_images_for(normalized),
+            )
+        except Exception:
+            log.exception("布局预览失败")
+            return _api_error("LAYOUT_INVALID", "预览暂时画不出来", 500)
+        buf = __import__("io").BytesIO()
+        image.save(buf, format="PNG")
+        resp = Response(buf.getvalue(), mimetype="image/png")
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
 
     return bp

@@ -101,6 +101,45 @@ wait_for_network() {
     return 1
 }
 
+page_upper() {
+    printf '%s' "$1" | tr '[:lower:]' '[:upper:]'
+}
+
+page_has_month() {
+    upper=$(page_upper "$1")
+    eval regions=\"\$R_${upper}_REGIONS\"
+    for r in $regions; do
+        [ "$r" = "TITLE" ] || [ "$r" = "GRID" ] && return 0
+    done
+    return 1
+}
+
+apply_clock() {
+    upper=$(page_upper "${CUR_PAGE:-today}")
+    eval en=\"\$CLOCK_${upper}_ENABLED\"
+    if [ -n "$en" ]; then
+        CLOCK_ENABLED="$en"
+        if [ "$en" = "1" ]; then
+            eval CLOCK_X=\"\$CLOCK_${upper}_X\"
+            eval CLOCK_Y=\"\$CLOCK_${upper}_Y\"
+            eval CLOCK_DIGIT_W=\"\$CLOCK_${upper}_DIGIT_W\"
+            eval CLOCK_DIGIT_H=\"\$CLOCK_${upper}_DIGIT_H\"
+            eval CLOCK_COLON_W=\"\$CLOCK_${upper}_COLON_W\"
+            eval CLOCK_GAP=\"\$CLOCK_${upper}_GAP\"
+            eval CLOCK_GLYPH_URL_PREFIX=\"\$CLOCK_${upper}_GLYPH_URL_PREFIX\"
+        fi
+    elif [ "${CUR_PAGE:-today}" != "today" ]; then
+        CLOCK_ENABLED=0
+    fi
+    geom="${CLOCK_X:-}.${CLOCK_Y:-}.${CLOCK_DIGIT_W:-}.${CLOCK_DIGIT_H:-}.${CLOCK_COLON_W:-}.${CLOCK_GAP:-}"
+    oldgeom=""
+    [ -f "$STATE_DIR/clock.geom" ] && oldgeom="$(cat "$STATE_DIR/clock.geom")"
+    if [ "$oldgeom" != "$geom" ]; then
+        rm -f "$STATE_DIR/clock.last"
+        echo "$geom" > "$STATE_DIR/clock.geom"
+    fi
+}
+
 # ───────── v2.1: 多页分区模式 ─────────
 
 env_sync() {
@@ -165,7 +204,7 @@ goto_page() {
 
     # 月历页：TITLE/GRID——±1 月用预裁键（零延迟），其余偏移动态拉取
     for r in $regions; do
-        if [ "$page" = "month" ] && { [ "$r" = "TITLE" ] || [ "$r" = "GRID" ]; }; then
+        if [ "$r" = "TITLE" ] || [ "$r" = "GRID" ]; then
             case "$MONTH_OFFSET" in
                 -1) sync_region_asset "${upper}_${r}_PREV"
                     draw_region "${upper}_${r}_PREV" "$flash" 1 ;;
@@ -173,12 +212,11 @@ goto_page() {
                     draw_region "${upper}_${r}_NEXT" "$flash" 1 ;;
                 0)  sync_region_asset "${upper}_${r}_CUR"
                     draw_region "${upper}_${r}_CUR" "$flash" 1 ;;
-                *)  ensure_month_asset "$r" "$MONTH_OFFSET"
-                    f="$CACHE_DIR/month_${r}_m${MONTH_OFFSET}.png"
+                *)  ensure_month_asset "$page" "$r" "$MONTH_OFFSET"
+                    f="$CACHE_DIR/${page}_${r}_m${MONTH_OFFSET}.png"
                     if [ -f "$f" ]; then
-                        # 动态月与当月共用同一 rect；env 只下发 CUR 坐标
-                        eval x="\$R_MONTH_${r}_CUR_X"
-                        eval y="\$R_MONTH_${r}_CUR_Y"
+                        eval x="\$R_${upper}_${r}_CUR_X"
+                        eval y="\$R_${upper}_${r}_CUR_Y"
                         fbink_img "$f" "$x" "$y" GC16 "$flash"
                     else
                         log "动态月资产缺失 offset=$MONTH_OFFSET region=$r"
@@ -189,22 +227,22 @@ goto_page() {
             draw_region "${upper}_${r}" "$flash" 1
         fi
     done
-    if [ "$page" = "today" ]; then
-        rm -f "$STATE_DIR/clock.last"
-        draw_clock
-    fi
+    rm -f "$STATE_DIR/clock.last"
+    draw_clock
 }
 
 # ensure_month_asset <TITLE|GRID> <offset>：动态月份资产本地缓存
 # （文件存在即用；跨天清除，由 do_fetch 后的重绘触发重拉）
 ensure_month_asset() {
-    r="$1"
-    off="$2"
+    page="$1"
+    r="$2"
+    off="$3"
     [ -n "$off" ] && [ "$off" != "0" ] || return 1
-    f="$CACHE_DIR/month_${r}_m${off}.png"
+    f="$CACHE_DIR/${page}_${r}_m${off}.png"
     [ -f "$f" ] && return 0
 
-    eval tmpl="\$R_MONTH_${r}_TMPL"
+    upper=$(page_upper "$page")
+    eval tmpl=\"\$R_${upper}_${r}_TMPL\"
     [ -n "$tmpl" ] || return 1
     url=$(printf '%s' "$tmpl" | sed "s/{o}/$off/")
     wifi_on
@@ -258,7 +296,8 @@ sync_glyphs() {
 
 # 每分钟更新时钟：只重绘发生变化的字形（A2 快速局刷）
 draw_clock() {
-    [ "$CLOCK_ENABLED" = "1" ] || return 0
+    apply_clock
+    [ "$CLOCK_ENABLED" = "0" ] && return 0
     [ -n "$CLOCK_X" ] || return 0
     str="$(date +%H%M)"
     last=""
@@ -302,7 +341,7 @@ do_fetch() {
             upper=$(printf '%s' "$p" | tr '[:lower:]' '[:upper:]')
             eval regions=\"\$R_${upper}_REGIONS\"
             for r in $regions; do
-                if [ "$p" = "month" ] && { [ "$r" = "TITLE" ] || [ "$r" = "GRID" ]; }; then
+            if [ "$r" = "TITLE" ] || [ "$r" = "GRID" ]; then
                     sync_region_asset "${upper}_${r}_PREV"
                     sync_region_asset "${upper}_${r}_CUR"
                     sync_region_asset "${upper}_${r}_NEXT"
@@ -311,6 +350,7 @@ do_fetch() {
                 fi
             done
         done
+        apply_clock
         sync_glyphs || log "字形同步失败"
         ensure_cur_page
     else
@@ -430,11 +470,11 @@ apply_gestures() {
         case "$cmd" in
             NEXT_PAGE) switch_page next ;;
             PREV_PAGE) switch_page prev ;;
-            MONTH_PREV) [ "$CUR_PAGE" = "month" ] && change_month -1 ;;
-            MONTH_NEXT) [ "$CUR_PAGE" = "month" ] && change_month 1 ;;
+            MONTH_PREV) page_has_month "$CUR_PAGE" && change_month -1 ;;
+            MONTH_NEXT) page_has_month "$CUR_PAGE" && change_month 1 ;;
             # 滑动：月历页=翻月，其余页=翻页（滑动比角落热区好点）
-            SWIPE_L) if [ "$CUR_PAGE" = "month" ]; then change_month 1; else switch_page next; fi ;;
-            SWIPE_R) if [ "$CUR_PAGE" = "month" ]; then change_month -1; else switch_page prev; fi ;;
+            SWIPE_L) if page_has_month "$CUR_PAGE"; then change_month 1; else switch_page next; fi ;;
+            SWIPE_R) if page_has_month "$CUR_PAGE"; then change_month -1; else switch_page prev; fi ;;
             INVERT) toggle_invert ;;
             REFRESH) manual_refresh ;;
             EXIT) exit_request=1; log "长按退出请求" ;;
@@ -466,6 +506,19 @@ switch_page() {
     CUR_PAGE="$new_page"
     MONTH_OFFSET=0
     if goto_page "$CUR_PAGE"; then
+        apply_clock
+        if [ "$CLOCK_ENABLED" = "1" ]; then
+            key="${CLOCK_DIGIT_W:-0}.${CLOCK_DIGIT_H:-0}.${CLOCK_COLON_W:-0}.${CLOCK_GAP:-0}"
+            old=""
+            [ -f "$STATE_DIR/glyph.key" ] && old="$(cat "$STATE_DIR/glyph.key")"
+            if [ "$old" != "$key" ]; then
+                wifi_on
+                sync_glyphs || log "切页字形同步失败"
+                wifi_off
+                rm -f "$STATE_DIR/clock.last"
+                draw_clock
+            fi
+        fi
         rotate_arm
     else
         CUR_PAGE="$prev_page"  # 目标页无资产（如该页从未同步过）时回退，保持画面与状态一致
@@ -478,7 +531,7 @@ change_month() {
     limit=${MONTH_LIMIT:-24}
     [ "$new" -gt "$limit" ] || [ "$new" -lt "$((-limit))" ] && return 0
     MONTH_OFFSET=$new
-    if goto_page month; then
+    if goto_page "$CUR_PAGE"; then
         ROTATE_UNTIL=$(( $(date +%s) + ${ROTATE_SUPPRESS_S:-120} ))
     fi
 }
@@ -592,7 +645,7 @@ v21_loop() {
         poll_touch
         apply_gestures
         [ "$exit_request" = "1" ] && break
-        [ "$CUR_PAGE" = "today" ] && draw_clock
+        [ "$CUR_PAGE" != "" ] && draw_clock
 
         now=$(date +%s)
 

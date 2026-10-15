@@ -29,16 +29,12 @@ from server.settings import (
     settings_path,
     settings_version as content_version,
 )
-from server.render import (
-    PAGE_REGION_LISTS,
-    PAGES,
-    compose_page,
-    page_region_names,
-    page_regions,
-    render_glyphs,
-    render_page_regions,
-)
-from server.render.regions import Rect, clock_metrics
+from server.render import render_glyphs
+from server.layout import clock_block, draw_region_keys, find_block, http_region_names, scale_box
+from server.render.placed import paste_page, placed_rect, render_placed
+from server.render.regions import Rect, metrics_in
+from server.catalog import fetch_center_items
+from server import storage
 from server.locale import localize_payload, with_lang_query
 from server.weather import WeatherData, fetch_weather
 
@@ -94,8 +90,8 @@ class DashboardService:
         self._regions_fingerprint = ""
         self._regions_by_lang: dict[str, tuple[str, dict[tuple[str, str], RegionRender]]] = {}
         self._month_offset_cache: dict[tuple, RegionRender] = {}  # (region, offset, fingerprint)
-        self._glyphs: dict[str, bytes] = {}
-        self._glyphs_key: tuple | None = None
+        self._glyph_sets: dict[tuple, dict[str, bytes]] = {}
+        self._asset_images: dict[str, Image.Image] = {}
 
         self.heartbeat = HeartbeatLog()
         deploy = {
@@ -134,6 +130,8 @@ class DashboardService:
             self._fingerprints.clear()
             self._month_offset_cache.clear()
             self._payload = None
+            self._glyph_sets.clear()
+            self._asset_images = {}
         if not location_was_changed:
             return False
         return self._sync_weather(timeout=8.0)
@@ -276,89 +274,155 @@ class DashboardService:
                 self._payload_fingerprint = fingerprint
         return payload
 
+    def _settings_now(self) -> dict:
+        with self._lock:
+            return copy_settings(self._settings)
+
+    def page_record(self, page_id: str) -> dict | None:
+        for page in self._settings_now().get("pages") or []:
+            if page.get("page_id") == page_id:
+                return page
+        return None
+
+    def has_page(self, page_id: str) -> bool:
+        return self.page_record(page_id) is not None
+
+    def _definitions(self, settings: dict) -> dict[str, dict]:
+        found = {item["id"]: item for item in settings.get("widget_defs") or []}
+        try:
+            center = fetch_center_items()
+        except Exception:
+            log.warning("模板中心读取失败，自定义积木仅使用本机定义")
+            center = []
+        for item in center:
+            if item.get("kind") == "data":
+                found.setdefault(item["id"], item)
+        return found
+
+    def _asset_images_for(self, settings: dict) -> dict[str, Image.Image]:
+        images: dict[str, Image.Image] = {}
+        for asset in settings.get("assets") or []:
+            asset_id = asset.get("id")
+            key = asset.get("key")
+            if not asset_id or not key:
+                continue
+            with self._lock:
+                cached = self._asset_images.get(key)
+            if cached is None:
+                raw = storage.get_object(key)
+                if not raw:
+                    continue
+                try:
+                    cached = Image.open(io.BytesIO(raw))
+                    cached.load()
+                except Exception:
+                    log.warning("素材无法解码 key=%s", key)
+                    continue
+                with self._lock:
+                    self._asset_images[key] = cached
+            images[asset_id] = cached
+        return images
+
     def _get_regions(self, lang: str = "zh") -> dict[tuple[str, str], RegionRender]:
         lang = "en" if lang == "en" else "zh"
         payload = self.get_payload(lang)
-        fingerprint = self._fingerprints[lang]
+        settings = self._settings_now()
+        token = self._fingerprints[lang] + ":" + content_version(settings)
         with self._lock:
             cached = self._regions_by_lang.get(lang)
-            if cached and cached[0] == fingerprint:
+            if cached and cached[0] == token:
                 return cached[1]
 
+        definitions = self._definitions(settings)
+        images = self._asset_images_for(settings)
         regions: dict[tuple[str, str], RegionRender] = {}
-        for page in PAGES:
-            images = render_page_regions(page, payload, self.width, self.height, self.font_path)
-            rects = page_regions(page, self.width, self.height)
-            for key, img in images.items():
-                base = key.split("-")[0] if key in ("title-prev", "title-next", "grid-prev", "grid-next") else key
+        for page in settings.get("pages") or []:
+            page_id = page["page_id"]
+            rendered = render_placed(page, payload, self.width, self.height, self.font_path, definitions, images)
+            for key, img in rendered.items():
                 png = _png_bytes(img)
-                regions[(page, key)] = RegionRender(
-                    rect=rects[base], png=png, etag=hashlib.sha256(png).hexdigest()[:32]
+                regions[(page_id, key)] = RegionRender(
+                    rect=placed_rect(page, key, self.width, self.height),
+                    png=png,
+                    etag=hashlib.sha256(png).hexdigest()[:32],
                 )
 
         with self._lock:
-            self._regions_by_lang[lang] = (fingerprint, regions)
+            self._regions_by_lang[lang] = (token, regions)
             if lang == "zh":
                 self._regions = regions
-                self._regions_fingerprint = fingerprint
+                self._regions_fingerprint = token
         return regions
 
     def get_region(self, page: str, region: str, offset: int = 0, lang: str = "zh") -> RegionRender | None:
         lang = "en" if lang == "en" else "zh"
-        if page not in PAGES or region not in page_region_names(page):
+        record = self.page_record(page)
+        if record is None or region not in http_region_names(record):
             return None
-        # 月历 title/grid 支持任意月偏移（跨月浏览），独立小缓存
-        if page == "month" and region in ("title", "grid") and offset != 0:
-            return self._get_month_offset_region(region, offset, lang)
+        if region in ("title", "grid") and offset != 0 and find_block(record, region) is not None:
+            return self._get_month_offset_region(page, region, offset, lang)
         regions = self._get_regions(lang)
         return regions.get((page, region))
 
-    def _get_month_offset_region(self, region: str, offset: int, lang: str = "zh") -> RegionRender:
+    def _get_month_offset_region(self, page: str, region: str, offset: int, lang: str = "zh") -> RegionRender:
+        from server.render.placed import paint_system
+
         lang = "en" if lang == "en" else "zh"
         offset = max(-120, min(120, int(offset)))
+        record = self.page_record(page)
         payload = self.get_payload(lang)
-        key = (region, offset, self._fingerprints[lang], lang)
+        rect = placed_rect(record, region, self.width, self.height)
+        key = (page, region, offset, rect.x, rect.y, rect.w, rect.h, self._fingerprints[lang], lang)
         with self._lock:
             cached = self._month_offset_cache.get(key)
         if cached is not None:
             return cached
 
-        from server.render.pages import month as month_page
-
-        rects = page_regions("month", self.width, self.height)
-        if region == "title":
-            img = month_page.render_title(payload, rects["title"], self.font_path, offset=offset)
-        else:
-            img = month_page.render_grid(payload, rects["grid"], self.font_path, offset=offset)
+        img = paint_system(region, payload, rect, self.font_path, page, offset)
         png = _png_bytes(img)
-        rendered = RegionRender(rect=rects[region], png=png, etag=hashlib.sha256(png).hexdigest()[:32])
-
+        rendered = RegionRender(rect=rect, png=png, etag=hashlib.sha256(png).hexdigest()[:32])
         with self._lock:
-            if len(self._month_offset_cache) > 64:  # 两年跨度的 LRU 上限
+            if len(self._month_offset_cache) > 64:
                 self._month_offset_cache.clear()
             self._month_offset_cache[key] = rendered
         return rendered
 
-    def get_glyphs(self) -> dict[str, bytes]:
-        key = (self.width, self.height, self.font_path)
+    def get_glyphs(self, page: str = "today") -> dict[str, bytes]:
+        record = self.page_record(page)
+        block = clock_block(record) if record else None
+        if block is None:
+            return {}
+        x, y, w, h = scale_box(int(block["x"]), int(block["y"]), int(block["w"]), int(block["h"]), self.width, self.height)
+        metrics = metrics_in(Rect(x, y, w, h))
+        key = (page, metrics.digit_w, metrics.digit_h, metrics.colon_w, metrics.gap, self.font_path)
         with self._lock:
-            if self._glyphs and self._glyphs_key == key:
-                return self._glyphs
-
-        metrics = clock_metrics(self.width, self.height)
+            cached = self._glyph_sets.get(key)
+            if cached:
+                return cached
         glyphs = {ch: _png_bytes(img) for ch, img in render_glyphs(metrics, self.font_path).items()}
         with self._lock:
-            self._glyphs = glyphs
-            self._glyphs_key = key
+            self._glyph_sets[key] = glyphs
         return glyphs
+
+    def render_page_image(self, page: dict, payload: dict, definitions: dict | None = None, images: dict | None = None) -> Image.Image:
+        settings = self._settings_now()
+        return paste_page(
+            page,
+            payload,
+            self.width,
+            self.height,
+            self.font_path,
+            definitions if definitions is not None else self._definitions(settings),
+            images if images is not None else self._asset_images_for(settings),
+            None,
+            metrics_in,
+        )
 
     def get_composite(self, page: str = "today", lang: str = "zh") -> bytes:
         lang = "en" if lang == "en" else "zh"
-        if page not in PAGES:
-            page = "today"
+        record = self.page_record(page) or self.page_record("today")
         payload = self.get_payload(lang)
-        img = compose_page(page, payload, self.width, self.height, self.font_path)
-        return _png_bytes(img)
+        return _png_bytes(self.render_page_image(record, payload))
 
     # ── 设备端 env ──
 
@@ -376,8 +440,6 @@ class DashboardService:
             if page_id != "today":
                 other = dwell.get(page_id, 30)
                 break
-        metrics = clock_metrics(self.width, self.height)
-        clock_rect = page_regions("today", self.width, self.height)["clock"]
 
         def region_lines(var_prefix: str, page: str, key: str, region: RegionRender) -> list[str]:
             return [
@@ -401,29 +463,73 @@ class DashboardService:
             f'PAGES="{" ".join(pages)}"',
         ]
 
-        # 每页分区清单 + 各分区变量（month 的 title/grid 统一三预裁键 PREV/CUR/NEXT）
-        _MONTH_KEYS = {"title": "TITLE_CUR", "grid": "GRID_CUR", "title-prev": "TITLE_PREV", "grid-prev": "GRID_PREV", "title-next": "TITLE_NEXT", "grid-next": "GRID_NEXT"}
-        for page in PAGES:
-            upper = page.upper()
-            lines.append(f'R_{upper}_REGIONS="{" ".join(r.upper() for r in PAGE_REGION_LISTS[page])}"')
-            for key in page_region_names(page):
-                region = regions.get((page, key))
+        # 每页分区清单 + 各分区变量（title/grid 统一三预裁键 PREV/CUR/NEXT）
+        _MONTH_KEYS = {
+            "title": "TITLE_CUR",
+            "grid": "GRID_CUR",
+            "title-prev": "TITLE_PREV",
+            "grid-prev": "GRID_PREV",
+            "title-next": "TITLE_NEXT",
+            "grid-next": "GRID_NEXT",
+        }
+        page_records = {item["page_id"]: item for item in settings.get("pages") or []}
+        clock_legacy: list[str] = []
+        month_templates: list[str] = []
+        for page_id in pages:
+            record = page_records.get(page_id)
+            if record is None:
+                continue
+            upper = page_id.upper()
+            keys = draw_region_keys(record)
+            lines.append(f'R_{upper}_REGIONS="{" ".join(key.upper() for key in keys)}"')
+            for key in http_region_names(record):
+                region = regions.get((page_id, key))
                 if region is None:
                     continue
-                var_key = _MONTH_KEYS.get(key, key.upper().replace("-", "_")) if page == "month" else key.upper().replace("-", "_")
-                lines += region_lines(f"R_{upper}_{var_key}", page, key, region)
+                var_key = _MONTH_KEYS.get(key, key.upper().replace("-", "_"))
+                lines += region_lines(f"R_{upper}_{var_key}", page_id, key, region)
+            if "title" in keys:
+                month_templates.append(
+                    f'R_{upper}_TITLE_TMPL="{with_lang_query(f"{base}/r/{page_id}/title.png?offset={{o}}", lang)}"'
+                )
+            if "grid" in keys:
+                month_templates.append(
+                    f'R_{upper}_GRID_TMPL="{with_lang_query(f"{base}/r/{page_id}/grid.png?offset={{o}}", lang)}"'
+                )
+            block = clock_block(record)
+            if block is None:
+                lines.append(f"CLOCK_{upper}_ENABLED=0")
+                if page_id == "today":
+                    clock_legacy.append("CLOCK_ENABLED=0")
+                continue
+            x, y, w, h = scale_box(int(block["x"]), int(block["y"]), int(block["w"]), int(block["h"]), self.width, self.height)
+            clock_metrics = metrics_in(Rect(x, y, w, h))
+            prefix = f"{base}/r/{page_id}/clock/"
+            clock_lines = [
+                f"CLOCK_{upper}_ENABLED=1",
+                f"CLOCK_{upper}_X={clock_metrics.x}",
+                f"CLOCK_{upper}_Y={clock_metrics.y}",
+                f"CLOCK_{upper}_DIGIT_W={clock_metrics.digit_w}",
+                f"CLOCK_{upper}_DIGIT_H={clock_metrics.digit_h}",
+                f"CLOCK_{upper}_COLON_W={clock_metrics.colon_w}",
+                f"CLOCK_{upper}_GAP={clock_metrics.gap}",
+                f'CLOCK_{upper}_GLYPH_URL_PREFIX="{prefix}"',
+            ]
+            lines += clock_lines
+            if page_id == "today":
+                clock_legacy = [
+                    "CLOCK_ENABLED=1",
+                    f"CLOCK_X={clock_metrics.x}",
+                    f"CLOCK_Y={clock_metrics.y}",
+                    f"CLOCK_DIGIT_W={clock_metrics.digit_w}",
+                    f"CLOCK_DIGIT_H={clock_metrics.digit_h}",
+                    f"CLOCK_COLON_W={clock_metrics.colon_w}",
+                    f"CLOCK_GAP={clock_metrics.gap}",
+                    f'CLOCK_GLYPH_URL_PREFIX="{prefix}"',
+                ]
 
-        # 时钟（仅 today）
-        x0 = (self.width - metrics.total_w()) // 2
+        lines += clock_legacy
         lines += [
-            f"CLOCK_X={x0}",
-            f"CLOCK_Y={clock_rect.y + (clock_rect.h - metrics.digit_h) // 2}",
-            f"CLOCK_DIGIT_W={metrics.digit_w}",
-            f"CLOCK_DIGIT_H={metrics.digit_h}",
-            f"CLOCK_COLON_W={metrics.colon_w}",
-            f"CLOCK_GAP={metrics.gap}",
-            f'CLOCK_GLYPH_URL_PREFIX="{base}/r/today/clock/"',
-            # 轮播与配置版本来自台历配置；旧变量名保留给 v2.1 dash.sh
             f"SETTINGS_VERSION={content_version(settings)}",
             f"ROTATE_ENABLED={1 if settings['rotation']['enabled'] else 0}",
             f"ROTATE_OTHER_S={other}",
@@ -431,13 +537,13 @@ class DashboardService:
         ]
         for page_id in pages:
             lines.append(f"ROTATE_{page_id.upper()}_S={dwell.get(page_id, 30)}")
-        lines += [
-            # 翻月范围（±N 月）：±1 用预裁资产零流量，超出经 TMPL 按需拉取
-            "MONTH_LIMIT=24",
-            f'R_MONTH_TITLE_TMPL="{with_lang_query(f"{base}/r/month/title.png?offset={{o}}", lang)}"',
-            f'R_MONTH_GRID_TMPL="{with_lang_query(f"{base}/r/month/grid.png?offset={{o}}", lang)}"',
-            f'LEGACY_URL="{with_lang_query(f"{base}/dashboard.png", lang)}"',
-        ]
+        lines.append("MONTH_LIMIT=24")
+        lines += month_templates
+        if "R_MONTH_TITLE_TMPL=" not in "\n".join(month_templates):
+            lines.append(f'R_MONTH_TITLE_TMPL="{with_lang_query(f"{base}/r/month/title.png?offset={{o}}", lang)}"')
+        if "R_MONTH_GRID_TMPL=" not in "\n".join(month_templates):
+            lines.append(f'R_MONTH_GRID_TMPL="{with_lang_query(f"{base}/r/month/grid.png?offset={{o}}", lang)}"')
+        lines.append(f'LEGACY_URL="{with_lang_query(f"{base}/dashboard.png", lang)}"')
 
         # P1 旧名兼容别名（保留一个版本）
         legacy_block: list[str] = []

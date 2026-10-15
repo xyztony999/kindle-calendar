@@ -17,9 +17,19 @@ from zoneinfo import ZoneInfo
 
 log = logging.getLogger(__name__)
 
-PAGE_IDS = ("today", "week", "month", "detail", "almanac")
+from server.layout import (
+    CUSTOM_PAGE_RE,
+    MAX_PAGES,
+    PRESET_IDS,
+    default_page,
+    drop_unreferenced_assets,
+    validate_layout_fields,
+)
+
+PAGE_IDS = PRESET_IDS
 QUOTE_MODES = ("online", "offline", "custom")
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+ACCEPTED_SCHEMAS = (1, 2)
 
 DWELL_MIN = 5
 DWELL_MAX = 3600
@@ -28,7 +38,8 @@ CUSTOM_MAX = 100
 TEXT_MAX = 32
 FROM_MAX = 16
 NAME_MAX = 20
-SETTINGS_MAX_BYTES = 32 * 1024
+BLOCK_TEXT_MAX = 200
+SETTINGS_MAX_BYTES = 64 * 1024
 
 DEFAULT_INTERVAL_S = 900
 HEARTBEAT_ONLINE_FACTOR = 2
@@ -80,6 +91,11 @@ def limits() -> dict[str, int]:
         "custom_max": CUSTOM_MAX,
         "text_max": TEXT_MAX,
         "from_max": FROM_MAX,
+        "name_max": NAME_MAX,
+        "block_text_max": BLOCK_TEXT_MAX,
+        "max_pages": MAX_PAGES,
+        "max_blocks": 24,
+        "max_defs": 12,
     }
 
 
@@ -88,17 +104,12 @@ def copy_settings(settings: dict) -> dict:
 
 
 def defaults_from_config(config: dict) -> dict:
-    pages = [
-        {
-            "page_id": page_id,
-            "enabled": True,
-            "dwell_s": 120 if page_id == "today" else 30,
-        }
-        for page_id in PAGE_IDS
-    ]
+    pages = [default_page(page_id, True, 120 if page_id == "today" else 30) for page_id in PAGE_IDS]
     return {
         "schema_version": SCHEMA_VERSION,
         "pages": pages,
+        "widget_defs": [],
+        "assets": [],
         "rotation": {"enabled": True, "suppress_s": 120},
         "quote": {"mode": "online", "custom": []},
         "location": {
@@ -166,9 +177,14 @@ def validate(data: Any) -> list[dict]:
     if not isinstance(data, dict):
         return [_detail("", "PAGES_SET_INVALID", "配置必须是对象")]
 
+    schema = data.get("schema_version", 1)
+    if schema not in ACCEPTED_SCHEMAS:
+        details.append(_detail("schema_version", "PAGES_SET_INVALID", "配置 schema 不受支持"))
+
     pages = data.get("pages")
-    if not isinstance(pages, list) or len(pages) != 5:
-        details.append(_detail("pages", "PAGES_SET_INVALID", "页面须恰好 5 项且覆盖全部页面"))
+    if not isinstance(pages, list) or not 5 <= len(pages) <= MAX_PAGES:
+        details.append(_detail("pages", "PAGES_SET_INVALID", "页面数量须为 5–12，且包含全部预设页"))
+        pages = []
     else:
         ids: list[Any] = []
         for index, item in enumerate(pages):
@@ -176,7 +192,8 @@ def validate(data: Any) -> list[dict]:
                 ids.append(None)
                 details.append(_detail("pages", "PAGES_SET_INVALID", "页面项格式不正确"))
                 continue
-            ids.append(item.get("page_id"))
+            page_id = item.get("page_id")
+            ids.append(page_id)
             if not isinstance(item.get("enabled"), bool):
                 details.append(_detail(f"pages[{index}].enabled", "PAGES_SET_INVALID", "启用标记须为布尔值"))
             dwell = _as_int(item.get("dwell_s"))
@@ -188,11 +205,28 @@ def validate(data: Any) -> list[dict]:
                         f"停留秒数须为 {DWELL_MIN}–{DWELL_MAX} 的整数",
                     )
                 )
+            if isinstance(page_id, str) and CUSTOM_PAGE_RE.match(page_id):
+                name = _clean_text(item.get("name"))
+                if not name or len(name) > NAME_MAX or "\n" in name or "\r" in name:
+                    details.append(_detail(f"pages[{index}].name", "PAGES_SET_INVALID", f"页面名称须为 1–{NAME_MAX} 字"))
+            elif page_id not in PAGE_IDS:
+                details.append(_detail(f"pages[{index}].page_id", "PAGES_SET_INVALID", "页面 id 无效"))
         first = pages[0] if isinstance(pages[0], dict) else {}
-        if ids[0] != "today" or first.get("enabled") is not True:
+        if not ids or ids[0] != "today" or first.get("enabled") is not True:
             details.append(_detail("pages[0]", "TODAY_MUST_BE_FIRST_ENABLED", "今日页必须固定在首位且保持启用"))
-        if set(ids) != set(PAGE_IDS):
+        if len(ids) != len(set(ids)) or not set(PAGE_IDS).issubset(set(ids)):
             details.append(_detail("pages", "PAGES_SET_INVALID", "页面须互不重复且覆盖今日、一周、月历、详情、黄历"))
+
+    widget_defs = data.get("widget_defs", [])
+    assets = data.get("assets", [])
+    try:
+        from server.catalog import approved_data_items
+
+        center_items = approved_data_items()
+    except Exception:
+        log.warning("读取模板中心失败，校验时按空目录处理")
+        center_items = []
+    validate_layout_fields(pages if isinstance(pages, list) else [], widget_defs, assets, center_items, details)
 
     rotation = data.get("rotation")
     if not isinstance(rotation, dict) or not isinstance(rotation.get("enabled"), bool):
@@ -258,25 +292,66 @@ def validate(data: Any) -> list[dict]:
     return details
 
 
+def _normalize_block(block: dict) -> dict:
+    widget = block["widget"]
+    item = {
+        "widget": widget,
+        "id": widget if widget in ("header", "clock", "weather", "sun", "scene", "quote", "list", "chart", "title", "grid", "hourly", "indices", "main") else block["id"],
+        "x": _as_int(block["x"]),
+        "y": _as_int(block["y"]),
+        "w": _as_int(block["w"]),
+        "h": _as_int(block["h"]),
+        "z": _as_int(block["z"]),
+    }
+    if widget == "image":
+        item["asset"] = block["asset"]
+    elif widget == "text":
+        item["text"] = _clean_text(block.get("text"))
+        item["align"] = block.get("align") if block.get("align") in ("left", "center", "right") else "left"
+    elif widget == "custom":
+        item["def"] = block["def"]
+    return item
+
+
 def normalize(data: dict) -> dict:
-    """校验通过后的规范化：去空白、整数化、今日页强制启用。"""
+    """校验通过后的规范化：去空白、整数化、今日页强制启用，并补上默认布局。"""
     pages = []
     for item in data["pages"]:
         page_id = item["page_id"]
-        pages.append(
-            {
-                "page_id": page_id,
-                "enabled": True if page_id == "today" else item["enabled"] is True,
-                "dwell_s": _as_int(item["dwell_s"]),
-            }
-        )
+        page = {
+            "page_id": page_id,
+            "enabled": True if page_id == "today" else item["enabled"] is True,
+            "dwell_s": _as_int(item["dwell_s"]),
+        }
+        if CUSTOM_PAGE_RE.match(page_id):
+            page["name"] = _clean_text(item.get("name"))
+        if "layout" in item and isinstance(item.get("layout"), list):
+            page["layout"] = [_normalize_block(block) for block in item["layout"]]
+        else:
+            page["layout"] = default_page(page_id, True, 30)["layout"] if page_id in PAGE_IDS else []
+        pages.append(page)
     custom = []
     for item in data["quote"]["custom"]:
         custom.append({"text": _clean_text(item.get("text")), "from": _clean_text(item.get("from"))})
     location = data["location"]
+    defs = []
+    for item in data.get("widget_defs") or []:
+        defs.append(
+            {
+                "id": item["id"],
+                "name": _clean_text(item.get("name")),
+                "style": item["style"],
+                "fields": list(item["fields"]),
+            }
+        )
+    assets = []
+    for item in data.get("assets") or []:
+        assets.append({"id": item["id"], "key": item["key"], "content_type": item["content_type"]})
     return {
         "schema_version": SCHEMA_VERSION,
         "pages": pages,
+        "widget_defs": defs,
+        "assets": assets,
         "rotation": {
             "enabled": data["rotation"]["enabled"] is True,
             "suppress_s": _as_int(data["rotation"]["suppress_s"]),
@@ -322,7 +397,7 @@ class SettingsStore:
         except Exception as exc:
             log.warning("配置文件损坏，使用部署默认值: %s", exc)
             return self._use(fallback, degraded=True)
-        if not isinstance(raw, dict) or raw.get("schema_version") != SCHEMA_VERSION:
+        if not isinstance(raw, dict) or raw.get("schema_version") not in ACCEPTED_SCHEMAS:
             log.warning("配置 schema 不支持，使用部署默认值")
             return self._use(fallback, degraded=True)
         details = validate(raw)
@@ -333,6 +408,13 @@ class SettingsStore:
         updated = raw.get("updated_at")
         if isinstance(updated, str) and updated:
             normalized["updated_at"] = updated
+        if raw.get("schema_version") != SCHEMA_VERSION:
+            try:
+                raw_bytes = (json.dumps(normalized, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+                self._atomic_write(raw_bytes)
+                log.info("配置已从 schema %s 迁移到 %s", raw.get("schema_version"), SCHEMA_VERSION)
+            except Exception as exc:
+                log.warning("配置迁移后写回失败，本次仍使用内存中的新结构: %s", exc)
         return self._use(normalized, degraded=False)
 
     def _use(self, settings: dict, degraded: bool) -> LoadResult:
@@ -347,20 +429,22 @@ class SettingsStore:
             assert self._settings is not None
             return copy_settings(self._settings), self._degraded, settings_version(self._settings)
 
-    def save(self, incoming: dict) -> tuple[dict, str, bool, bool]:
+    def save(self, incoming: dict, *, gc_assets: bool = True) -> tuple[dict, str, bool, bool]:
         """校验并原子写入。返回 (settings, version, location_changed, weather_refreshed)。"""
         details = validate(incoming)
         if details:
             raise SettingsError("SETTINGS_VALIDATION_FAILED", "配置校验失败", details)
         normalized = normalize(incoming)
+        if gc_assets:
+            normalized = drop_unreferenced_assets(normalized)
         tz_name = normalized["location"]["timezone"]
         normalized["updated_at"] = datetime.now(ZoneInfo(tz_name)).isoformat(timespec="seconds")
         raw = (json.dumps(normalized, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
         if len(raw) > SETTINGS_MAX_BYTES:
             raise SettingsError(
                 "SETTINGS_VALIDATION_FAILED",
-                "配置超过 32KB",
-                [_detail("quote.custom", "QUOTE_CUSTOM_INVALID", "配置体积超过 32KB")],
+                "配置超过 64KB",
+                [_detail("", "SETTINGS_TOO_LARGE", "配置体积超过 64KB")],
             )
 
         with self._lock:

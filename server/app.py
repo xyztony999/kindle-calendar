@@ -24,7 +24,6 @@ from server.reading import (
     render_unavailable,
     render_weather,
 )
-from server.render import PAGES, page_region_names
 from server.service import DashboardService
 from server.settings import env_int
 from server.viewer import render_viewer, render_viewer_missing, viewer_wants_html
@@ -241,7 +240,12 @@ def create_app() -> Flask:
 
     @app.get("/r/<page>/<region>.png")
     def region_png(page: str, region: str):
-        if page not in PAGES or not _REGION_RE.match(region) or region not in page_region_names(page):
+        if not _REGION_RE.match(region) or not service.has_page(page):
+            return _image_missing()
+        record = service.page_record(page)
+        from server.layout import http_region_names
+
+        if record is None or region not in http_region_names(record):
             return _image_missing()
         # 月历 title/grid 支持任意月偏移（跨月浏览）
         offset = request.args.get("offset", type=int) or 0
@@ -254,17 +258,19 @@ def create_app() -> Flask:
 
     @app.get("/r/<page>/clock/<glyph>.png")
     def clock_glyph_png(page: str, glyph: str):
-        if page != "today" or not _GLYPH_RE.match(glyph):
+        if not service.has_page(page) or not _GLYPH_RE.match(glyph):
             return _image_missing()
         if viewer_wants_html():
             return _html_page(render_viewer("clock", glyph=glyph))
-        glyphs = service.get_glyphs()
-        return _png_response(glyphs[glyph], f"glyph-{glyph}")
+        glyphs = service.get_glyphs(page)
+        if glyph not in glyphs:
+            return _image_missing()
+        return _png_response(glyphs[glyph], f"glyph-{page}-{glyph}")
 
     @app.get("/dashboard.png")
     def dashboard_png():
         page = request.args.get("page", "today")
-        if page not in PAGES:
+        if not service.has_page(page):
             log.warning("未知页面参数 page=%s，回退 today", page)
             page = "today"
         offset = request.args.get("offset", type=int) or 0

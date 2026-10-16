@@ -218,6 +218,35 @@ def create_app() -> Flask:
             return _html_page(render_dashboard(payload, _reading_lang(True)))
         return _machine_json(payload)
 
+    def _device_interval():
+        if request.headers.get("X-Kindle-Device") != "dash":
+            return None
+        raw = request.headers.get("X-Kindle-Interval", "900")
+        if not re.fullmatch(r"[0-9]{1,5}", raw) or not 60 <= int(raw) <= 86400:
+            return None
+        return int(raw)
+
+    def _note_device_fetch(mode):
+        interval = _device_interval()
+        if interval is not None:
+            service.note_heartbeat(request.remote_addr or "", request.headers.get("User-Agent", ""), interval, mode)
+
+    @app.post("/api/v1/device/heartbeat")
+    def device_heartbeat():
+        data = request.get_json(silent=True)
+        if request.headers.get("X-Kindle-Device") != "dash" or not isinstance(data, dict):
+            return jsonify({"ok": False, "error": "invalid device heartbeat"}), 400
+        interval = data.get("interval_s")
+        mode = data.get("mode")
+        version = data.get("applied_version")
+        if (type(interval) is not int or not 60 <= interval <= 86400 or mode not in ("v1", "v2")
+                or (version is not None and (not isinstance(version, str) or len(version) > 128))
+                or (mode == "v1" and version)):
+            return jsonify({"ok": False, "error": "invalid device heartbeat"}), 400
+        service.note_heartbeat(request.remote_addr or "", request.headers.get("User-Agent", ""),
+                               interval, mode, fetched=False, applied_version=version)
+        return jsonify({"ok": True})
+
     @app.get("/api/v1/dashboard.env")
     def dashboard_env():
         html = prefer_html(request.args.get("format"), request.headers.get("Accept"))
@@ -228,7 +257,8 @@ def create_app() -> Flask:
                 log.exception("设备清单阅读页暂时读不到")
                 return _html_page(render_unavailable(_reading_lang(True), "env"), 500)
             raise
-        service.note_heartbeat(request.remote_addr or "", request.headers.get("User-Agent", ""))
+        if not html:
+            _note_device_fetch("v2")
         if html:
             return _html_page(render_env(env, _reading_lang(True)))
         return _machine_text(env)
@@ -277,6 +307,7 @@ def create_app() -> Flask:
         if viewer_wants_html():
             return _html_page(render_viewer("page", page=page, offset=offset))
         png = service.get_composite(page, device_lang(request.args.get("lang")))
+        _note_device_fetch("v1")
         return _png_response(png, max_age=60)
 
     @app.get("/weather")

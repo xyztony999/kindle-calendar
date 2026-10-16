@@ -154,7 +154,7 @@ class AdminApiTests(unittest.TestCase):
         self.assertFalse(payload["location_changed"])
         version = payload["settings_version"]
 
-        env = self.client.get("/api/v1/dashboard.env", headers={"User-Agent": "Kindle/2.1"})
+        env = self.client.get("/api/v1/dashboard.env", headers={"User-Agent": "Kindle/2.1", "X-Kindle-Device": "dash"})
         text = env.get_data(as_text=True)
         pages_line = next(line for line in text.splitlines() if line.startswith("PAGES="))
         self.assertEqual(pages_line, 'PAGES="today month week detail"')
@@ -181,6 +181,10 @@ class AdminApiTests(unittest.TestCase):
         self.assertEqual(hidden.status_code, 200)
         self.assertTrue(hidden.data.startswith(b"\x89PNG"))
 
+        pending = self.client.get("/admin/api/device").get_json()["data"]
+        self.assertEqual(pending["delivery_state"], "pending")
+        self.client.post("/api/v1/device/heartbeat", json={"interval_s": 900, "mode": "v2", "applied_version": version},
+                         headers={"User-Agent": "Kindle/2.1", "X-Kindle-Device": "dash"})
         device = self.client.get("/admin/api/device").get_json()["data"]
         self.assertEqual(device["delivery_state"], "delivered")
         self.assertEqual(device["online_state"], "online")

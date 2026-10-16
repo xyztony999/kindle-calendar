@@ -81,13 +81,31 @@ prevent_sleep() {
 fetch_url() {
     # $1=目标路径 $2=URL
     if command -v wget >/dev/null 2>&1; then
-        wget -q -T 30 -O "$1.tmp" "$2" && mv "$1.tmp" "$1"
+        wget -q -T 30 --header="X-Kindle-Device: dash" --header="X-Kindle-Interval: $INTERVAL" -O "$1.tmp" "$2" && mv "$1.tmp" "$1"
     elif command -v curl >/dev/null 2>&1; then
-        curl -s --connect-timeout 30 --max-time 60 -o "$1.tmp" "$2" && mv "$1.tmp" "$1"
+        curl -fsS --connect-timeout 30 --max-time 60 -H "X-Kindle-Device: dash" -H "X-Kindle-Interval: $INTERVAL" -o "$1.tmp" "$2" && mv "$1.tmp" "$1"
     else
         log "ERROR: 未找到 wget 或 curl"
         return 1
     fi
+}
+
+# Reuse the existing synchronization Wi-Fi window; reporting failure is non-fatal.
+report_device() {
+    report_mode="$1"
+    report_version="${2:-}"
+    report_base="${API_URL:-$SERVER_URL}"
+    report_base=$(printf '%s' "$report_base" | sed 's#^\(https\{0,1\}://[^/]*\).*#\1#')
+    report_url="$report_base/api/v1/device/heartbeat"
+    report_body=$(printf '{"interval_s":%s,"mode":"%s","applied_version":"%s"}' "$INTERVAL" "$report_mode" "$report_version")
+    if command -v wget >/dev/null 2>&1; then
+        wget -q -T 10 --header="X-Kindle-Device: dash" --header="Content-Type: application/json" \
+            --post-data="$report_body" -O /dev/null "$report_url" || log "device report failed"
+    elif command -v curl >/dev/null 2>&1; then
+        curl -fsS --connect-timeout 10 --max-time 15 -H "X-Kindle-Device: dash" \
+            -H "Content-Type: application/json" -d "$report_body" -o /dev/null "$report_url" || log "device report failed"
+    fi
+    return 0
 }
 
 wait_for_network() {
@@ -191,6 +209,8 @@ draw_region() {
     fi
     if fbink_img "$CACHE_DIR/$lc.png" "$x" "$y" GC16 "$flash"; then
         echo "$etag" > "$STATE_DIR/$lc.etag"
+    else
+        return 1
     fi
 }
 
@@ -203,32 +223,35 @@ goto_page() {
     [ -n "$regions" ] || return 1
 
     # 月历页：TITLE/GRID——±1 月用预裁键（零延迟），其余偏移动态拉取
+    page_draw_ok=1
     for r in $regions; do
         if [ "$r" = "TITLE" ] || [ "$r" = "GRID" ]; then
             case "$MONTH_OFFSET" in
                 -1) sync_region_asset "${upper}_${r}_PREV"
-                    draw_region "${upper}_${r}_PREV" "$flash" 1 ;;
+                    draw_region "${upper}_${r}_PREV" "$flash" 1 || page_draw_ok=0 ;;
                 1)  sync_region_asset "${upper}_${r}_NEXT"
-                    draw_region "${upper}_${r}_NEXT" "$flash" 1 ;;
+                    draw_region "${upper}_${r}_NEXT" "$flash" 1 || page_draw_ok=0 ;;
                 0)  sync_region_asset "${upper}_${r}_CUR"
-                    draw_region "${upper}_${r}_CUR" "$flash" 1 ;;
+                    draw_region "${upper}_${r}_CUR" "$flash" 1 || page_draw_ok=0 ;;
                 *)  ensure_month_asset "$page" "$r" "$MONTH_OFFSET"
                     f="$CACHE_DIR/${page}_${r}_m${MONTH_OFFSET}.png"
                     if [ -f "$f" ]; then
                         eval x="\$R_${upper}_${r}_CUR_X"
                         eval y="\$R_${upper}_${r}_CUR_Y"
-                        fbink_img "$f" "$x" "$y" GC16 "$flash"
+                        fbink_img "$f" "$x" "$y" GC16 "$flash" || page_draw_ok=0
                     else
+                        page_draw_ok=0
                         log "动态月资产缺失 offset=$MONTH_OFFSET region=$r"
                     fi ;;
             esac
         else
             sync_region_asset "${upper}_${r}"
-            draw_region "${upper}_${r}" "$flash" 1
+            draw_region "${upper}_${r}" "$flash" 1 || page_draw_ok=0
         fi
     done
     rm -f "$STATE_DIR/clock.last"
-    draw_clock
+    draw_clock || page_draw_ok=0
+    [ "$page_draw_ok" = "1" ]
 }
 
 # ensure_month_asset <TITLE|GRID> <offset>：动态月份资产本地缓存
@@ -250,7 +273,7 @@ ensure_month_asset() {
         rm -f "$f"
         log "动态月资产拉取失败 offset=$off"
     fi
-    wifi_off
+    [ "${FETCH_ACTIVE:-0}" = "1" ] || wifi_off
     [ -f "$f" ]
 }
 
@@ -321,8 +344,9 @@ draw_clock() {
             file="$c"
             w="$CLOCK_DIGIT_W"
         fi
-        if [ "$c" != "$prev" ] && [ -f "$GLYPH_DIR/$file.png" ]; then
-            fbink_img "$GLYPH_DIR/$file.png" "$x" "$CLOCK_Y" A2 0
+        [ -f "$GLYPH_DIR/$file.png" ] || return 1
+        if [ "$c" != "$prev" ]; then
+            fbink_img "$GLYPH_DIR/$file.png" "$x" "$CLOCK_Y" A2 0 || return 1
         fi
         x=$((x + w + CLOCK_GAP))
         i=$((i + 1))
@@ -335,6 +359,8 @@ do_fetch() {
     wifi_on
     wait_for_network
     ENV_OK=0
+    FETCH_ACTIVE=1
+    fetch_assets_ok=1
     if env_sync; then
         ENV_OK=1
         for p in ${PAGES:-today}; do
@@ -342,24 +368,29 @@ do_fetch() {
             eval regions=\"\$R_${upper}_REGIONS\"
             for r in $regions; do
             if [ "$r" = "TITLE" ] || [ "$r" = "GRID" ]; then
-                    sync_region_asset "${upper}_${r}_PREV"
-                    sync_region_asset "${upper}_${r}_CUR"
-                    sync_region_asset "${upper}_${r}_NEXT"
+                    sync_region_asset "${upper}_${r}_PREV" || fetch_assets_ok=0
+                    sync_region_asset "${upper}_${r}_CUR" || fetch_assets_ok=0
+                    sync_region_asset "${upper}_${r}_NEXT" || fetch_assets_ok=0
                 else
-                    sync_region_asset "${upper}_${r}"
+                    sync_region_asset "${upper}_${r}" || fetch_assets_ok=0
                 fi
             done
         done
         apply_clock
-        sync_glyphs || log "字形同步失败"
+        [ "$CLOCK_ENABLED" = "0" ] || sync_glyphs || fetch_assets_ok=0
+        [ "$fetch_assets_ok" = "1" ] || log "asset synchronization incomplete; keeping previous application confirmation"
         ensure_cur_page
     else
         log "env 拉取失败"
     fi
-    wifi_off
     if goto_page "$CUR_PAGE"; then
         READY_DRAWN=1
+        if [ "$ENV_OK" = "1" ] && [ "$fetch_assets_ok" = "1" ]; then
+            report_device v2 "$SETTINGS_VERSION"
+        fi
     fi
+    FETCH_ACTIVE=0
+    wifi_off
 }
 
 redraw_all_flash() {
@@ -744,10 +775,10 @@ v1_loop() {
         if fetch_url "$DASH_PNG" "$SERVER_URL"; then
             refresh_count=$((refresh_count + 1))
             if [ $((refresh_count % FULL_REFRESH_EVERY)) -eq 0 ]; then
-                show_dashboard_png "$DASH_PNG" 1
+                show_dashboard_png "$DASH_PNG" 1 && report_device v1
                 log "全刷显示"
             else
-                show_dashboard_png "$DASH_PNG" 0
+                show_dashboard_png "$DASH_PNG" 0 && report_device v1
                 log "局部刷新"
             fi
         else

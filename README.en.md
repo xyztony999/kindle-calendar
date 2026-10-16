@@ -213,6 +213,10 @@ Cloud deploys use environment variables instead of `config.yaml`. The yaml file 
 ## Screen and power
 
 - Keep the fetch interval at 15 minutes or more (`INTERVAL=900`). The clock refreshes locally every minute and does not use the network
+
+Admin device status follows contact initiated by the Kindle, normally every 15 minutes; it is not a live probe. Update both the server and `kindle/dash.sh`: the script identifies device requests and confirms the configuration version after asset synchronization and a successful current-page draw. Browsing an API does not mark the device online, and rapid manual refreshes do not shorten its online window. Full-image fallback reports contact without confirming a region layout. Server restarts reset status to unknown until the next device contact.
+
+The layout editor automatically renders the unsaved preview. “Refresh preview” redraws it immediately or retries a failed render; previewing does not save settings or apply them to the Kindle.
 - A full refresh runs at 03:00, and again each time the carousel returns to Today, to clear ghosting
 - Do not leave it plugged in forever; cycle the battery
 - Keep OTA updates blocked so a firmware upgrade does not remove the jailbreak

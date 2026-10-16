@@ -60,7 +60,8 @@
     text-decoration: none;
     letter-spacing: 0.5px;
   }
-  .topbar .mark .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--ink); margin-right: 8px; vertical-align: baseline; }
+  .topbar .mark { display: inline-flex; align-items: center; gap: 8px; }
+  .brand-icon { width: 28px; height: 28px; flex: none; }
   .nav-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .topbar .btn {
     border-radius: 999px;
@@ -287,6 +288,22 @@
   .block .block-remove:hover { color: var(--bad); background: #fdeceb; }
   .def-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
   .field-checks { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 8px 0; font-size: 13px; }
+  .style-options { border: 0; padding: 0; margin: 14px 0; min-width: 0; }
+  .style-options legend { font-size: 13px; color: var(--mid); margin-bottom: 8px; }
+  .style-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .style-option { position: relative; cursor: pointer; }
+  .style-option input { position: absolute; top: 10px; right: 10px; margin: 0; width: 15px; height: 15px; }
+  .style-card { display: flex; flex-direction: column; gap: 8px; height: 100%; padding: 12px 10px; border: 1px solid var(--line); border-radius: 10px; }
+  .style-option input:checked + .style-card { border-color: var(--ink); background: color-mix(in srgb, var(--ink) 7%, var(--card)); box-shadow: inset 0 0 0 1px var(--ink); }
+  .style-option input:focus-visible + .style-card { outline: 2px solid var(--ink); outline-offset: 3px; }
+  .style-sample { display: flex; flex-direction: column; justify-content: center; gap: 5px; height: 56px; padding-right: 15px; color: var(--ink); }
+  .style-sample strong { font-size: 28px; line-height: 1; font-weight: 600; }
+  .sample-line { display: block; width: 65%; height: 3px; background: var(--mid); border-radius: 2px; opacity: 0.5; }
+  .sample-row { display: flex; align-items: center; gap: 10px; }
+  .sample-row .sample-line { width: 30%; }
+  .sample-row b { font-size: 14px; font-weight: 600; }
+  .style-title { font-size: 13px; font-weight: 600; }
+  #preview-note { margin: 0 0 10px; }
   body.editor-open { overflow: hidden; }
   @media (max-width: 900px) {
     .canvas-modal { padding: 0; }
@@ -362,14 +379,14 @@
   /* ── 登录卡：品牌符 + 居中大输入 + 主按钮 ── */
   .login-card { max-width: 400px; margin: 8vh auto 0; padding: 28px 24px 20px; text-align: center; }
   .login-mark {
-    width: 44px; height: 44px;
+    width: 48px; height: 48px;
     margin: 0 auto 14px;
     border-radius: 12px;
-    background: var(--ink);
-    color: var(--card);
+    color: var(--ink);
     display: flex; align-items: center; justify-content: center;
     font-size: 22px; font-weight: 700;
   }
+  .login-mark .brand-icon { width: 48px; height: 48px; }
   .login-card h1 { font-size: 20px; margin-bottom: 4px; }
   .login-card .muted { margin: 0 0 18px; }
   .login-card .field { text-align: left; }
@@ -477,13 +494,17 @@
 </style>
 </head>
 <body>
+{% macro brand_icon() -%}
+<svg class="brand-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><rect width="44" height="50" x="10" y="8" stroke="currentColor" stroke-width="4" rx="8"/><path stroke="currentColor" stroke-linecap="round" stroke-width="4" d="M10 22h44M23 5v8M41 5v8"/><path fill="currentColor" d="M22 33h8v8h-8z"/><path stroke="currentColor" stroke-linecap="round" stroke-width="3" d="M37 33h5M37 41h5M22 49h20"/></svg>
+{%- endmacro %}
 <div class="wrap">
   <nav class="topbar">
-    <a class="mark" href="/"><span class="dot"></span>{{ ui.site_name }}</a>
+    <a class="mark" href="/">{{ brand_icon() }}{{ ui.site_name }}</a>
     <div class="nav-actions">
       <button class="btn icon-btn" id="theme-btn" type="button" title="{{ ui.theme_to_dark }}">☾</button>
       <a class="btn" id="lang-link" href="/admin?lang={{ 'zh' if ui.lang == 'en' else 'en' }}">{{ ui.switch_label }}</a>
       <a class="btn" id="back-home" href="/">{{ ui.back_home }}</a>
+      <button class="btn" id="logout-btn" type="button" hidden>{{ ui.logout }}</button>
     </div>
   </nav>
   <section id="view-disabled" hidden>
@@ -496,7 +517,7 @@
 
   <section id="view-login" hidden>
     <form class="card login-card" id="login-form">
-      <div class="login-mark">历</div>
+      <div class="login-mark">{{ brand_icon() }}</div>
       <h1>{{ ui.title }}</h1>
       <p class="muted">{{ ui.login_prompt }}</p>
       <label class="field">{{ ui.password }}
@@ -513,7 +534,6 @@
         <h1>{{ ui.h1 }}</h1>
         <div class="muted">{{ ui.version }} <span id="version-label">—</span> <span id="dirty-flag" class="dirty" hidden>● {{ ui.unsaved }}</span></div>
       </div>
-      <button class="link" id="logout-btn" type="button">{{ ui.logout }}</button>
     </div>
     <div id="degraded-banner" class="banner" hidden>{{ ui.degraded }}</div>
     <div id="error-summary" class="summary"></div>
@@ -613,8 +633,9 @@
       <div class="canvas-panel canvas-stage-panel">
         <div class="stage-toolbar">
           <p class="muted" id="drop-hint">{{ ui.drop_hint }}</p>
-          <button class="btn" id="draft-preview" type="button">{{ ui.draft_preview }}</button>
+          <button class="btn" id="draft-preview" type="button" aria-describedby="preview-note">{{ ui.draft_preview }}</button>
         </div>
+        <p class="muted" id="preview-note">{{ ui.preview_note }}</p>
         <div class="stage-wrap">
           <img id="draft-img" alt="" hidden>
           <div id="stage"></div>
@@ -627,12 +648,19 @@
         <label class="field">{{ ui.widget_name }}
           <input id="def-name" type="text" maxlength="20">
         </label>
-        <label class="field">{{ ui.style_hero }}
-          <input id="def-hero" type="radio" name="def-style" value="hero" checked>
-        </label>
-        <label class="field">{{ ui.style_rows }}
-          <input id="def-rows" type="radio" name="def-style" value="rows">
-        </label>
+        <fieldset class="style-options">
+          <legend>{{ ui.display_style }}</legend>
+          <div class="style-grid">
+            <label class="style-option">
+              <input id="def-hero" type="radio" name="def-style" value="hero" checked>
+              <span class="style-card"><span class="style-sample" aria-hidden="true"><strong>24°</strong><span class="sample-line"></span></span><span class="style-title">{{ ui.style_hero }}</span></span>
+            </label>
+            <label class="style-option">
+              <input id="def-rows" type="radio" name="def-style" value="rows">
+              <span class="style-card"><span class="style-sample" aria-hidden="true"><span class="sample-row"><span class="sample-line"></span><b>24°</b></span><span class="sample-row"><span class="sample-line"></span><b>60%</b></span><span class="sample-row"><span class="sample-line"></span><b>3.2</b></span></span><span class="style-title">{{ ui.style_rows }}</span></span>
+            </label>
+          </div>
+        </fieldset>
         <div id="def-fields" class="field-checks"></div>
         <button class="btn" id="def-save" type="button">{{ ui.save_widget }}</button>
         <div id="def-list"></div>
@@ -668,6 +696,7 @@
   const $ = (id) => document.getElementById(id);
 
   function showView(name) {
+    $("logout-btn").hidden = name !== "settings";
     ["disabled", "login", "settings"].forEach((view) => {
       $("view-" + view).hidden = view !== name;
     });
@@ -1074,23 +1103,21 @@
   function renderDevice(data) {
     const body = $("device-body");
     body.replaceChildren();
-    if (!data || data.online_state === "unknown") {
-      body.replaceChildren();
-      T.device_unknown.forEach((line) => {
-        const row = document.createElement("div");
-        row.textContent = line;
-        body.appendChild(row);
-      });
-      return;
-    }
+    data = data || {};
     const line1 = document.createElement("div");
-    line1.append(T.online.online + " ", badge(data.online_state, ONLINE));
+    line1.append(T.connection_word + " ", badge(data.online_state || "unknown", ONLINE));
     const seen = document.createElement("div");
-    seen.textContent = T.last_fetch.replace("{when}", relTime(data.last_seen_at));
+    seen.textContent = T.last_contact.replace("{when}", relTime(data.last_seen_at));
     if (data.last_seen_at) seen.title = data.last_seen_at;
+    const fetched = document.createElement("div");
+    fetched.textContent = T.last_fetch.replace("{when}", relTime(data.last_fetch_at));
+    if (data.last_fetch_at) fetched.title = data.last_fetch_at;
+    const applied = document.createElement("div");
+    applied.textContent = T.last_applied.replace("{when}", relTime(data.last_applied_at));
+    if (data.last_applied_at) applied.title = data.last_applied_at;
     const line2 = document.createElement("div");
-    line2.append(T.delivery_word + " ", badge(data.delivery_state, DELIVERY));
-    if (data.delivery_state === "pending") {
+    line2.append(T.delivery_word + " ", badge(data.delivery_state || "unknown", DELIVERY));
+    if (data.delivery_state === "pending" && data.online_state === "online" && data.eta_minutes > 0) {
       line2.append(" " + T.eta.replace("{n}", String(data.eta_minutes || 0)));
     }
     const same = data.delivered_settings_version && data.delivered_settings_version === data.current_settings_version;
@@ -1102,7 +1129,16 @@
     src.className = "muted";
     const ua = (data.last_user_agent || "").slice(0, 40);
     src.textContent = [data.last_ip, ua].filter(Boolean).join(" · ") || "—";
-    body.append(line1, seen, line2, ver, src);
+    const note = document.createElement("p");
+    note.className = "muted";
+    note.textContent = T.device_note;
+    body.append(line1, seen, fetched, applied, line2, ver, src, note);
+    if (T.device_mode[data.mode]) {
+      const mode = document.createElement("div");
+      mode.className = "muted";
+      mode.textContent = T.device_mode[data.mode];
+      body.insertBefore(mode, seen);
+    }
   }
 
   function relTime(iso) {

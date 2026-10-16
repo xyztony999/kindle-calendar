@@ -89,7 +89,7 @@ class ReadingRouteTests(unittest.TestCase):
         env = self.client.get("/api/v1/dashboard.env", headers=HTML)
         page = env.get_data(as_text=True)
         self.assertIn("设备清单", page)
-        self.assertIn("打开本页会计一次拉取", page)
+        self.assertIn("不计入设备通信", page)
         self.assertIn("<details>", page)
         self.assertTrue(page.lstrip().startswith("<!DOCTYPE html>"))
 
@@ -148,7 +148,7 @@ class ReadingRouteTests(unittest.TestCase):
         self.assertEqual(english_raw.get_json()["current"]["description"], "Clear sky")
         self.assertIsNone(english_raw.headers.get("Set-Cookie"))
 
-    def test_env_source_matches_machine_text_and_counts_one_heartbeat(self):
+    def test_env_source_matches_machine_text_without_browser_heartbeat(self):
         calls = []
         real = DashboardService.note_heartbeat
 
@@ -159,7 +159,7 @@ class ReadingRouteTests(unittest.TestCase):
         with patch.object(DashboardService, "note_heartbeat", wrapped):
             raw = self.client.get("/api/v1/dashboard.env")
             page = self.client.get("/api/v1/dashboard.env", headers=HTML)
-        self.assertEqual(len(calls), 2)
+        self.assertEqual(len(calls), 0)
         self.assertIn(str(escape(raw.get_data(as_text=True))), page.get_data(as_text=True))
 
     def test_html_failure_hides_stack_and_skips_heartbeat(self):

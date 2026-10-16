@@ -1,5 +1,24 @@
 ---
 pipeline:
+  - module: admin-feedback
+    title: "管理端五条浏览器反馈：LogoLoom 标志、样式卡、预览语义、设备状态与退出按钮"
+    stages:
+      design:
+        status: complete
+        note: "2026-10-16 增量设计完成，Gate 1 PASS，用户 yes 确认。"
+      code:
+        status: complete
+        note: "2026-10-16 五项反馈已实现；58项测试、编译、shell语法与中英/明暗/窄屏浏览器验证通过。Gate 2 WARN 用户已回复确认接受，本地交付确认完成，Kindle真机验收保留待办。未提交部署。"
+    artifacts:
+      prd:
+        - 02-detailed/prd/prd-admin-feedback.md
+      api:
+        - 02-detailed/api/api-admin-feedback.md
+      interaction:
+        - 02-detailed/interaction/interaction-admin-feedback.md
+      reports:
+        - 05-reports/gate1-admin-feedback.md
+        - 05-reports/gate2-admin-feedback.md
   - module: v2-pages
     title: "v2.1 页面集与显示治理（启动清屏 + 五页面集 + 双导航 + 三月预裁翻月）"
     stages:

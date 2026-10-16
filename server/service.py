@@ -167,8 +167,9 @@ class DashboardService:
         log.info("城市变更后天气已更新")
         return True
 
-    def note_heartbeat(self, ip: str, ua: str) -> None:
-        self.heartbeat.record(ip, ua, self.settings_version(), self.regions_version())
+    def note_heartbeat(self, ip: str, ua: str, interval: int = 900, mode: str = "v2",
+                       *, fetched: bool = True, applied_version: str | None = None) -> None:
+        self.heartbeat.record(ip, ua, interval, mode, fetched=fetched, applied_version=applied_version)
 
     def settings_version(self) -> str:
         with self._lock:

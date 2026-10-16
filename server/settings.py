@@ -485,68 +485,48 @@ class SettingsStore:
             raise
 
 
-@dataclass
-class _Beat:
-    ts: float
-    ip: str | None
-    ua: str | None
-    settings_version: str
-    regions_version: str
-
-
 class HeartbeatLog:
-    """进程内最近两次 env 拉取。重启后状态为 unknown。"""
+    """Latest device communication and confirmed application; reset on restart."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._beats: list[_Beat] = []
+        self._state: dict = {}
 
-    def record(self, ip: str | None, ua: str | None, settings_version_value: str, regions_version: str) -> None:
-        agent = (ua or "").strip()[:80] or None
-        beat = _Beat(time.time(), (ip or "").strip() or None, agent, settings_version_value, regions_version)
+    def record(self, ip: str | None, ua: str | None, interval: int = DEFAULT_INTERVAL_S,
+               mode: str = "v2", *, fetched: bool = False, applied_version: str | None = None) -> None:
+        now = time.time()
         with self._lock:
-            self._beats.append(beat)
-            del self._beats[:-2]
+            self._state.update(ts=now, ip=(ip or "").strip() or None,
+                               ua=(ua or "").strip()[:80] or None, interval=interval, mode=mode)
+            if fetched:
+                self._state["fetch_ts"] = now
+            if applied_version:
+                self._state.update(applied_ts=now, applied_version=applied_version)
 
     def snapshot(self, current_version: str, tz_name: str) -> dict:
         with self._lock:
-            beats = list(self._beats)
-        base = {
-            "online_state": "unknown",
-            "delivery_state": "unknown",
-            "last_seen_at": None,
-            "last_ip": None,
-            "last_user_agent": None,
-            "delivered_settings_version": None,
-            "current_settings_version": current_version,
-            "interval_estimate_s": DEFAULT_INTERVAL_S,
-            "eta_minutes": 0,
-        }
-        if not beats:
-            return base
-        last = beats[-1]
-        if len(beats) >= 2:
-            interval = max(1, int(round(last.ts - beats[-2].ts)))
-        else:
-            interval = DEFAULT_INTERVAL_S
-        age = time.time() - last.ts
-        online = "online" if age < HEARTBEAT_ONLINE_FACTOR * interval else "offline"
-        delivery = "delivered" if last.settings_version == current_version else "pending"
-        eta = math.ceil(max(0.0, last.ts + interval - time.time()) / 60.0)
+            state = dict(self._state)
         try:
-            seen = datetime.fromtimestamp(last.ts, ZoneInfo(tz_name)).isoformat(timespec="seconds")
+            tz = ZoneInfo(tz_name)
         except Exception:
-            seen = datetime.fromtimestamp(last.ts, timezone.utc).isoformat(timespec="seconds")
-        base.update(
-            {
-                "online_state": online,
-                "delivery_state": delivery,
-                "last_seen_at": seen,
-                "last_ip": last.ip,
-                "last_user_agent": last.ua,
-                "delivered_settings_version": last.settings_version,
-                "interval_estimate_s": interval,
-                "eta_minutes": int(eta),
-            }
-        )
-        return base
+            tz = timezone.utc
+        def stamp(key):
+            value = state.get(key)
+            return datetime.fromtimestamp(value, tz).isoformat(timespec="seconds") if value is not None else None
+        interval = state.get("interval", DEFAULT_INTERVAL_S)
+        seen = state.get("ts")
+        applied = state.get("applied_version")
+        online = "unknown" if seen is None else (
+            "online" if time.time() - seen < HEARTBEAT_ONLINE_FACTOR * interval + 60 else "offline")
+        delivery = "unknown" if seen is None or state.get("mode") == "v1" else (
+            "delivered" if applied == current_version else "pending")
+        fetch_ts = state.get("fetch_ts")
+        eta = math.ceil(max(0.0, fetch_ts + interval - time.time()) / 60) if fetch_ts is not None else 0
+        return {
+            "online_state": online, "delivery_state": delivery,
+            "last_seen_at": stamp("ts"), "last_fetch_at": stamp("fetch_ts"),
+            "last_applied_at": stamp("applied_ts"), "mode": state.get("mode"),
+            "last_ip": state.get("ip"), "last_user_agent": state.get("ua"),
+            "delivered_settings_version": applied, "current_settings_version": current_version,
+            "interval_estimate_s": interval, "eta_minutes": int(eta),
+        }

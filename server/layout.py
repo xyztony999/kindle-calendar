@@ -41,6 +41,7 @@ ASSET_RE = re.compile(r"^a[0-9a-f]{8}$")
 CENTER_RE = re.compile(r"^center\.[a-z0-9][a-z0-9-]{0,32}$")
 ASSET_KEY_RE = re.compile(r"^[A-Za-z0-9_./-]{1,200}$")
 STYLES = ("hero", "rows")
+DATA_STYLES = ("hero", "rows", "horizontal", "grid")
 ALIGNS = ("left", "center", "right")
 FORBIDDEN_CENTER_KEYS = {"script", "code", "url", "entry", "callback", "command", "href", "src"}
 
@@ -124,6 +125,42 @@ FIELD_DEFS: tuple[tuple[str, str, str], ...] = (
 )
 FIELD_IDS = {item[0] for item in FIELD_DEFS}
 _FIELD_LABEL = {item[0]: (item[1], item[2]) for item in FIELD_DEFS}
+
+_NUMERIC_FIELDS = {"weather.temperature", "weather.humidity", "weather.wind_speed", "weather.precip_prob", "weather.temp_min", "weather.temp_max", "sun.illumination", "aqi.value"}
+_TIME_FIELDS = {"sun.sunrise", "sun.sunset"}
+_SHORT_FIELDS = {"weather.description", "date.weekday", "date.solar_term", "sun.moon", "aqi.level"}
+FIELD_KINDS = {field: ("number" if field in _NUMERIC_FIELDS else "time" if field in _TIME_FIELDS else "date" if field == "date.month_day" else "short_text" if field in _SHORT_FIELDS else "text") for field in FIELD_IDS}
+
+
+def field_kind(field_id: str) -> str:
+    return FIELD_KINDS.get(field_id, "text")
+
+
+def data_style_catalog(lang: str = "zh") -> list[dict]:
+    compact = ["number", "time", "date", "short_text"]
+    primary = ["number", "time", "date"]
+    labels = {
+        "hero": ("突出首个数据", "首项放大，其余显示名称和数值。", "Large first value", "Enlarge the first value; label the remaining values."),
+        "rows": ("逐行数据列表", "每行显示名称和数值，适合文字与混合内容。", "Labelled rows", "Label each value, including text and mixed content."),
+        "horizontal": ("横向并列", "紧凑数据横向排列，数值在上、名称在下。", "Horizontal values", "Place compact values above their labels in equal columns."),
+        "grid": ("数据网格", "将紧凑数据排列成多列网格。", "Value grid", "Arrange compact values in a grid."),
+    }
+    rules = {"hero": (1, 3, compact, primary), "rows": (1, 6, compact + ["text"], []), "horizontal": (2, 3, compact, []), "grid": (2, 6, compact, [])}
+    result = []
+    for style_id in DATA_STYLES:
+        minimum, maximum, kinds, first = rules[style_id]
+        text = labels[style_id]
+        offset = 2 if lang == "en" else 0
+        result.append({"id": style_id, "label": text[offset], "description": text[offset + 1], "min_fields": minimum, "max_fields": maximum, "allowed_kinds": list(kinds), "first_kinds": list(first)})
+    return result
+
+
+def applicable_data_styles(fields: list[str]) -> dict:
+    """Stable field capabilities, independent of today's values or missing data."""
+    kinds = [field_kind(field) for field in fields]
+    styles = [rule["id"] for rule in data_style_catalog() if rule["min_fields"] <= len(fields) <= rule["max_fields"] and all(kind in rule["allowed_kinds"] for kind in kinds) and (not rule["first_kinds"] or kinds[0] in rule["first_kinds"])]
+    preferred = "hero" if len(fields) == 1 else "horizontal" if len(fields) <= 3 else "grid"
+    return {"styles": styles, "recommended": preferred if preferred in styles else "rows" if "rows" in styles else None}
 
 SYSTEM_LABELS = {
     "header": ("页眉", "Header"),
@@ -269,12 +306,15 @@ def _validate_block(
     asset_ids: set[str],
     def_ids: set[str],
     center_defs: set[str],
+    definitions: dict[str, dict],
 ) -> dict | None:
     prefix = f"pages[{page_index}].layout[{index}]"
     if not isinstance(block, dict):
         details.append(_detail(prefix, "LAYOUT_INVALID", "积木项格式不正确"))
         return None
     widget = block.get("widget")
+    if "style" in block and widget != "custom":
+        details.append(_detail(f"{prefix}.style", "LAYOUT_INVALID", "仅数据积木允许设置外观"))
     if widget not in SYSTEM_WIDGETS and widget not in ("image", "text", "custom"):
         details.append(_detail(f"{prefix}.widget", "LAYOUT_INVALID", "积木类型无效"))
         return None
@@ -308,6 +348,14 @@ def _validate_block(
         def_id = block.get("def")
         if not isinstance(def_id, str) or (def_id not in def_ids and def_id not in center_defs):
             details.append(_detail(f"{prefix}.def", "WIDGET_DEF_INVALID", "数据积木定义不存在或未通过审核"))
+        if "style" in block:
+            chosen = block["style"]
+            definition = definitions.get(def_id) if isinstance(def_id, str) else None
+            fields = definition.get("fields") if definition else None
+            if not isinstance(chosen, str) or chosen not in DATA_STYLES:
+                details.append(_detail(f"{prefix}.style", "LAYOUT_INVALID", "数据积木外观无效"))
+            elif isinstance(fields, list) and all(isinstance(field, str) for field in fields) and chosen not in applicable_data_styles(fields)["styles"]:
+                details.append(_detail(f"{prefix}.style", "LAYOUT_INVALID", "所选外观不适用于这些字段的数量或类型"))
     return {"x": x, "y": y, "w": w, "h": h, "widget": widget}
 
 
@@ -371,7 +419,10 @@ def validate_layout_fields(
         if not 1 <= len(fields) <= limit:
             details.append(_detail(f"{prefix}.fields", "WIDGET_DEF_INVALID", "数据积木字段数量与版式不符"))
 
-    center_defs = {item["id"] for item in center_items if item.get("kind") == "data" and item.get("placeable")}
+    approved_center = [accepted for item in center_items if (accepted := accept_center_item(item)) and accepted.get("kind") == "data" and accepted.get("placeable")]
+    center_defs = {item["id"] for item in approved_center}
+    definitions = {item["id"]: item for item in approved_center}
+    definitions.update({item["id"]: item for item in widget_defs if isinstance(item, dict) and isinstance(item.get("id"), str)})
     if not isinstance(pages, list):
         return
     for page_index, page in enumerate(pages):
@@ -387,7 +438,7 @@ def validate_layout_fields(
         seen_ids: set[str] = set()
         placed: list[dict] = []
         for index, block in enumerate(layout):
-            parsed = _validate_block(block, index, page_index, details, asset_ids, def_ids, center_defs)
+            parsed = _validate_block(block, index, page_index, details, asset_ids, def_ids, center_defs, definitions)
             if not isinstance(block, dict):
                 continue
             block_id = block.get("id")

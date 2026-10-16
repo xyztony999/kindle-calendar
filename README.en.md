@@ -214,9 +214,15 @@ Cloud deploys use environment variables instead of `config.yaml`. The yaml file 
 
 - Keep the fetch interval at 15 minutes or more (`INTERVAL=900`). The clock refreshes locally every minute and does not use the network
 
-Admin device status follows contact initiated by the Kindle, normally every 15 minutes; it is not a live probe. Update both the server and `kindle/dash.sh`: the script identifies device requests and confirms the configuration version after asset synchronization and a successful current-page draw. Browsing an API does not mark the device online, and rapid manual refreshes do not shorten its online window. Full-image fallback reports contact without confirming a region layout. Server restarts reset status to unknown until the next device contact.
+Admin device status follows contact initiated by the Kindle, normally every 15 minutes; it is not a live probe. Update both the server and `kindle/dash.sh`, then stop and restart the calendar. The script identifies device requests and confirms the configuration version after asset synchronization and a successful current-page draw. Reports use a form compatible with older BusyBox wget, without adding duplicate Content-Type headers, and try curl if wget fails. Browsing an API does not mark the device online, and rapid manual refreshes do not shorten its online window. Full-image fallback reports contact without confirming a region layout. Status is stored in `device-status.json` beside settings; the existing data volume preserves it across worker restarts. Missing or corrupt records show unknown; write failures produce a warning.
 
 The layout editor automatically renders the unsaved preview. “Refresh preview” redraws it immediately or retries a failed render; previewing does not save settings or apply them to the Kindle.
+
+“Done” keeps changes in the draft; use the sticky settings toolbar to save them. “Cancel”, Escape, or clicking the backdrop restores the draft from before this editing session. Manage custom blocks in the left “My blocks” menu; deleting a definition affects all pages using it. City suggestions appear while typing and support arrow keys and Enter.
+
+Create a data block by naming it and choosing up to six fields. After placing it, select the block on the canvas to choose a suitable first-value, list, horizontal, or grid layout. Long-text combinations use lists. Each instance has its own appearance, so the same definition can look different on different pages; previews use actual data. “Restore original layout” returns to the definition's default. Existing configurations retain their inherited layout. Exports use schema 3; imports accept schemas 1, 2, and 3. Older servers cannot import schema 3. Rendering remains on the server and requires no additional Kindle protocol update.
+
+See the future [quote-library format](docs/quote-library.md) and [JSON example](docs/quote-library.example.json). This is a reserved contract, not an implemented library-import feature; library files are not full calendar settings.
 - A full refresh runs at 03:00, and again each time the carousel returns to Today, to clear ghosting
 - Do not leave it plugged in forever; cycle the battery
 - Keep OTA updates blocked so a firmware upgrade does not remove the jailbreak

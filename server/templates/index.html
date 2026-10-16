@@ -1,6 +1,8 @@
+{% from "_brand.html" import brand_icon, brand_head %}
 <!DOCTYPE html>
 <html lang="{{ copy.html_lang }}" {% if theme %}data-theme="{{ theme }}"{% endif %}>
 <head>
+{{ brand_head() }}
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ copy.title }}</title>
@@ -42,9 +44,10 @@
     gap: 16px;
     padding: 22px 0 8px;
   }
+  .brand-icon { flex: none; }
   .mark {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 10px;
     text-decoration: none;
   }
@@ -252,6 +255,7 @@
 <body>
   <header class="nav">
     <a class="mark" href="/">
+      {{ brand_icon() }}
       <strong>{{ copy.mark }}</strong>
       <span>v{{ version }}</span>
     </a>

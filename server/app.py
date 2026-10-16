@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import logging
+import json
 import os
 import re
 import secrets
 from datetime import timedelta
 from pathlib import Path
+from urllib.parse import parse_qsl, unquote
 
 import yaml
 from flask import Flask, Response, jsonify, render_template, request
@@ -233,18 +235,60 @@ def create_app() -> Flask:
 
     @app.post("/api/v1/device/heartbeat")
     def device_heartbeat():
-        data = request.get_json(silent=True)
-        if request.headers.get("X-Kindle-Device") != "dash" or not isinstance(data, dict):
-            return jsonify({"ok": False, "error": "invalid device heartbeat"}), 400
+        def reject(code, reason, status=400):
+            log.warning("Device heartbeat rejected: %s (%s)", code, reason)
+            return jsonify({"ok": False, "error": {"code": code, "message": reason}}), status
+
+        if request.headers.get("X-Kindle-Device") != "dash":
+            return reject("DEVICE_MARKER_REQUIRED", "X-Kindle-Device must be dash")
+        if request.content_length is not None and request.content_length > 2048:
+            return reject("HEARTBEAT_TOO_LARGE", "Request body exceeds 2048 bytes", 413)
+        raw = request.stream.read(2049)
+        if len(raw) > 2048:
+            return reject("HEARTBEAT_TOO_LARGE", "Request body exceeds 2048 bytes", 413)
+        if request.mimetype not in ("application/json", "application/x-www-form-urlencoded"):
+            return reject("HEARTBEAT_CONTENT_TYPE", "Use application/json or application/x-www-form-urlencoded")
+
+        def unique_pairs(pairs):
+            result = {}
+            for key, value in pairs:
+                if key in result:
+                    raise ValueError("Duplicate field: " + key)
+                result[key] = value
+            return result
+
+        try:
+            text = raw.decode("utf-8").strip()
+            if text[:3].lower() == "%7b":
+                text = unquote(text, encoding="utf-8", errors="strict")
+            is_json = request.mimetype == "application/json" or text.startswith("{")
+            if is_json:
+                data = json.loads(text, object_pairs_hook=unique_pairs)
+            else:
+                data = unique_pairs(parse_qsl(text, keep_blank_values=True, strict_parsing=True))
+                value = data.get("interval_s", "")
+                if not re.fullmatch(r"[0-9]{1,5}", value):
+                    return reject("HEARTBEAT_INTERVAL", "interval_s must be an integer from 60 to 86400")
+                data["interval_s"] = int(value)
+        except (ValueError, UnicodeError) as exc:
+            return reject("HEARTBEAT_BODY_INVALID", "Malformed payload or duplicate fields")
+        if not isinstance(data, dict) or data.keys() - {"interval_s", "mode", "applied_version"}:
+            return reject("HEARTBEAT_BODY_INVALID", "Expected an object containing only interval_s, mode, applied_version")
         interval = data.get("interval_s")
         mode = data.get("mode")
         version = data.get("applied_version")
-        if (type(interval) is not int or not 60 <= interval <= 86400 or mode not in ("v1", "v2")
-                or (version is not None and (not isinstance(version, str) or len(version) > 128))
-                or (mode == "v1" and version)):
-            return jsonify({"ok": False, "error": "invalid device heartbeat"}), 400
+        if type(interval) is not int or not 60 <= interval <= 86400:
+            return reject("HEARTBEAT_INTERVAL", "interval_s must be an integer from 60 to 86400")
+        if mode not in ("v1", "v2"):
+            return reject("HEARTBEAT_MODE", "mode must be v1 or v2")
+        if version is not None and (not isinstance(version, str) or
+                (version and not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", version))):
+            return reject("HEARTBEAT_VERSION", "applied_version must be empty or use 1-128 letters, digits, dots, underscores or hyphens")
+        if mode == "v1" and version:
+            return reject("HEARTBEAT_VERSION", "v1 cannot confirm a layout version")
         service.note_heartbeat(request.remote_addr or "", request.headers.get("User-Agent", ""),
                                interval, mode, fetched=False, applied_version=version)
+        log.info("Device heartbeat accepted: mode=%s applied_version=%s", mode, version or "unchanged")
         return jsonify({"ok": True})
 
     @app.get("/api/v1/dashboard.env")

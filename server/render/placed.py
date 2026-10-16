@@ -104,6 +104,64 @@ def paint_image(source: Image.Image | None, rect: Rect) -> Image.Image:
     return canvas
 
 
+def _data_lines(draw, text: str, font, width: int) -> list[str]:
+    """Wrap CJK and unbroken identifiers using actual glyph bounds."""
+    lines = []
+    line = ""
+    for char in text:
+        if char == "\n":
+            lines.append(line)
+            line = ""
+            continue
+        left, _, right, _ = draw.textbbox((0, 0), line + char, font=font)
+        if line and right - left > width:
+            lines.append(line)
+            line = char
+        else:
+            line += char
+    lines.append(line)
+    return lines
+
+
+def _data_text(draw, text: str, box: tuple[int, int, int, int], font_path: str,
+               start: int, fill: int = style.INK, align: str = "left", gap: int = 2) -> int:
+    """Fit into a real pixel budget, then ellipsize the last visible line."""
+    x, y, width, height = box
+    if width < 1 or height < 1:
+        return 0
+    original = str(text or "—").replace("\r", "")
+    text = original[:2048]
+    size = max(1, min(start, height))
+    minimum = min(size, 8)
+    while True:
+        font = style.get_font(size, font_path)
+        lines = _data_lines(draw, text, font, width)
+        bounds = [draw.textbbox((0, 0), line or "—", font=font) for line in lines]
+        line_h = max(1, max(bottom - top for _, top, _, bottom in bounds))
+        fits = (len(lines) * line_h + max(0, len(lines) - 1) * gap <= height
+                and all(right - left <= width for left, _, right, _ in bounds))
+        if fits or size <= minimum:
+            break
+        size = max(minimum, size - 2)
+    capacity = max(0, (height + gap) // (line_h + gap))
+    visible = lines[:capacity]
+    truncated = len(visible) < len(lines) or len(original) > len(text)
+    if visible:
+        for index, line in enumerate(visible):
+            suffix = "…" if (index == len(visible) - 1 and truncated) else ""
+            while line and draw.textbbox((0, 0), line + suffix, font=font)[2] - draw.textbbox((0, 0), line + suffix, font=font)[0] > width:
+                line = line[:-1]
+                suffix = "…"
+            rendered = line + suffix
+            left, top, right, bottom = draw.textbbox((0, 0), rendered, font=font)
+            if right - left > width or bottom - top > line_h:
+                continue
+            offset = (width - (right - left)) // 2 if align == "center" else width - (right - left) if align == "right" else 0
+            draw.text((x + offset - left, y - top), rendered, font=font, fill=fill)
+            y += line_h + gap
+    return len(visible) * (line_h + gap)
+
+
 def paint_custom(definition: dict | None, payload: dict, rect: Rect, font_path: str) -> Image.Image:
     image = Image.new("L", (rect.w, rect.h), style.PAPER)
     if not definition:
@@ -113,26 +171,54 @@ def paint_custom(definition: dict | None, payload: dict, rect: Rect, font_path: 
     fields = list(definition.get("fields") or [])
     values = [field_text(payload, field) for field in fields]
     labels = [field_label(field, lang) for field in fields]
-    if definition.get("style") == "hero":
-        hero = values[0] if values else "—"
-        font, lines, size = _fit_font(draw, hero, font_path, rect.w - 8, max(20, int(rect.h * 0.62)), max(20, int(rect.h * 0.42)))
-        y = 4
-        for line in lines:
-            style.draw_text(draw, (4, y), line, font, style.INK)
-            y += size + 2
-        small = style.get_font(max(15, size // 2), font_path)
-        for label, value in zip(labels[1:], values[1:]):
-            style.draw_text(draw, (4, y), f"{label}  {value}", small, style.MID)
-            y += max(18, size // 2 + 4)
+    if not fields:
         return image
-    count = max(1, len(fields))
+    padding = min(4, max(0, (min(rect.w, rect.h) - 1) // 2))
+    width, height = rect.w - 2 * padding, rect.h - 2 * padding
+    appearance = definition.get("style", "rows")
+    count = len(fields)
+    if appearance == "hero":
+        # Keep the legacy first-value emphasis, with a separate footer budget.
+        hero_height = height if count == 1 else max(1, min(int(rect.h * 0.62), height - min(18, height // count) * (count - 1)))
+        used = _data_text(draw, values[0], (padding, padding, width, hero_height), font_path,
+                          max(20, int(rect.h * 0.42)))
+        if count > 1:
+            y = padding + min(hero_height, used)
+            row_height = max(0, (height - (y - padding)) // (count - 1))
+            small = max(15, int(rect.h * 0.42) // 2)
+            for label, value in zip(labels[1:], values[1:]):
+                _data_text(draw, f"{label}  {value}", (padding, y, width, row_height), font_path, small, style.MID)
+                y += row_height
+        return image
+    if appearance in ("horizontal", "grid"):
+        columns = count if appearance == "horizontal" else min(count, 2)
+        rows = (count + columns - 1) // columns
+        for index, (label, value) in enumerate(zip(labels, values)):
+            col, row = index % columns, index // columns
+            x0, x1 = padding + width * col // columns, padding + width * (col + 1) // columns
+            y0, y1 = padding + height * row // rows, padding + height * (row + 1) // rows
+            if appearance == "grid" and x1 - x0 >= 12 and y1 - y0 >= 12:
+                draw.rectangle((x0, y0, x1 - 1, y1 - 1), outline=style.MID)
+                x0, x1, y0, y1 = x0 + 3, x1 - 3, y0 + 3, y1 - 3
+            cell_gap = min(4, max(0, (x1 - x0) // 8))
+            cell_width = x1 - x0 - cell_gap
+            label_height = max(1, (y1 - y0) // 3)
+            value_height = max(0, y1 - y0 - label_height - 2)
+            _data_text(draw, value, (x0, y0, cell_width, value_height), font_path,
+                       min(48, max(18, value_height * 2 // 3)), align="center")
+            _data_text(draw, label, (x0, y1 - label_height, cell_width, label_height), font_path,
+                       min(22, max(10, label_height - 2)), style.MID, align="center")
+        return image
+    # Rows reserve distinct columns so long values cannot collide with labels.
     size = max(15, min(36, rect.h // (count + 1)))
-    font = style.get_font(size, font_path)
-    y = 4
-    for label, value in zip(labels, values):
-        style.draw_text(draw, (4, y), label, font, style.MID)
-        style.draw_text_right(draw, rect.w - 4, y, value, font, style.INK)
-        y += size + 6
+    label_width = max(0, width * 2 // 5)
+    column_gap = min(8, width // 8)
+    for index, (label, value) in enumerate(zip(labels, values)):
+        y0 = padding + height * index // count
+        y1 = padding + height * (index + 1) // count
+        _data_text(draw, label, (padding, y0, label_width, y1 - y0), font_path, size, style.MID)
+        _data_text(draw, value, (padding + label_width + column_gap, y0, width - label_width - column_gap, y1 - y0),
+                   font_path, size, align="right")
     return image
 
 
@@ -169,7 +255,10 @@ def render_placed(page, payload, width, height, font_path, definitions, images) 
         elif widget == "image":
             out[region] = paint_image(images.get(str(block.get("asset") or "")), target)
         elif widget == "custom":
-            out[region] = paint_custom(definitions.get(str(block.get("def") or "")), payload, target, font_path)
+            definition = definitions.get(str(block.get("def") or ""))
+            if definition is not None and block.get("style") in ("hero", "rows", "horizontal", "grid"):
+                definition = {**definition, "style": block["style"]}
+            out[region] = paint_custom(definition, payload, target, font_path)
     return out
 
 

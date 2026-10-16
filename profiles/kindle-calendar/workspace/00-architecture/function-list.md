@@ -1,5 +1,9 @@
 # Kindle 电子翻页台历 功能清单
 
+2026-10-17 adaptive-data-styles已获Gate1确认并实施：创建数据与外观分离；稳定字段分类；hero/rows/horizontal/grid候选筛选及推荐；画布选择/切换/恢复继承；真实预览；跨页实例独立；旧配置继承/schema3迁移与导入保护。本地Gate2 PASS待交付确认。
+
+2026-10-16 admin-refinement 已获Gate1确认并实施：新增页面入口移位；全局操作条吸顶；样式说明与示例；编辑取消与草稿回滚；积木管理菜单；全站Logo/favicon；城市联想键盘/乱序处理；语录库格式预留；设备确认表单/旧编码兼容及心跳持久化。Gate2本地通过，Kindle真机待验收。细则见 prd-admin-refinement.md。
+
 | 属性 | 值 |
 |------|-----|
 | 版本 | v1.6 |

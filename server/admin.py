@@ -17,9 +17,9 @@ import requests
 from flask import Blueprint, Response, jsonify, render_template, request, session
 
 from server.catalog import fetch_center_items
-from server.layout import DESIGN, FIELD_DEFS, SYSTEM_WIDGETS, field_label, system_label
+from server.layout import DESIGN, FIELD_DEFS, SYSTEM_WIDGETS, data_style_catalog, field_kind, field_label, system_label
 from server.locale import LANG_COOKIE, LANG_MAX_AGE, THEME_COOKIE, admin_ui, explicit_lang, translate_message, web_lang, web_theme
-from server.settings import SETTINGS_MAX_BYTES, SettingsError, env_int, limits
+from server.settings import ACCEPTED_SCHEMAS, SETTINGS_MAX_BYTES, SettingsError, env_int, limits
 from server.storage import AssetError
 from server import storage
 
@@ -354,7 +354,7 @@ def create_admin_blueprint(service) -> Blueprint:
             payload = json.loads(raw.decode("utf-8"))
         except Exception:
             return _api_error("SETTINGS_IMPORT_INVALID", "导入文件不是有效的 JSON", 400)
-        if not isinstance(payload, dict) or payload.get("schema_version") not in (1, 2):
+        if not isinstance(payload, dict) or payload.get("schema_version") not in ACCEPTED_SCHEMAS:
             return _api_error("SETTINGS_IMPORT_INVALID", "导入文件的 schema_version 不受支持", 400)
         return save_body(payload)
 
@@ -427,8 +427,8 @@ def create_admin_blueprint(service) -> Blueprint:
             copied = dict(item)
             copied["source"] = "center"
             center.append(copied)
-        fields = [{"id": field_id, "label": field_label(field_id, lang)} for field_id, _zh, _en in FIELD_DEFS]
-        return _api_ok({"system": system, "mine": mine, "center": center, "fields": fields})
+        fields = [{"id": field_id, "label": field_label(field_id, lang), "kind": field_kind(field_id)} for field_id, _zh, _en in FIELD_DEFS]
+        return _api_ok({"system": system, "mine": mine, "center": center, "fields": fields, "data_styles": data_style_catalog(lang)})
 
     @bp.post("/admin/api/assets")
     def upload_asset():

@@ -1,6 +1,8 @@
+{% from "_brand.html" import brand_icon, brand_head %}
 <!DOCTYPE html>
 <html lang="{{ view.html_lang }}" {% if view.theme %}data-theme="{{ view.theme }}"{% endif %}>
 <head>
+{{ brand_head() }}
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ view.title }}</title>
@@ -34,7 +36,11 @@
     padding: 22px 0 8px;
     flex-wrap: wrap;
   }
+  .brand-icon { flex: none; }
   .mark {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
     font-family: "Palatino Linotype", "Songti SC", "Noto Serif SC", serif;
     font-size: 18px;
     text-decoration: none;
@@ -107,7 +113,7 @@
 </head>
 <body>
   <header class="nav">
-    <a class="mark" href="/">{{ view.mark }}</a>
+    <a class="mark" href="/">{{ brand_icon() }}{{ view.mark }}</a>
     <div class="nav-actions">
       <button class="btn" id="theme-btn" type="button" title="{{ view.theme_to_dark }}">☾</button>
       <a class="btn" href="{{ view.switch_href }}">{{ view.switch_label }}</a>

@@ -1,9 +1,11 @@
 <!DOCTYPE html>
+{% from "_brand.html" import brand_icon, brand_head %}
 <html lang="{{ ui.html_lang }}" {% if ui.theme %}data-theme="{{ ui.theme }}"{% endif %}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ ui.title }}</title>
+{{ brand_head() }}
 <style>
   :root {
     --ink: #1c1c1c;
@@ -133,18 +135,20 @@
   .btn.primary { background: var(--ink); color: var(--card); border-color: var(--ink); }
   .btn.danger { color: var(--bad); border-color: #e3b2ad; background: var(--card); }
   .btn:disabled { opacity: 0.55; cursor: default; }
-  .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  @media (max-width: 767px) {
-    .actions {
-      position: sticky;
-      bottom: 0;
-      background: rgba(246, 243, 238, 0.96);
-      background: color-mix(in srgb, var(--paper) 96%, transparent);
-      backdrop-filter: blur(4px);
-      padding: 10px 0 4px;
-      z-index: 3;
-    }
-  }
+  .settings-toolbar { position: sticky; top: 8px; z-index: 4; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.08); padding: 10px 12px; }
+  .settings-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .section-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .section-head h2 { margin: 0; }
+  .editor-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .editor-note { margin: -6px 0 16px; }
+  .style-help { font-size: 12px; color: var(--mid); line-height: 1.5; }
+  .style-sample .sample-row b { white-space: nowrap; }
+  .sample-label { color: var(--mid); font-size: 10px; white-space: nowrap; }
+  .widget-item { display: inline-flex; align-items: stretch; position: relative; max-width: 100%; }
+  .widget-item > .btn { border-radius: 8px 0 0 8px; }
+  .widget-menu > summary { list-style: none; border-radius: 0 8px 8px 0; padding: 8px; border-left: 0; cursor: pointer; }
+  .widget-menu > summary::-webkit-details-marker { display: none; }
+  .widget-menu[open] > .widget-delete { position: absolute; top: 100%; right: 0; z-index: 6; margin-top: 4px; white-space: nowrap; box-shadow: 0 4px 12px rgba(0,0,0,.15); }
   .page-row, .quote-row, .loc-grid {
     display: grid;
     gap: 8px;
@@ -195,6 +199,13 @@
     background: var(--card);
   }
   .canvas-panel h3 { margin-top: 0; }
+  .editor-sidebar { display: grid; gap: 14px; min-width: 0; }
+  #appearance-note { margin-bottom: 8px; }
+  .recommend-tag { display: inline-block; font-size: 11px; font-weight: 500; color: var(--mid); }
+  #stage .block.selected { outline: 2px solid var(--ink); outline-offset: 1px; border-color: var(--ink); }
+  #stage.has-preview .block.selected { outline-color: #1c1c1c; border-color: #1c1c1c; }
+  #stage .block:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .style-option input { z-index: 1; }
   .palette { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
   .palette-title { flex-basis: 100%; font-weight: 700; margin-top: 6px; }
   .palette .btn:not(:disabled) { cursor: grab; }
@@ -397,7 +408,13 @@
   .login-foot a:hover { text-decoration: underline; }
   .dim { opacity: 0.45; }
   .counter { font-size: 12px; color: var(--mid); }
-  .search-line { display: flex; gap: 8px; }
+  .search-line { position: relative; }
+  #geo-q { height: 42px; padding: 8px 10px; }
+  #geo-list { position: absolute; top: 100%; left: 0; right: 0; z-index: 5; }
+  .candidates button.active { background: var(--ink); color: var(--card); }
+  #geo-status { min-height: 22px; margin: 4px 0 8px; }
+  .quote-plan { margin: 12px 0 0; }
+  .quote-plan a { color: inherit; }
   .corner { position: absolute; top: 12px; right: 12px; font-size: 12px; color: var(--warn); }
   /* dark：变量驱动（手动选择或系统跟随，两处共用同一组值） */
   html[data-theme="dark"] {
@@ -494,9 +511,6 @@
 </style>
 </head>
 <body>
-{% macro brand_icon() -%}
-<svg class="brand-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" aria-hidden="true" focusable="false"><rect width="44" height="50" x="10" y="8" stroke="currentColor" stroke-width="4" rx="8"/><path stroke="currentColor" stroke-linecap="round" stroke-width="4" d="M10 22h44M23 5v8M41 5v8"/><path fill="currentColor" d="M22 33h8v8h-8z"/><path stroke="currentColor" stroke-linecap="round" stroke-width="3" d="M37 33h5M37 41h5M22 49h20"/></svg>
-{%- endmacro %}
 <div class="wrap">
   <nav class="topbar">
     <a class="mark" href="/">{{ brand_icon() }}{{ ui.site_name }}</a>
@@ -537,13 +551,24 @@
     </div>
     <div id="degraded-banner" class="banner" hidden>{{ ui.degraded }}</div>
     <div id="error-summary" class="summary"></div>
+    <section class="card settings-toolbar" aria-label="{{ ui.settings_actions }}">
+      <div class="settings-actions">
+        <button class="btn primary" id="save-btn" type="button">{{ ui.save }}</button>
+        <span id="toolbar-status" class="muted" role="status">{{ ui.saved_state }}</span>
+      </div>
+      <div class="settings-actions">
+        <button class="btn" id="import-btn" type="button">{{ ui.import_ }}</button>
+        <a class="btn" id="export-link" href="/admin/api/settings/export">{{ ui.export }}</a>
+        <button class="btn danger" id="reset-btn" type="button">{{ ui.reset }}</button>
+        <input id="import-file" type="file" accept=".json,application/json" hidden>
+      </div>
+    </section>
     <div class="layout">
       <div class="col-main">
         <section class="card" id="card-pages">
-          <h2>{{ ui.pages_h2 }}</h2>
+          <div class="section-head"><h2>{{ ui.pages_h2 }}</h2><button class="btn" id="add-page" type="button">+ {{ ui.add_page }}</button></div>
           <label class="switch"><input id="rotate-enabled" type="checkbox"> {{ ui.rotate }}</label>
           <div id="page-list"></div>
-          <button class="btn" id="add-page" type="button">{{ ui.add_page }}</button>
           <p id="only-today" class="muted" hidden>{{ ui.only_today }}</p>
           <label class="field">{{ ui.suppress }}
             <input id="suppress" type="number" min="0" max="3600" step="1" data-field="rotation.suppress_s">
@@ -553,11 +578,11 @@
           <span id="loc-flag" class="corner" hidden>{{ ui.loc_flag }}</span>
           <h2>{{ ui.city_h2 }}</h2>
           <div class="search-line">
-            <input id="geo-q" type="search" placeholder="{{ ui.geo_ph }}" maxlength="50">
-            <button class="btn" id="geo-btn" type="button">{{ ui.search }}</button>
+            <input id="geo-q" type="search" placeholder="{{ ui.geo_ph }}" maxlength="50" autocomplete="off" role="combobox" aria-label="{{ ui.geo_ph }}" aria-autocomplete="list" aria-controls="geo-list" aria-expanded="false" aria-describedby="geo-help geo-status">
+            <div id="geo-list" role="listbox"></div>
           </div>
-          <div id="geo-status" class="muted"></div>
-          <div id="geo-list"></div>
+          <p id="geo-help" class="muted">{{ ui.geo_help }}</p>
+          <div id="geo-status" class="muted" role="status"></div>
           <div class="loc-grid">
             <label class="field">{{ ui.city_name }}
               <input id="loc-name" type="text" maxlength="20" data-field="location.name">
@@ -585,6 +610,7 @@
         <section class="card" id="card-quote">
           <h2>{{ ui.quote_h2 }}</h2>
           <div class="radios" id="quote-modes"></div>
+          <p class="muted quote-plan">{{ ui.quote_plan }} <a href="{{ url_for('static', filename='docs/quote-library.md') }}" target="_blank" rel="noopener">{{ ui.quote_format }}</a></p>
           <div id="custom-box" hidden>
             <div id="quote-list"></div>
             <button class="btn" id="add-quote" type="button">{{ ui.add_quote }}</button>
@@ -602,15 +628,6 @@
           <p id="preview-hint" class="muted" hidden>{{ ui.preview_hint }}</p>
           <div id="previews" class="previews"></div>
         </section>
-        <section class="card">
-          <div class="actions">
-            <button class="btn primary" id="save-btn" type="button">{{ ui.save }}</button>
-            <button class="btn danger" id="reset-btn" type="button">{{ ui.reset }}</button>
-            <a class="btn" id="export-link" href="/admin/api/settings/export">{{ ui.export }}</a>
-            <button class="btn" id="import-btn" type="button">{{ ui.import_ }}</button>
-            <input id="import-file" type="file" accept=".json,application/json" hidden>
-          </div>
-        </section>
       </div>
     </div>
   </section>
@@ -622,8 +639,9 @@
         <h2 id="canvas-page"></h2>
         <input id="editor-page-name" type="text" maxlength="20" placeholder="{{ ui.page_name_ph }}" hidden>
       </div>
-      <button class="btn primary" id="close-editor" type="button">{{ ui.close_editor }}</button>
+      <div class="editor-actions"><button class="btn" id="cancel-editor" type="button">{{ ui.cancel_editor }}</button><button class="btn primary" id="close-editor" type="button">{{ ui.close_editor }}</button></div>
     </div>
+    <p class="muted editor-note">{{ ui.editor_note }}</p>
     <div class="canvas-tools" id="canvas-tools">
       <div class="canvas-panel">
         <div class="palette" id="palette-system"></div>
@@ -643,27 +661,30 @@
         <p id="clock-warn" class="muted" hidden>{{ ui.clock_overlap }}</p>
         <input id="image-file" type="file" accept="image/png,image/jpeg" hidden>
       </div>
-      <div class="canvas-panel" id="def-editor">
+      <div class="editor-sidebar">
+      <section class="canvas-panel" id="block-appearance" aria-labelledby="appearance-title">
+        <h3 id="appearance-title">{{ ui.block_appearance }}</h3>
+        <p class="muted" id="appearance-note">{{ ui.select_data_block }}</p>
+        <div id="appearance-controls" hidden>
+          <p class="muted" id="appearance-fields"></p>
+          <p class="muted" id="appearance-current" role="status"></p>
+          <fieldset class="style-options">
+            <legend>{{ ui.display_style }}</legend>
+            <div class="style-grid" id="block-styles"></div>
+          </fieldset>
+          <p class="muted" id="appearance-reason"></p>
+          <button class="btn" id="reset-block-style" type="button">{{ ui.restore_block_style }}</button>
+        </div>
+      </section>
+      <section class="canvas-panel" id="def-editor">
         <h3>{{ ui.new_data }}</h3>
         <label class="field">{{ ui.widget_name }}
           <input id="def-name" type="text" maxlength="20">
         </label>
-        <fieldset class="style-options">
-          <legend>{{ ui.display_style }}</legend>
-          <div class="style-grid">
-            <label class="style-option">
-              <input id="def-hero" type="radio" name="def-style" value="hero" checked>
-              <span class="style-card"><span class="style-sample" aria-hidden="true"><strong>24°</strong><span class="sample-line"></span></span><span class="style-title">{{ ui.style_hero }}</span></span>
-            </label>
-            <label class="style-option">
-              <input id="def-rows" type="radio" name="def-style" value="rows">
-              <span class="style-card"><span class="style-sample" aria-hidden="true"><span class="sample-row"><span class="sample-line"></span><b>24°</b></span><span class="sample-row"><span class="sample-line"></span><b>60%</b></span><span class="sample-row"><span class="sample-line"></span><b>3.2</b></span></span><span class="style-title">{{ ui.style_rows }}</span></span>
-            </label>
-          </div>
-        </fieldset>
         <div id="def-fields" class="field-checks"></div>
+        <p id="first-field" class="muted" role="status"></p>
         <button class="btn" id="def-save" type="button">{{ ui.save_widget }}</button>
-        <div id="def-list"></div>
+      </section>
       </div>
     </div>
   </section>
@@ -691,7 +712,15 @@
   let toastTimer = null;
   let catalog = {system: [], mine: [], center: [], fields: []};
   let selectedPageId = "today";
+  let selectedBlockId = null;
   let editingDef = null;
+  let editorSnapshot = null;
+  let editorSession = 0;
+  let editorTrigger = null;
+  let geoSeq = 0;
+  let geoController = null;
+  let geoComposing = false;
+  let geoActive = -1;
 
   const $ = (id) => document.getElementById(id);
 
@@ -727,6 +756,7 @@
   function markDirty() {
     dirty = snapshot(state) !== snapshot(saved);
     $("dirty-flag").hidden = !dirty;
+    $("toolbar-status").textContent = dirty ? T.unsaved : T.saved_state;
     $("preview-hint").hidden = !dirty;
     $("loc-flag").hidden = !locationDirty();
     window.onbeforeunload = dirty ? (() => "") : null;
@@ -754,7 +784,8 @@
       method: method,
       headers: headers,
       body: method === "GET" ? undefined : payload,
-      credentials: "same-origin"
+      credentials: "same-origin",
+      signal: opts.signal
     });
     const kind = resp.headers.get("content-type") || "";
     const data = kind.indexOf("json") >= 0 ? await resp.json() : null;
@@ -835,6 +866,7 @@
       const row = document.createElement("div");
       row.className = "page-row" + ((!page.enabled || !rotateOn) ? " dim" : "") + (page.page_id === selectedPageId ? " on" : "");
       row.dataset.field = "pages[" + index + "]";
+      row.dataset.pageId = page.page_id;
       row.draggable = page.page_id !== "today";
       const handle = document.createElement("span");
       handle.className = "handle";
@@ -1349,8 +1381,14 @@
     return state.pages.find((page) => page.page_id === selectedPageId) || state.pages[0];
   }
 
-  function openEditor(pageId) {
+  function openEditor(pageId, before) {
+    editorSnapshot = {state: before || JSON.parse(JSON.stringify(state)), selectedPageId};
+    editorTrigger = document.activeElement;
+    editorSession += 1;
     selectedPageId = pageId;
+    selectedBlockId = null;
+    $("def-name").value = "";
+    $("def-fields").querySelectorAll("input").forEach((input) => { input.checked = false; });
     renderPages();
     renderCanvas();
     clearPreview();
@@ -1360,11 +1398,27 @@
     loadPreview();
   }
 
-  function closeEditor() {
+  function closeEditor(accept = true) {
+    const focusPageId = selectedPageId;
+    if (!accept && editorSnapshot) {
+      state = editorSnapshot.state;
+      selectedPageId = editorSnapshot.selectedPageId;
+    }
+    editorSnapshot = null;
+    selectedBlockId = null;
+    editorSession += 1;
     $("canvas-modal").hidden = true;
     document.body.classList.remove("editor-open");
     clearPreview();
     renderPages();
+    renderPreviews();
+    if (state && saved) markDirty();
+    if (editorTrigger && editorTrigger.isConnected) editorTrigger.focus();
+    else {
+      const row = Array.from($("page-list").children).find((item) => item.dataset.pageId === focusPageId);
+      const target = row ? row.querySelector("button") : $("add-page");
+      if (target) target.focus();
+    }
   }
 
   function hexId(prefix) {
@@ -1404,6 +1458,109 @@
     renderCanvas();
   }
 
+  function dataDefinition(id) {
+    return (state.widget_defs || []).find((item) => item.id === id)
+      || (catalog.center || []).find((item) => item.id === id && item.placeable);
+  }
+
+  function styleChoices(fields) {
+    const values = Array.isArray(fields) ? fields : [];
+    const kinds = values.map((id) => {
+      const field = (catalog.fields || []).find((item) => item.id === id);
+      return field ? field.kind : "text";
+    });
+    const styles = (catalog.data_styles || []).filter((item) =>
+      values.length >= item.min_fields && values.length <= item.max_fields
+      && kinds.every((kind) => item.allowed_kinds.includes(kind))
+      && (!item.first_kinds || !item.first_kinds.length || item.first_kinds.includes(kinds[0])));
+    const ids = styles.map((item) => item.id);
+    let recommended = "rows";
+    if (values.length === 1 && ids.includes("hero")) recommended = "hero";
+    else if (values.length <= 3 && ids.includes("horizontal")) recommended = "horizontal";
+    else if (values.length >= 4 && ids.includes("grid")) recommended = "grid";
+    return {styles, recommended};
+  }
+
+  function selectedBlock() {
+    const page = selectedPage();
+    return page && (page.layout || []).find((item) => item.id === selectedBlockId);
+  }
+
+  function selectBlock(id) {
+    selectedBlockId = id;
+    $("stage").querySelectorAll(".block").forEach((el) => {
+      const on = el.dataset.blockId === id;
+      el.classList.toggle("selected", on);
+      el.setAttribute("aria-current", String(on));
+    });
+    renderBlockAppearance();
+  }
+
+  function renderBlockAppearance() {
+    const block = selectedBlock();
+    const definition = block && block.widget === "custom" && dataDefinition(block.def);
+    $("appearance-controls").hidden = !definition;
+    $("appearance-note").textContent = definition ? T.appearance_scope.replace("{name}", definition.name) : T.select_data_block;
+    const options = $("block-styles");
+    options.replaceChildren();
+    if (!definition) return;
+    const fields = definition.fields || [];
+    const choices = styleChoices(fields);
+    const effective = block.style || definition.style || "rows";
+    const isInherited = !Object.prototype.hasOwnProperty.call(block, "style");
+    const actual = (catalog.data_styles || []).find((item) => item.id === effective);
+    $("appearance-fields").textContent = fields.map((id) => {
+      const field = (catalog.fields || []).find((item) => item.id === id);
+      return field ? field.label : id;
+    }).join(" · ");
+    const label = actual ? actual.label : effective;
+    $("appearance-current").textContent = (isInherited ? T.inherited_style : T.current_style).replace("{name}", label);
+    const legacy = isInherited && !choices.styles.some((item) => item.id === effective);
+    $("appearance-reason").textContent = legacy ? T.legacy_style : (choices.styles.length === 1 ? T.text_style_reason : T.style_preview_help);
+    $("reset-block-style").hidden = isInherited;
+    choices.styles.forEach((item) => {
+      const option = document.createElement("label");
+      option.className = "style-option";
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = "block-style";
+      input.id = "block-style-" + item.id;
+      input.value = item.id;
+      input.checked = effective === item.id;
+      const card = document.createElement("span");
+      card.className = "style-card";
+      const title = document.createElement("span");
+      title.className = "style-title";
+      title.style.paddingRight = "16px";
+      title.textContent = item.label;
+      const description = document.createElement("span");
+      description.className = "style-help";
+      description.textContent = item.description;
+      card.append(title, description);
+      if (item.id === choices.recommended) {
+        const badge = document.createElement("span");
+        badge.className = "recommend-tag";
+        badge.textContent = T.recommended;
+        card.appendChild(badge);
+      }
+      input.addEventListener("change", () => {
+        block.style = item.id;
+        markDirty();
+        renderBlockAppearance();
+        $(input.id).focus();
+      });
+      option.append(input, card);
+      options.appendChild(option);
+    });
+  }
+  $("reset-block-style").addEventListener("click", () => {
+    const block = selectedBlock();
+    if (!block || block.widget !== "custom") return;
+    delete block.style;
+    markDirty();
+    renderBlockAppearance();
+  });
+
   function renderCanvas() {
     if (!state) return;
     const page = selectedPage();
@@ -1419,6 +1576,17 @@
     (page.layout || []).forEach((block) => {
       const el = document.createElement("div");
       el.className = "block" + (block.widget === "clock" && clockBad(page.layout) ? " bad" : "");
+      el.dataset.blockId = block.id;
+      el.tabIndex = 0;
+      el.setAttribute("role", "group");
+      el.setAttribute("aria-label", blockLabel(block));
+      el.setAttribute("aria-current", String(block.id === selectedBlockId));
+      el.classList.toggle("selected", block.id === selectedBlockId);
+      el.addEventListener("keydown", (event) => {
+        if (event.target !== el || (event.key !== "Enter" && event.key !== " ")) return;
+        event.preventDefault();
+        selectBlock(block.id);
+      });
       el.style.left = (block.x / 758 * 100) + "%";
       el.style.top = (block.y / 1024 * 100) + "%";
       el.style.width = (block.w / 758 * 100) + "%";
@@ -1436,6 +1604,7 @@
         event.stopPropagation();
         const current = selectedPage();
         current.layout = (current.layout || []).filter((item) => item !== block && item.id !== block.id);
+        if (selectedBlockId === block.id) selectedBlockId = null;
         markDirty();
         renderCanvas();
       }
@@ -1449,6 +1618,7 @@
     });
     renderPalette(page);
     renderDefEditor();
+    renderBlockAppearance();
     if (!$("draft-img").hidden) $("stage").classList.add("has-preview");
   }
 
@@ -1469,6 +1639,7 @@
     }
     el.addEventListener("pointerdown", (event) => {
       if (event.target === handle || event.target.closest(".block-remove")) return;
+      selectBlock(block.id);
       event.preventDefault();
       const start = point(event);
       const origin = {x: block.x, y: block.y};
@@ -1492,6 +1663,7 @@
     handle.addEventListener("pointerdown", (event) => {
       event.preventDefault();
       event.stopPropagation();
+      selectBlock(block.id);
       const start = point(event);
       const origin = {w: block.w, h: block.h};
       function move(ev) {
@@ -1539,7 +1711,12 @@
     if (!at && clock && overlaps({x: x, y: y, w: block.w, h: block.h}, clock)) {
       y = Math.min(1024 - block.h, clock.y + clock.h + 8);
     }
+    if (block.widget === "custom" && !block.style) {
+      const definition = dataDefinition(block.def);
+      if (definition) block.style = styleChoices(definition.fields).recommended;
+    }
     page.layout.push(Object.assign({x: x, y: y, z: z}, block));
+    selectedBlockId = block.id;
     markDirty();
     renderCanvas();
   }
@@ -1695,7 +1872,29 @@
       btn.className = "btn";
       btn.textContent = item.name;
       bindPaletteChip(btn, {widget: "custom", def: item.id, w: 280, h: 160}, false);
-      mine.appendChild(btn);
+      const entry = document.createElement("div");
+      entry.className = "widget-item";
+      const menu = document.createElement("details");
+      menu.className = "widget-menu";
+      const more = document.createElement("summary");
+      more.className = "btn";
+      more.textContent = "⋯";
+      more.setAttribute("aria-label", T.manage_widget.replace("{name}", item.name));
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "btn danger widget-delete";
+      del.textContent = T.delete_widget;
+      del.addEventListener("click", () => {
+        const count = state.pages.filter((p) => (p.layout || []).some((block) => block.def === item.id)).length;
+        if (!window.confirm(T.delete_widget_confirm.replace("{name}", item.name).replace("{n}", String(count)))) return;
+        state.widget_defs = state.widget_defs.filter((def) => def.id !== item.id);
+        state.pages.forEach((p) => { p.layout = (p.layout || []).filter((block) => block.def !== item.id); });
+        markDirty();
+        renderCanvas();
+      });
+      menu.append(more, del);
+      entry.append(btn, menu);
+      mine.appendChild(entry);
     });
     (state.assets || []).forEach((asset) => {
       const btn = document.createElement("button");
@@ -1735,29 +1934,15 @@
       });
       box.dataset.ready = "1";
     }
-    const list = $("def-list");
-    list.replaceChildren();
-    (state.widget_defs || []).forEach((item) => {
-      const row = document.createElement("div");
-      row.className = "def-row";
-      const name = document.createElement("span");
-      name.textContent = item.name;
-      const del = document.createElement("button");
-      del.type = "button";
-      del.className = "btn";
-      del.textContent = T.delete_widget;
-      del.addEventListener("click", () => {
-        state.widget_defs = state.widget_defs.filter((def) => def.id !== item.id);
-        state.pages.forEach((page) => {
-          page.layout = (page.layout || []).filter((block) => block.def !== item.id);
-        });
-        markDirty();
-        renderCanvas();
-      });
-      row.append(name, del);
-      list.appendChild(row);
-    });
+    updateFieldHint();
   }
+
+  function updateFieldHint() {
+    const first = $("def-fields").querySelector("input:checked");
+    const field = first && (catalog.fields || []).find((item) => item.id === first.value);
+    $("first-field").textContent = field ? T.first_field.replace("{name}", field.label) : T.field_order;
+  }
+  $("def-fields").addEventListener("change", updateFieldHint);
 
   $("add-page").addEventListener("click", () => {
     if (!state || state.pages.length >= (limits.max_pages || 12)) {
@@ -1765,14 +1950,15 @@
       return;
     }
     const page = {page_id: hexId("c"), name: T.add_page, enabled: true, dwell_s: 30, layout: []};
+    const before = JSON.parse(JSON.stringify(state));
     state.pages.push(page);
-    selectedPageId = page.page_id;
     renderPages();
     markDirty();
-    openEditor(page.page_id);
+    openEditor(page.page_id, before);
   });
 
-  $("close-editor").addEventListener("click", closeEditor);
+  $("close-editor").addEventListener("click", () => closeEditor(true));
+  $("cancel-editor").addEventListener("click", () => closeEditor(false));
   $("editor-page-name").addEventListener("input", () => {
     const page = selectedPage();
     if (!page || String(page.page_id).charAt(0) !== "c") return;
@@ -1781,23 +1967,21 @@
     markDirty();
   });
   $("canvas-modal").addEventListener("click", (event) => {
-    if (event.target === $("canvas-modal")) closeEditor();
+    if (event.target === $("canvas-modal")) closeEditor(false);
   });
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && !$("canvas-modal").hidden) closeEditor();
+    if (event.key === "Escape" && !$("canvas-modal").hidden) closeEditor(false);
   });
 
   $("def-save").addEventListener("click", () => {
     const name = $("def-name").value.trim();
-    const style = $("def-rows").checked ? "rows" : "hero";
     const fields = Array.from($("def-fields").querySelectorAll("input:checked")).map((input) => input.value);
-    const max = style === "hero" ? 3 : 6;
-    if (!name || fields.length < 1 || fields.length > max) {
+    if (!name || fields.length < 1 || fields.length > 6) {
       toast(T.save_failed, true);
       return;
     }
     if ((state.widget_defs || []).length >= (limits.max_defs || 12)) return;
-    state.widget_defs.push({id: hexId("w"), name: name, style: style, fields: fields});
+    state.widget_defs.push({id: hexId("w"), name: name, style: "rows", fields: fields});
     $("def-name").value = "";
     markDirty();
     renderCanvas();
@@ -1809,13 +1993,15 @@
     if (!file) return;
     const body = new FormData();
     body.append("file", file);
+    const session = editorSession;
     try {
       const data = await api("POST", "/admin/api/assets", body, {form: true});
+      if (session !== editorSession || $("canvas-modal").hidden) return;
       state.assets = state.assets || [];
       state.assets.push(data.data.asset);
       place({widget: "image", id: hexId("b"), asset: data.data.asset.id, w: 280, h: 180});
     } catch (err) {
-      if (!err.handled) toast((err.data && err.data.error && err.data.error.message) || T.oss_missing, true);
+      if (session === editorSession && !err.handled) toast((err.data && err.data.error && err.data.error.message) || T.oss_missing, true);
     }
   });
 
@@ -1826,6 +2012,7 @@
   function clearPreview() {
     clearTimeout(previewTimer);
     previewSeq += 1;
+    $("draft-preview").disabled = false;
     const img = $("draft-img");
     img.hidden = true;
     img.removeAttribute("src");
@@ -1945,22 +2132,43 @@
     }
   });
 
+  function clearGeo() {
+    $("geo-list").replaceChildren();
+    $("geo-q").setAttribute("aria-expanded", "false");
+    $("geo-q").removeAttribute("aria-activedescendant");
+    geoActive = -1;
+  }
+
+  function stopGeo() {
+    clearTimeout(geoTimer);
+    geoSeq += 1;
+    if (geoController) geoController.abort();
+    clearGeo();
+  }
+
   async function runGeocode() {
     const q = $("geo-q").value.trim();
-    $("geo-list").replaceChildren();
+    stopGeo();
+    const seq = geoSeq;
     if (!q || q.length > 50) {
       $("geo-status").textContent = q ? T.query_len : "";
       return;
     }
     $("geo-status").textContent = T.searching;
+    geoController = new AbortController();
     try {
-      const data = await api("GET", "/admin/api/geocode?q=" + encodeURIComponent(q));
+      const data = await api("GET", "/admin/api/geocode?q=" + encodeURIComponent(q), null, {signal: geoController.signal});
+      if (seq !== geoSeq || q !== $("geo-q").value.trim()) return;
       $("geo-status").textContent = "";
       const list = document.createElement("div");
       list.className = "candidates";
-      (data.data.candidates || []).forEach((item) => {
+      (data.data.candidates || []).forEach((item, index) => {
         const btn = document.createElement("button");
         btn.type = "button";
+        btn.id = "geo-option-" + index;
+        btn.setAttribute("role", "option");
+        btn.setAttribute("aria-selected", "false");
+        btn.addEventListener("mousedown", (event) => event.preventDefault());
         btn.textContent = [item.name, item.admin1, item.country].filter(Boolean).join(" · ")
           + " ／ " + item.latitude + ", " + item.longitude + " ／ " + item.timezone;
         btn.addEventListener("click", () => {
@@ -1969,34 +2177,66 @@
           state.location.longitude = item.longitude;
           state.location.timezone = item.timezone || state.location.timezone;
           fillLocation();
-          $("geo-list").replaceChildren();
+          $("geo-q").value = item.name || "";
+          stopGeo();
+          $("geo-status").textContent = "";
           markDirty();
         });
         list.appendChild(btn);
       });
       if (!(data.data.candidates || []).length) $("geo-status").textContent = T.no_city;
-      else $("geo-list").appendChild(list);
+      else {
+        $("geo-list").appendChild(list);
+        $("geo-q").setAttribute("aria-expanded", "true");
+      }
     } catch (err) {
+      if (seq !== geoSeq || err.name === "AbortError") return;
       if (err.handled) return;
       const body = err.data && err.data.error;
       $("geo-status").textContent = (body && body.message) || T.geo_failed;
     }
   }
 
-  $("geo-q").addEventListener("input", () => {
-    clearTimeout(geoTimer);
+  function scheduleGeo() {
+    stopGeo();
+    $("geo-status").textContent = "";
+    if (geoComposing) return;
     geoTimer = setTimeout(runGeocode, 400);
+  }
+  $("geo-q").addEventListener("input", scheduleGeo);
+  $("geo-q").addEventListener("compositionstart", () => {
+    geoComposing = true;
+    stopGeo();
   });
+  $("geo-q").addEventListener("compositionend", () => { geoComposing = false; scheduleGeo(); });
   $("geo-q").addEventListener("keydown", (event) => {
+    if (geoComposing || event.isComposing) return;
+    const options = Array.from($("geo-list").querySelectorAll("button"));
+    if (event.key === "Escape") {
+      event.preventDefault();
+      stopGeo();
+      $("geo-status").textContent = "";
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (!options.length) { runGeocode(); return; }
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      geoActive = (geoActive + step + options.length) % options.length;
+      options.forEach((button, index) => {
+        button.classList.toggle("active", index === geoActive);
+        button.setAttribute("aria-selected", String(index === geoActive));
+      });
+      $("geo-q").setAttribute("aria-activedescendant", options[geoActive].id);
+      options[geoActive].scrollIntoView({block: "nearest"});
+    }
     if (event.key === "Enter") {
       event.preventDefault();
-      clearTimeout(geoTimer);
-      runGeocode();
+      if (geoActive >= 0 && options[geoActive]) options[geoActive].click();
+      else runGeocode();
     }
   });
-  $("geo-btn").addEventListener("click", () => {
-    clearTimeout(geoTimer);
-    runGeocode();
+  $("geo-q").addEventListener("blur", stopGeo);
+  document.addEventListener("pointerdown", (event) => {
+    if (!event.target.closest(".search-line")) stopGeo();
   });
 
   $("lightbox").addEventListener("click", () => { $("lightbox").hidden = true; });

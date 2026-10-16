@@ -97,13 +97,30 @@ report_device() {
     report_base="${API_URL:-$SERVER_URL}"
     report_base=$(printf '%s' "$report_base" | sed 's#^\(https\{0,1\}://[^/]*\).*#\1#')
     report_url="$report_base/api/v1/device/heartbeat"
-    report_body=$(printf '{"interval_s":%s,"mode":"%s","applied_version":"%s"}' "$INTERVAL" "$report_mode" "$report_version")
+    report_body="interval_s=$INTERVAL&mode=$report_mode&applied_version=$report_version"
+    report_ok=0
     if command -v wget >/dev/null 2>&1; then
-        wget -q -T 10 --header="X-Kindle-Device: dash" --header="Content-Type: application/json" \
-            --post-data="$report_body" -O /dev/null "$report_url" || log "device report failed"
-    elif command -v curl >/dev/null 2>&1; then
-        curl -fsS --connect-timeout 10 --max-time 15 -H "X-Kindle-Device: dash" \
-            -H "Content-Type: application/json" -d "$report_body" -o /dev/null "$report_url" || log "device report failed"
+        # BusyBox adds the form Content-Type itself. A manual header can produce
+        # duplicate Content-Type headers, rejected by reverse proxies.
+        if report_error=$(wget -T 10 --header="X-Kindle-Device: dash" \
+            --post-data="$report_body" -O /dev/null "$report_url" 2>&1); then
+            report_ok=1
+        else
+            log "device report wget failed: $report_error"
+        fi
+    fi
+    if [ "$report_ok" = "0" ] && command -v curl >/dev/null 2>&1; then
+        if report_error=$(curl -fsS --connect-timeout 10 --max-time 15 -H "X-Kindle-Device: dash" \
+            -H "Content-Type: application/x-www-form-urlencoded" -d "$report_body" -o /dev/null "$report_url" 2>&1); then
+            report_ok=1
+        else
+            log "device report curl failed: $report_error"
+        fi
+    fi
+    if [ "$report_ok" = "1" ]; then
+        log "device report accepted: mode=$report_mode version=${report_version:-unchanged}"
+    else
+        log "device report failed; keeping previous application confirmation"
     fi
     return 0
 }
@@ -368,16 +385,19 @@ do_fetch() {
             eval regions=\"\$R_${upper}_REGIONS\"
             for r in $regions; do
             if [ "$r" = "TITLE" ] || [ "$r" = "GRID" ]; then
-                    sync_region_asset "${upper}_${r}_PREV" || fetch_assets_ok=0
-                    sync_region_asset "${upper}_${r}_CUR" || fetch_assets_ok=0
-                    sync_region_asset "${upper}_${r}_NEXT" || fetch_assets_ok=0
+                    sync_region_asset "${upper}_${r}_PREV" || { fetch_assets_ok=0; log "asset download failed: ${upper}_${r}_PREV"; }
+                    sync_region_asset "${upper}_${r}_CUR" || { fetch_assets_ok=0; log "asset download failed: ${upper}_${r}_CUR"; }
+                    sync_region_asset "${upper}_${r}_NEXT" || { fetch_assets_ok=0; log "asset download failed: ${upper}_${r}_NEXT"; }
                 else
-                    sync_region_asset "${upper}_${r}" || fetch_assets_ok=0
+                    sync_region_asset "${upper}_${r}" || { fetch_assets_ok=0; log "asset download failed: ${upper}_${r}"; }
                 fi
             done
         done
         apply_clock
-        [ "$CLOCK_ENABLED" = "0" ] || sync_glyphs || fetch_assets_ok=0
+        if [ "$CLOCK_ENABLED" != "0" ] && ! sync_glyphs; then
+            fetch_assets_ok=0
+            log "clock glyph download failed"
+        fi
         [ "$fetch_assets_ok" = "1" ] || log "asset synchronization incomplete; keeping previous application confirmation"
         ensure_cur_page
     else
@@ -388,6 +408,8 @@ do_fetch() {
         if [ "$ENV_OK" = "1" ] && [ "$fetch_assets_ok" = "1" ]; then
             report_device v2 "$SETTINGS_VERSION"
         fi
+    else
+        log "display failed: page=$CUR_PAGE; application not confirmed"
     fi
     FETCH_ACTIVE=0
     wifi_off
@@ -775,11 +797,19 @@ v1_loop() {
         if fetch_url "$DASH_PNG" "$SERVER_URL"; then
             refresh_count=$((refresh_count + 1))
             if [ $((refresh_count % FULL_REFRESH_EVERY)) -eq 0 ]; then
-                show_dashboard_png "$DASH_PNG" 1 && report_device v1
-                log "全刷显示"
+                if show_dashboard_png "$DASH_PNG" 1; then
+                    report_device v1
+                    log "full display completed"
+                else
+                    log "v1 full display failed; application not confirmed"
+                fi
             else
-                show_dashboard_png "$DASH_PNG" 0 && report_device v1
-                log "局部刷新"
+                if show_dashboard_png "$DASH_PNG" 0; then
+                    report_device v1
+                    log "partial display completed"
+                else
+                    log "v1 partial display failed; application not confirmed"
+                fi
             fi
         else
             log "拉取失败"

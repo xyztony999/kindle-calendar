@@ -30,6 +30,12 @@
 |--------|------|------|--------|
 | `ui_theme` | light / dark | 使用者点过明暗按钮之后记住的外观。只有这两个值会写入 Cookie `kc_theme`。没有这枚 Cookie，或值不是这两个，页面跟随系统，不另设第三态 | api-web-chrome.md 3.4 / interaction-web-chrome.md |
 
+## §5 adaptive-data-styles（数据积木外观，2026-10-17设计）
+
+data_style code+label：hero=突出首项，rows=逐行列表，horizontal=横向指标，grid=网格卡片。适用规则见api-adaptive-data-styles.md，不用于系统widget类型枚举。历史定义默认仍hero/rows；新覆盖使用四值。
+
+field_kind code+label：number=数字，time=时间，date=日期，short_text=短分类，text=文本。紧凑类别为前四项；缺失值不改变类别。引用：catalog与样式适用校验。
+
 ## 更新记录
 
 | 版本 | 日期 | 更新说明 |

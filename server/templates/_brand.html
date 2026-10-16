@@ -1,0 +1,9 @@
+{% macro brand_icon() -%}
+<svg class="brand-icon" width="28" height="28" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none"><rect x="10" y="8" width="44" height="50" rx="8" stroke="currentColor" stroke-width="4"/><path d="M10 22h44M23 5v8M41 5v8" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><path d="M22 33h8v8h-8z" fill="currentColor"/><path d="M37 33h5M37 41h5M22 49h20" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>
+{%- endmacro %}
+
+{% macro brand_head() -%}
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/static/brand/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/brand/apple-touch-icon.png" sizes="180x180">
+{%- endmacro %}

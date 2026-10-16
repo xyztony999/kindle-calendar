@@ -12,8 +12,8 @@ from unittest.mock import patch
 
 from PIL import Image
 
-from server.layout import accept_center_item, default_layout
-from server.settings import defaults_from_config, validate
+from server.layout import FIELD_IDS, accept_center_item, applicable_data_styles, default_layout, field_kind
+from server.settings import defaults_from_config, normalize, settings_version, validate
 from server.weather import CurrentWeather, DailyForecast, HourlyPoint, WeatherData
 
 PASSWORD = "test-only-not-a-secret"
@@ -53,7 +53,7 @@ class LayoutUnitTests(unittest.TestCase):
         from server.settings import normalize
 
         out = normalize(raw)
-        self.assertEqual(out["schema_version"], 2)
+        self.assertEqual(out["schema_version"], 3)
         self.assertEqual(out["location"]["name"], "杭州")
         self.assertEqual(out["pages"][1]["enabled"], False)
         self.assertEqual(out["pages"][0]["layout"], default_layout("today"))
@@ -78,6 +78,59 @@ class LayoutUnitTests(unittest.TestCase):
         self.assertIsNone(accept_center_item({"id": "center.ok", "kind": "data", "review": "pending", "name": "等", "style": "rows", "fields": ["weather.temperature"]}))
         item = accept_center_item({"id": "center.ok", "kind": "data", "review": "approved", "name": "温度", "style": "hero", "fields": ["weather.temperature"]})
         self.assertEqual(item["placeable"], True)
+
+    def test_field_capabilities_and_style_boundaries(self):
+        self.assertEqual(len(FIELD_IDS), 25)
+        self.assertEqual({field_kind(field) for field in FIELD_IDS}, {"number", "time", "date", "short_text", "text"})
+        self.assertEqual(field_kind("unknown"), "text")
+        compact = ["weather.temperature", "sun.sunrise", "date.month_day", "weather.humidity", "aqi.value", "sun.sunset"]
+        for count, recommended in ((1, "hero"), (2, "horizontal"), (3, "horizontal"), (4, "grid"), (6, "grid")):
+            self.assertEqual(applicable_data_styles(compact[:count])["recommended"], recommended)
+        for style_id, allowed_counts in (("hero", {1, 2, 3}), ("rows", {1, 2, 3, 4, 5, 6}), ("horizontal", {2, 3}), ("grid", {2, 3, 4, 5, 6})):
+            for count in range(7):
+                with self.subTest(style=style_id, count=count):
+                    self.assertEqual(style_id in applicable_data_styles(compact[:count])["styles"], count in allowed_counts)
+        self.assertEqual(applicable_data_styles(["quote.text", "weather.temperature"]), {"styles": ["rows"], "recommended": "rows"})
+        self.assertNotIn("hero", applicable_data_styles(["weather.description"])["styles"])
+        self.assertEqual(applicable_data_styles([])["styles"], [])
+        self.assertEqual(applicable_data_styles(compact + ["weather.wind_speed"])["styles"], [])
+
+    def test_instance_override_validation_and_legacy_inheritance(self):
+        raw = defaults_from_config(DEPLOY)
+        raw["schema_version"] = 2
+        raw["widget_defs"] = [{"id": "w1234abcd", "name": "语录", "style": "hero", "fields": ["quote.text"]}]
+        block = {"widget": "custom", "id": "b1234abcd", "def": "w1234abcd", "x": 56, "y": 160, "w": 300, "h": 200, "z": 1}
+        raw["pages"][0]["layout"] = [block]
+        self.assertEqual(validate(raw), [])
+        migrated = normalize(raw)
+        self.assertEqual(migrated["schema_version"], 3)
+        self.assertNotIn("style", migrated["pages"][0]["layout"][0])
+        block["style"] = "hero"
+        errors = validate(raw)
+        self.assertTrue(any(error["field"] == "pages[0].layout[0].style" and error["code"] == "LAYOUT_INVALID" for error in errors))
+        block["style"] = "rows"
+        self.assertEqual(validate(raw), [])
+        self.assertEqual(normalize(raw)["pages"][0]["layout"][0]["style"], "rows")
+        for invalid in ("unknown", None, ["rows"]):
+            block["style"] = invalid
+            self.assertTrue(any(error["field"].endswith(".style") for error in validate(raw)))
+        block.pop("style")
+        block["def"] = "center.pending"
+        with patch("server.catalog.approved_data_items", return_value=[{"id": "center.pending", "kind": "data", "review": "pending", "name": "未审核", "style": "rows", "fields": ["weather.temperature"], "placeable": True}]):
+            self.assertTrue(any(error["code"] == "WIDGET_DEF_INVALID" for error in validate(raw)))
+        raw["pages"][0]["layout"] = [dict(default_layout("today")[0], style="rows")]
+        self.assertTrue(any(error["field"].endswith(".style") for error in validate(raw)))
+
+    def test_approved_center_instance_style_and_content_version(self):
+        raw = defaults_from_config(DEPLOY)
+        raw["pages"][0]["layout"] = [{"widget": "custom", "id": "b1234abcd", "def": "center.temps", "style": "horizontal", "x": 56, "y": 160, "w": 300, "h": 200, "z": 1}]
+        center = {"id": "center.temps", "kind": "data", "review": "approved", "name": "温度湿度", "style": "rows", "fields": ["weather.temperature", "weather.humidity"]}
+        with patch("server.catalog.approved_data_items", return_value=[center]):
+            self.assertEqual(validate(raw), [])
+            before = settings_version(normalize(raw))
+            raw["pages"][0]["layout"][0]["style"] = "grid"
+            self.assertEqual(validate(raw), [])
+            self.assertNotEqual(before, settings_version(normalize(raw)))
 
 
 class LayoutApiTests(unittest.TestCase):
@@ -125,6 +178,8 @@ class LayoutApiTests(unittest.TestCase):
         self.assertTrue(any(item["id"] == "weather" for item in body["system"]))
         self.assertEqual(body["center"], [])
         self.assertTrue(body["fields"])
+        self.assertEqual({item["id"] for item in body["data_styles"]}, {"hero", "rows", "horizontal", "grid"})
+        self.assertTrue(all(item["kind"] == field_kind(item["id"]) for item in body["fields"]))
 
         settings = self.client.get("/admin/api/settings", headers=self._headers()).get_json()["data"]["settings"]
         page = settings["pages"][0]
@@ -177,9 +232,34 @@ class LayoutApiTests(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 200, resp.get_data(as_text=True))
         saved = self.client.get("/admin/api/settings", headers=self._headers()).get_json()["data"]["settings"]
-        self.assertEqual(saved["schema_version"], 2)
+        self.assertEqual(saved["schema_version"], 3)
         self.assertEqual(saved["location"]["name"], "南京")
         self.assertTrue(saved["pages"][0]["layout"])
+
+    def test_schema3_instance_style_save_preview_export_import(self):
+        settings = self.client.get("/admin/api/settings", headers=self._headers()).get_json()["data"]["settings"]
+        settings["widget_defs"] = [{"id": "w1234abcd", "name": "天气数据", "style": "rows", "fields": ["weather.temperature", "weather.humidity"]}]
+        settings["pages"][0]["layout"] = [{"widget": "custom", "id": "b1234abcd", "def": "w1234abcd", "style": "horizontal", "x": 56, "y": 160, "w": 300, "h": 200, "z": 1}]
+        response = self.client.post("/admin/api/settings/save", json=settings, headers=self._headers())
+        self.assertEqual(response.status_code, 200, response.get_data(as_text=True))
+        preview = self.client.post("/admin/api/layout-preview", json={"page_id": "today", "layout": settings["pages"][0]["layout"], "widget_defs": settings["widget_defs"]}, headers=self._headers())
+        self.assertEqual(preview.status_code, 200, preview.get_data(as_text=True) if preview.mimetype != "image/png" else "")
+        Image.open(io.BytesIO(preview.data)).verify()
+        exported = self.client.get("/admin/api/settings/export", headers=self._headers()).get_json()
+        self.assertEqual(exported["schema_version"], 3)
+        self.assertEqual(exported["pages"][0]["layout"][0]["style"], "horizontal")
+        response = self.client.post("/admin/api/settings/import", json=exported, headers=self._headers())
+        self.assertEqual(response.status_code, 200, response.get_data(as_text=True))
+        after = self.client.get("/admin/api/settings", headers=self._headers()).get_json()["data"]["settings"]
+        self.assertEqual(after["pages"], exported["pages"])
+        self.assertEqual(after["widget_defs"][0]["style"], "rows")
+        exported["schema_version"] = 2
+        exported["pages"][0]["layout"][0].pop("style")
+        response = self.client.post("/admin/api/settings/import", json=exported, headers=self._headers())
+        self.assertEqual(response.status_code, 200, response.get_data(as_text=True))
+        migrated = self.client.get("/admin/api/settings", headers=self._headers()).get_json()["data"]["settings"]
+        self.assertEqual(migrated["schema_version"], 3)
+        self.assertNotIn("style", migrated["pages"][0]["layout"][0])
 
 
 if __name__ == "__main__":

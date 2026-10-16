@@ -1,5 +1,43 @@
 ---
 pipeline:
+  - module: adaptive-data-styles
+    title: "按数据提供适用样式、画布实例外观与schema3兼容"
+    stages:
+      design:
+        status: complete
+        note: "2026-10-17 D0–D4与Gate1 PASS，用户已选按页面设置并回复确认四样式设计。"
+      code:
+        status: complete
+        note: "2026-10-17 四样式/字段筛选/实例覆盖/schema3已实现，78项测试与两套浏览器回归通过，Gate2 PASS。用户commit & push确认本地结果并授权与前轮一起提交推送，前轮真机待办保留。"
+    artifacts:
+      prd:
+        - 02-detailed/prd/prd-adaptive-data-styles.md
+      api:
+        - 02-detailed/api/api-adaptive-data-styles.md
+      interaction:
+        - 02-detailed/interaction/interaction-adaptive-data-styles.md
+      reports:
+        - 05-reports/gate1-adaptive-data-styles.md
+        - 05-reports/gate2-adaptive-data-styles.md
+  - module: admin-refinement
+    title: "管理端八项体验反馈、设备确认400兼容与状态持久化"
+    stages:
+      design:
+        status: complete
+        note: "2026-10-16 增量D0–D4与Gate1 PASS，用户confirm确认。旧wget请求格式已模拟复现400。"
+      code:
+        status: complete
+        note: "2026-10-16 八项体验与确认格式/持久化已实现；69项单测、编译、shell与浏览器回归通过。2026-10-17用户commit & push接受本地结果并授权提交推送，Gate2 WARN真机验收继续保留。"
+    artifacts:
+      prd:
+        - 02-detailed/prd/prd-admin-refinement.md
+      api:
+        - 02-detailed/api/api-admin-refinement.md
+      interaction:
+        - 02-detailed/interaction/interaction-admin-refinement.md
+      reports:
+        - 05-reports/gate1-admin-refinement.md
+        - 05-reports/gate2-admin-refinement.md
   - module: admin-feedback
     title: "管理端五条浏览器反馈：LogoLoom 标志、样式卡、预览语义、设备状态与退出按钮"
     stages:

@@ -93,7 +93,7 @@ class DashboardService:
         self._glyph_sets: dict[tuple, dict[str, bytes]] = {}
         self._asset_images: dict[str, Image.Image] = {}
 
-        self.heartbeat = HeartbeatLog()
+        self.heartbeat = HeartbeatLog(settings_path().with_name("device-status.json"))
         deploy = {
             "location_name": config["location_name"],
             "latitude": config["latitude"],

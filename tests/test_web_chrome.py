@@ -82,6 +82,34 @@ class WebChromeTests(unittest.TestCase):
         self.assertLess(reading.index("theme-btn"), reading.index("原始数据"))
         self.assertLess(reading.index("原始数据"), reading.index("返回首页"))
 
+    def test_shared_brand_and_browser_icons_are_served_on_web_pages(self):
+        import re
+
+        for url in ("/", "/admin", "/health", "/dashboard.png?format=html"):
+            page = self.client.get(url, headers=HTML)
+            self.assertEqual(page.status_code, 200, url)
+            body = page.get_data(as_text=True)
+            self.assertIn('class="brand-icon"', body, url)
+            for icon_url in re.findall(r'<link rel="(?:icon|apple-touch-icon)" href="([^"]+)"', body):
+                with self.client.get(icon_url) as icon:
+                    self.assertEqual(icon.status_code, 200, icon_url)
+                    self.assertTrue(icon.data, icon_url)
+            self.assertIn('/static/brand/favicon.svg', body, url)
+            self.assertIn('/static/brand/favicon.ico', body, url)
+            self.assertIn('/static/brand/apple-touch-icon.png', body, url)
+
+        with self.client.get('/static/brand/favicon.svg') as response:
+            favicon = response.get_data(as_text=True)
+        self.assertIn('prefers-color-scheme: dark', favicon)
+        self.assertLess(favicon.index('color: #1a1814'), favicon.index('color: #f4f1ea'))
+
+    def test_quote_library_reference_links_serve_current_document_and_example(self):
+        docs = Path(__file__).resolve().parents[1] / 'docs'
+        for name in ('quote-library.md', 'quote-library.example.json'):
+            with self.client.get('/static/docs/' + name) as response:
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.data, (docs / name).read_bytes())
+
     def test_image_urls_negotiate_html_or_png(self):
         urls = (
             "/r/today/header.png",

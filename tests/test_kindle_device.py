@@ -58,14 +58,44 @@ goto_page() { echo draw; return "$draw_fail"; }
 API_URL=https://calendar.example/api/v1/dashboard.env?lang=en
 INTERVAL=900
 wget() { printf '%s\\n' "$*"; return 1; }
-log() { echo logged; }
+curl() { echo curl-failed; return 1; }
+log() { echo "$*"; }
 """
         output = self.run_shell(setup + function("report_device") + '\nreport_device v2 abc123\necho survived\n')
         self.assertIn("https://calendar.example/api/v1/device/heartbeat", output)
-        self.assertIn('"interval_s":900', output)
-        self.assertIn('"applied_version":"abc123"', output)
+        self.assertIn("interval_s=900&mode=v2", output)
+        self.assertIn("applied_version=abc123", output)
         self.assertIn("X-Kindle-Device: dash", output)
         self.assertIn("survived", output)
+
+    def test_wget_failure_falls_back_once_to_curl(self):
+        setup = """
+API_URL=https://calendar.example/api/v1/dashboard.env
+INTERVAL=900
+wget() { echo wget-400 >&2; return 1; }
+curl() { echo curl-success >&2; return 0; }
+log() { echo "$*"; }
+"""
+        output = self.run_shell(setup + function("report_device") + '\nreport_device v2 abc123\n')
+        self.assertIn("wget failed: wget-400", output)
+        self.assertIn("device report accepted: mode=v2 version=abc123", output)
+        self.assertNotIn("keeping previous", output)
+
+    def test_wget_form_does_not_add_duplicate_content_type(self):
+        setup = """
+API_URL=https://calendar.example/api/v1/dashboard.env
+INTERVAL=900
+wget() {
+    case "$*" in *Content-Type*) echo duplicate-header >&2; return 1;; esac
+    case "$*" in *'--post-data=interval_s=900&mode=v2&applied_version=abc123'*) return 0;; esac
+    echo bad-form >&2; return 1
+}
+curl() { return 1; }
+log() { echo "$*"; }
+"""
+        output = self.run_shell(setup + function("report_device") + '\nreport_device v2 abc123\n')
+        self.assertIn("device report accepted", output)
+        self.assertNotIn("wget failed", output)
 
     def test_failed_display_propagates(self):
         setup = """

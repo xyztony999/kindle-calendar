@@ -7,6 +7,7 @@ import json
 import logging
 import math
 import os
+import re
 import threading
 import time
 from dataclasses import dataclass
@@ -28,8 +29,8 @@ from server.layout import (
 
 PAGE_IDS = PRESET_IDS
 QUOTE_MODES = ("online", "offline", "custom")
-SCHEMA_VERSION = 2
-ACCEPTED_SCHEMAS = (1, 2)
+SCHEMA_VERSION = 3
+ACCEPTED_SCHEMAS = (1, 2, 3)
 
 DWELL_MIN = 5
 DWELL_MAX = 3600
@@ -310,6 +311,8 @@ def _normalize_block(block: dict) -> dict:
         item["align"] = block.get("align") if block.get("align") in ("left", "center", "right") else "left"
     elif widget == "custom":
         item["def"] = block["def"]
+        if "style" in block:
+            item["style"] = block["style"]
     return item
 
 
@@ -486,22 +489,74 @@ class SettingsStore:
 
 
 class HeartbeatLog:
-    """Latest device communication and confirmed application; reset on restart."""
+    """Latest device communication and application, persisted for one worker."""
 
-    def __init__(self) -> None:
+    def __init__(self, path: Path | None = None) -> None:
         self._lock = threading.Lock()
         self._state: dict = {}
+        self.path = path
+        if path is not None:
+            try:
+                if path.stat().st_size > 4096:
+                    raise ValueError("device status file too large")
+                state = json.loads(path.read_text(encoding="utf-8"))
+                self._validate_state(state)
+                self._state = state
+                log.info("Device status restored: %s", path)
+            except FileNotFoundError:
+                pass
+            except (OSError, ValueError, TypeError, OverflowError) as exc:
+                log.warning("Ignoring invalid device status file %s: %s", path, exc)
+
+    @staticmethod
+    def _validate_state(state: dict) -> None:
+        required = {"ts", "ip", "ua", "interval", "mode"}
+        optional = {"fetch_ts", "applied_ts", "applied_version"}
+        if not isinstance(state, dict) or not required <= state.keys() or state.keys() - required - optional:
+            raise ValueError("invalid device status structure")
+        if type(state["interval"]) is not int or not 60 <= state["interval"] <= 86400:
+            raise ValueError("invalid device interval")
+        if state["mode"] not in ("v1", "v2"):
+            raise ValueError("invalid device mode")
+        for key in ("ts", "fetch_ts", "applied_ts"):
+            if key in state and (type(state[key]) not in (int, float) or not math.isfinite(state[key])
+                                 or not 0 <= state[key] <= 253402214399):
+                raise ValueError("invalid device timestamp")
+        for key, limit in (("ip", 128), ("ua", 80)):
+            if state[key] is not None and (not isinstance(state[key], str) or len(state[key]) > limit):
+                raise ValueError("invalid device source")
+        if ("applied_version" in state) != ("applied_ts" in state):
+            raise ValueError("incomplete device confirmation")
+        if "applied_version" in state and (not isinstance(state["applied_version"], str)
+                or not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", state["applied_version"])):
+            raise ValueError("invalid applied version")
+
+    def _save(self) -> None:
+        if self.path is None:
+            return
+        tmp = self.path.with_name(self.path.name + ".tmp")
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            tmp.write_text(json.dumps(self._state, ensure_ascii=True), encoding="utf-8")
+            os.replace(tmp, self.path)
+        except OSError as exc:
+            log.warning("Could not persist device status %s: %s", self.path, exc)
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
 
     def record(self, ip: str | None, ua: str | None, interval: int = DEFAULT_INTERVAL_S,
                mode: str = "v2", *, fetched: bool = False, applied_version: str | None = None) -> None:
         now = time.time()
         with self._lock:
-            self._state.update(ts=now, ip=(ip or "").strip() or None,
+            self._state.update(ts=now, ip=(ip or "").strip()[:128] or None,
                                ua=(ua or "").strip()[:80] or None, interval=interval, mode=mode)
             if fetched:
                 self._state["fetch_ts"] = now
             if applied_version:
                 self._state.update(applied_ts=now, applied_version=applied_version)
+            self._save()
 
     def snapshot(self, current_version: str, tz_name: str) -> dict:
         with self._lock:

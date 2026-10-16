@@ -1,5 +1,9 @@
 # Kindle 电子翻页台历 应用架构
 
+2026-10-17 adaptive-data-styles已获Gate1确认并实施：数据定义保存名称/字段与兼容默认，布局实例独立覆盖style，目录下发字段kind与样式能力规则；PNG正式渲染承担四种外观，配置schema3保护新属性不被旧服务静默剥离。Kindle协议不变；本地Gate2 PASS待交付确认。
+
+2026-10-16 admin-refinement 已获Gate1确认并实施：管理端操作条、取消编辑与积木管理归属完善，城市联想修正，网页共享品牌；设备确认增加旧wget格式兼容与data目录状态持久化；一言库仅预留格式，不开放新来源。Gate2本地通过，Kindle真机待验收。详见 api-admin-refinement.md。
+
 2026-10-16 增量（admin-feedback，Gate 1 已确认）：管理端统一台历品牌与样式选择卡；设备通信与成功应用确认分离，沿用 900 秒联网节奏，v1/v2 均报告通信，浏览器访问排除。新增设备 heartbeat 确认接口，详见 api-admin-feedback.md。已实施；实际墨水屏效果待真机验收。
 
 | 属性 | 值 |

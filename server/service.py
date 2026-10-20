@@ -32,6 +32,7 @@ from server.settings import (
 from server.render import render_glyphs
 from server.layout import clock_block, draw_region_keys, find_block, http_region_names, scale_box
 from server.render.placed import paste_page, placed_rect, render_placed
+from server.layout import block_options, clock_rect_for_options
 from server.render.regions import Rect, metrics_in
 from server.catalog import fetch_center_items
 from server import storage
@@ -394,6 +395,7 @@ class DashboardService:
         if block is None:
             return {}
         x, y, w, h = scale_box(int(block["x"]), int(block["y"]), int(block["w"]), int(block["h"]), self.width, self.height)
+        x, y, w, h = clock_rect_for_options(x, y, w, h, block_options("clock", block.get("options")))
         metrics = metrics_in(Rect(x, y, w, h))
         key = (page, metrics.digit_w, metrics.digit_h, metrics.colon_w, metrics.gap, self.font_path)
         with self._lock:
@@ -504,6 +506,8 @@ class DashboardService:
                     clock_legacy.append("CLOCK_ENABLED=0")
                 continue
             x, y, w, h = scale_box(int(block["x"]), int(block["y"]), int(block["w"]), int(block["h"]), self.width, self.height)
+            _opts = block_options("clock", block.get("options"))
+            x, y, w, h = clock_rect_for_options(x, y, w, h, _opts)
             clock_metrics = metrics_in(Rect(x, y, w, h))
             prefix = f"{base}/r/{page_id}/clock/"
             clock_lines = [

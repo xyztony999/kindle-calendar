@@ -17,7 +17,10 @@ def _font(sx: float, base: int, font_path: str):
     return style.get_font(max(15, round(base * sx)), font_path)
 
 
-def render_header(payload: dict, rect: Rect, font_path: str, page: str) -> Image.Image:
+def render_header(payload: dict, rect: Rect, font_path: str, page: str, options: dict | None = None) -> Image.Image:
+    opts = options or {}
+    show_tabs = opts.get("show_tabs", True)
+    show_lunar = opts.get("show_lunar", True)
     img = Image.new("L", (rect.w, rect.h), style.PAPER)
     draw = ImageDraw.Draw(img)
     sx = rect.w / 646
@@ -63,23 +66,25 @@ def render_header(payload: dict, rect: Rect, font_path: str, page: str) -> Image
     dot_r = 4
     dot_gap = int(46 * sx)
     labels = {p: page_label(p, payload) for p in order}
-    labels_w = sum(style.tracked_width(draw, labels[p], f_page, 2) + dot_gap for p in order)
+    labels_w = sum(style.tracked_width(draw, labels[p], f_page, 2) + dot_gap for p in order) if show_tabs else 0
     x = rect.w - labels_w
-    for p in order:
-        cx = x + dot_r
-        cy = 14 + dot_r
-        if p == page:
-            draw.ellipse((cx - dot_r, cy - dot_r, cx + dot_r, cy + dot_r), fill=style.INK)
-        else:
-            draw.ellipse((cx - dot_r, cy - dot_r, cx + dot_r, cy + dot_r), outline=style.RULE, width=1)
-        style.draw_text(draw, (cx + dot_r + 4, 10), labels[p], f_page, style.MID if p != page else style.INK, tracking=2)
-        x += style.tracked_width(draw, labels[p], f_page, 2) + dot_gap
+    if show_tabs:
+        for p in order:
+            cx = x + dot_r
+            cy = 14 + dot_r
+            if p == page:
+                draw.ellipse((cx - dot_r, cy - dot_r, cx + dot_r, cy + dot_r), fill=style.INK)
+            else:
+                draw.ellipse((cx - dot_r, cy - dot_r, cx + dot_r, cy + dot_r), outline=style.RULE, width=1)
+            style.draw_text(draw, (cx + dot_r + 4, 10), labels[p], f_page, style.MID if p != page else style.INK, tracking=2)
+            x += style.tracked_width(draw, labels[p], f_page, 2) + dot_gap
 
-    if english:
-        lunar_line = f"{date['lunar']} · {date['ganzhi_year']} {zodiac_en(date['zodiac'])}"
-    else:
-        lunar_line = f"{date['lunar']} · {date['ganzhi_year']}{date['zodiac']}年"
-    style.draw_text_right(draw, rect.w, 46, lunar_line, f_small, style.MID)
+    if show_lunar:
+        if english:
+            lunar_line = f"{date['lunar']} · {date['ganzhi_year']} {zodiac_en(date['zodiac'])}"
+        else:
+            lunar_line = f"{date['lunar']} · {date['ganzhi_year']}{date['zodiac']}年"
+        style.draw_text_right(draw, rect.w, 46, lunar_line, f_small, style.MID)
     return img
 
 

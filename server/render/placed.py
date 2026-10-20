@@ -5,7 +5,7 @@ from __future__ import annotations
 from PIL import Image, ImageDraw
 
 from server.fields import field_text
-from server.layout import DESIGN, block_region_key, content_blank, field_label, find_block, http_region_names, iter_blocks, scale_box
+from server.layout import DESIGN, block_options, block_region_key, clock_rect_for_options, content_blank, field_label, find_block, http_region_names, iter_blocks, scale_box
 from server.locale import is_en
 from server.render import style as style
 from server.render.pages import almanac as almanac_page
@@ -13,13 +13,13 @@ from server.render.pages import common, detail as detail_page, month as month_pa
 from server.render.regions import Rect
 
 
-def _system_image(widget: str, payload: dict, rect: Rect, font_path: str, page: str, offset: int) -> Image.Image:
+def _system_image(widget: str, payload: dict, rect: Rect, font_path: str, page: str, offset: int, options: dict | None = None) -> Image.Image:
     if widget == "header":
-        return common.render_header(payload, rect, font_path, page=page)
+        return common.render_header(payload, rect, font_path, page=page, options=options)
     if widget == "weather":
-        return today.render_weather(payload, rect, font_path)
+        return today.render_weather(payload, rect, font_path, options=options)
     if widget == "sun":
-        return today.render_sun(payload, rect, font_path)
+        return today.render_sun(payload, rect, font_path, options=options)
     if widget == "scene":
         return today.render_scene_region(payload, rect, font_path)
     if widget == "quote":
@@ -31,19 +31,19 @@ def _system_image(widget: str, payload: dict, rect: Rect, font_path: str, page: 
     if widget == "title":
         return month_page.render_title(payload, rect, font_path, offset=offset)
     if widget == "grid":
-        return month_page.render_grid(payload, rect, font_path, offset=offset)
+        return month_page.render_grid(payload, rect, font_path, offset=offset, options=options)
     if widget == "hourly":
         return detail_page.render_hourly(payload, rect, font_path)
     if widget == "indices":
         return detail_page.render_indices(payload, rect, font_path)
     if widget == "main":
-        return almanac_page.render_main(payload, rect, font_path)
+        return almanac_page.render_main(payload, rect, font_path, options=options)
     return Image.new("L", (rect.w, rect.h), style.PAPER)
 
 
-def paint_system(widget: str, payload: dict, target: Rect, font_path: str, page: str, offset: int = 0) -> Image.Image:
+def paint_system(widget: str, payload: dict, target: Rect, font_path: str, page: str, offset: int = 0, options: dict | None = None) -> Image.Image:
     width, height = DESIGN[widget]
-    image = _system_image(widget, payload, Rect(0, 0, width, height), font_path, page, offset)
+    image = _system_image(widget, payload, Rect(0, 0, width, height), font_path, page, offset, options)
     if image.size != (target.w, target.h):
         image = image.resize((target.w, target.h), Image.Resampling.NEAREST)
     return image
@@ -249,7 +249,7 @@ def render_placed(page, payload, width, height, font_path, definitions, images) 
         target = _target(block, width, height)
         widget = block.get("widget")
         if widget in DESIGN:
-            out[region] = paint_system(widget, payload, target, font_path, page_id, _offset_for(region))
+            out[region] = paint_system(widget, payload, target, font_path, page_id, _offset_for(region), block_options(widget, block.get("options")))
         elif widget == "text":
             out[region] = paint_text(str(block.get("text") or ""), str(block.get("align") or "left"), target, font_path)
         elif widget == "image":
@@ -291,7 +291,9 @@ def paste_page(page, payload, width, height, font_path, definitions, images, gly
     clock = next((block for block in iter_blocks(page) if block.get("widget") == "clock"), None)
     if clock is not None:
         rect = _target(clock, width, height)
-        metrics = metrics_for(rect)
+        options = block_options("clock", clock.get("options"))
+        x, y, w, h = clock_rect_for_options(rect.x, rect.y, rect.w, rect.h, options)
+        metrics = metrics_for(Rect(x, y, w, h))
         if glyphs is None:
             glyphs = render_glyphs(metrics, font_path)
         hhmm = str((payload.get("clock") or {}).get("now") or "00:00")

@@ -22,7 +22,8 @@ def _draw_vertical(draw, x: int, y: int, text: str, font, fill: int) -> None:
         cy += ch_h + 6
 
 
-def render_main(payload: dict, rect: Rect, font_path: str) -> Image.Image:
+def render_main(payload: dict, rect: Rect, font_path: str, options: dict | None = None) -> Image.Image:
+    opts = options or {}
     img = Image.new("L", (rect.w, rect.h), style.PAPER)
     draw = ImageDraw.Draw(img)
     sx = rect.w / 646
@@ -87,12 +88,14 @@ def render_main(payload: dict, rect: Rect, font_path: str) -> Image.Image:
         yi_title, ji_title = "宜", "忌"
         term_line = f"节气 {st_name} · 已过{st_days}天 · 下一节气 {date.get('next_solar_term', '')}"
         phenology = f"物候 {date.get('wuhou', '')}"
-    draw_items(rx0, yi_title, date.get("yi") or [], style.INK)
-    draw_items(rx0 + col_w + int(16 * sx), ji_title, date.get("ji") or [], style.MID)
+    if opts.get("show_yiji", True):
+        draw_items(rx0, yi_title, date.get("yi") or [], style.INK)
+        draw_items(rx0 + col_w + int(16 * sx), ji_title, date.get("ji") or [], style.MID)
 
-    # 底部：节气与物候。英文名已经在载荷里换好。
-    y0 = rect.h - int(150 * sx)
-    style.hairline(draw, rx0, y0 - int(16 * sx), rect.w - int(16 * sx))
-    draw.text((rx0, y0), term_line, fill=style.INK, font=f_note)
-    draw.text((rx0, y0 + int(40 * sx)), phenology, fill=style.MID, font=f_note)
+    if opts.get("show_wuhou", True):
+        # 底部：节气与物候。英文名已经在载荷里换好。
+        y0 = rect.h - int(150 * sx)
+        style.hairline(draw, rx0, y0 - int(16 * sx), rect.w - int(16 * sx))
+        draw.text((rx0, y0), term_line, fill=style.INK, font=f_note)
+        draw.text((rx0, y0 + int(40 * sx)), phenology, fill=style.MID, font=f_note)
     return img

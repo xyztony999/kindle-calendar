@@ -17,7 +17,7 @@ import requests
 from flask import Blueprint, Response, jsonify, render_template, request, session
 
 from server.catalog import fetch_center_items
-from server.layout import DESIGN, FIELD_DEFS, SYSTEM_WIDGETS, data_style_catalog, field_kind, field_label, system_label
+from server.layout import DESIGN, FIELD_DEFS, SYSTEM_WIDGETS, data_style_catalog, field_kind, field_label, system_label, system_options_catalog
 from server.locale import LANG_COOKIE, LANG_MAX_AGE, THEME_COOKIE, admin_ui, explicit_lang, translate_message, web_lang, web_theme
 from server.settings import ACCEPTED_SCHEMAS, SETTINGS_MAX_BYTES, SettingsError, env_int, limits
 from server.storage import AssetError
@@ -394,6 +394,7 @@ def create_admin_blueprint(service) -> Blueprint:
                 "w": DESIGN[widget][0],
                 "h": DESIGN[widget][1],
                 "placeable": True,
+                "options": system_options_catalog(widget, lang),
             }
             for widget in SYSTEM_WIDGETS
         ]

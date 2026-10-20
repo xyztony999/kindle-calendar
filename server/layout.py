@@ -178,6 +178,72 @@ SYSTEM_LABELS = {
     "main": ("黄历", "Almanac"),
 }
 
+# 系统积木外观选项（有限可配）：key → (中文标签, 英文标签, 类型, 默认值, 选项枚举)
+# type "bool" 为开关；"choice" 为单选档位。未配置 = 默认值 = 现有版式不变。
+SYSTEM_OPTIONS: dict[str, dict[str, tuple[str, str, str, object, tuple | None]]] = {
+    "header": {
+        "show_tabs": ("页面指示点", "Page indicator dots", "bool", True, None),
+        "show_lunar": ("农历与干支行", "Lunar and ganzhi line", "bool", True, None),
+    },
+    "clock": {
+        "size": ("数字大小", "Digit size", "choice", "lg", ("lg", "md", "sm")),
+    },
+    "weather": {
+        "show_humidity": ("湿度", "Humidity", "bool", True, None),
+        "show_wind": ("风速", "Wind", "bool", True, None),
+        "show_precip": ("降水概率", "Precipitation", "bool", True, None),
+    },
+    "sun": {
+        "show_arc": ("日出日落弧线", "Sun arc", "bool", True, None),
+        "show_aqi": ("AQI 卡", "AQI card", "bool", True, None),
+    },
+    "grid": {
+        "show_badges": ("班休徽标", "Work/rest badges", "bool", True, None),
+        "show_lunar": ("农历节气角标", "Lunar and term captions", "bool", True, None),
+    },
+    "main": {
+        "show_yiji": ("宜忌双栏", "Yi/Ji columns", "bool", True, None),
+        "show_wuhou": ("节气物候", "Solar term and phenology", "bool", True, None),
+    },
+}
+
+CLOCK_SIZE_FACTOR = {"lg": 1.0, "md": 0.75, "sm": 0.55}
+
+
+def system_options_catalog(widget: str, lang: str) -> list[dict]:
+    """把某系统积木的选项 schema 输出为前端可用的列表。"""
+    out: list[dict] = []
+    for key, (zh, en, kind, default, choices) in SYSTEM_OPTIONS.get(widget, {}).items():
+        item: dict = {"key": key, "label": en if lang == "en" else zh, "kind": kind, "default": default}
+        if choices is not None:
+            item["choices"] = list(choices)
+        out.append(item)
+    return out
+
+
+def block_options(widget: str, raw: object) -> dict:
+    """读取并收敛积木 options：非法值回退默认，输出仅含已知键。"""
+    options: dict = {}
+    schema = SYSTEM_OPTIONS.get(widget, {})
+    if not isinstance(raw, dict):
+        return options
+    for key, (_zh, _en, kind, default, choices) in schema.items():
+        value = raw.get(key)
+        if kind == "bool":
+            options[key] = default if not isinstance(value, bool) else value
+        elif kind == "choice":
+            options[key] = default if value not in (choices or ()) else value
+    return options
+
+
+def clock_rect_for_options(x: int, y: int, w: int, h: int, options: dict) -> tuple[int, int, int, int]:
+    """时钟字号档位 → 调整后的字形矩形（居中收缩）。"""
+    factor = CLOCK_SIZE_FACTOR.get(str(options.get("size") or "lg"), 1.0)
+    if factor >= 1.0:
+        return x, y, w, h
+    nh = max(32, round(h * factor))
+    return x, y + (h - nh) // 2, w, nh
+
 
 def field_label(field_id: str, lang: str) -> str:
     zh, en = _FIELD_LABEL[field_id]
@@ -315,6 +381,18 @@ def _validate_block(
     widget = block.get("widget")
     if "style" in block and widget != "custom":
         details.append(_detail(f"{prefix}.style", "LAYOUT_INVALID", "仅数据积木允许设置外观"))
+    if "options" in block:
+        if widget not in SYSTEM_WIDGETS or not isinstance(block["options"], dict):
+            details.append(_detail(f"{prefix}.options", "LAYOUT_INVALID", "仅系统积木可配置外观选项"))
+        else:
+            schema = SYSTEM_OPTIONS.get(str(widget), {})
+            for key, value in block["options"].items():
+                if key not in schema:
+                    details.append(_detail(f"{prefix}.options.{key}", "LAYOUT_INVALID", "未知外观选项"))
+                elif schema[key][2] == "bool" and not isinstance(value, bool):
+                    details.append(_detail(f"{prefix}.options.{key}", "LAYOUT_INVALID", "开关选项须为布尔值"))
+                elif schema[key][2] == "choice" and value not in (schema[key][4] or ()):
+                    details.append(_detail(f"{prefix}.options.{key}", "LAYOUT_INVALID", "选项取值无效"))
     if widget not in SYSTEM_WIDGETS and widget not in ("image", "text", "custom"):
         details.append(_detail(f"{prefix}.widget", "LAYOUT_INVALID", "积木类型无效"))
         return None

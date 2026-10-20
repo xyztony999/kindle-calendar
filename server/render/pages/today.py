@@ -34,7 +34,8 @@ def render_header(payload: dict, rect: Rect, font_path: str) -> Image.Image:
     return img
 
 
-def render_weather(payload: dict, rect: Rect, font_path: str) -> Image.Image:
+def render_weather(payload: dict, rect: Rect, font_path: str, options: dict | None = None) -> Image.Image:
+    opts = options or {}
     img = Image.new("L", (rect.w, rect.h), style.PAPER)
     draw = ImageDraw.Draw(img)
     sx = rect.w / 646
@@ -51,17 +52,18 @@ def render_weather(payload: dict, rect: Rect, font_path: str) -> Image.Image:
     if is_en(payload):
         range_line = f"Today {today['temp_min']:.0f}° / {today['temp_max']:.0f}°"
         stats = [
-            f"Humidity {cur['humidity']}%",
-            f"Wind {cur['wind_speed']:.0f} km/h",
-            f"Rain {payload['weather'].get('precip_prob', 0)}%",
+            f"Humidity {cur['humidity']}%" if opts.get("show_humidity", True) else None,
+            f"Wind {cur['wind_speed']:.0f} km/h" if opts.get("show_wind", True) else None,
+            f"Rain {payload['weather'].get('precip_prob', 0)}%" if opts.get("show_precip", True) else None,
         ]
     else:
         range_line = f"今日 {today['temp_min']:.0f}° / {today['temp_max']:.0f}°"
         stats = [
-            f"湿度 {cur['humidity']}%",
-            f"风 {cur['wind_speed']:.0f} km/h",
-            f"降水 {payload['weather'].get('precip_prob', 0)}%",
+            f"湿度 {cur['humidity']}%" if opts.get("show_humidity", True) else None,
+            f"风 {cur['wind_speed']:.0f} km/h" if opts.get("show_wind", True) else None,
+            f"降水 {payload['weather'].get('precip_prob', 0)}%" if opts.get("show_precip", True) else None,
         ]
+    stats = [s for s in stats if s]
     draw.text((8, 198), range_line, fill=style.MID, font=f_info)
     for i, line in enumerate(stats):
         style.draw_text_right(draw, rect.w - 150 * sx, 34 + i * 44 * sx, line, f_info, style.MID)
@@ -111,7 +113,8 @@ def render_moon_disk(draw: ImageDraw.ImageDraw, cx: int, cy: int, r: int, phase:
     draw.polygon(pts, fill=style.INK)
 
 
-def render_sun(payload: dict, rect: Rect, font_path: str) -> Image.Image:
+def render_sun(payload: dict, rect: Rect, font_path: str, options: dict | None = None) -> Image.Image:
+    opts = options or {}
     img = Image.new("L", (rect.w, rect.h), style.PAPER)
     draw = ImageDraw.Draw(img)
     sx = rect.w / 646
@@ -123,12 +126,14 @@ def render_sun(payload: dict, rect: Rect, font_path: str) -> Image.Image:
     cx, rx, ry = (x0 + x1) // 2, (x1 - x0) // 2, int(rect.h * 0.42)
     cy = int(rect.h * 0.82)
 
-    draw.arc((cx - rx, cy - ry, cx + rx, cy + ry), start=180, end=360, fill=style.MID, width=2)
-    draw.line((x0 - 6, cy, x1 + 6, cy), fill=style.RULE, width=1)
+    show_arc = opts.get("show_arc", True)
+    if show_arc:
+        draw.arc((cx - rx, cy - ry, cx + rx, cy + ry), start=180, end=360, fill=style.MID, width=2)
+        draw.line((x0 - 6, cy, x1 + 6, cy), fill=style.RULE, width=1)
 
     rise, set_ = sun.get("sunrise_minutes"), sun.get("sunset_minutes")
     now_min = payload["clock"]["minutes"]
-    if rise is not None and set_ is not None and set_ > rise:
+    if show_arc and rise is not None and set_ is not None and set_ > rise:
         t = min(1.0, max(0.0, (now_min - rise) / (set_ - rise)))
         theta = math.pi * (1 - t)
         px = cx + rx * math.cos(theta)
@@ -148,6 +153,8 @@ def render_sun(payload: dict, rect: Rect, font_path: str) -> Image.Image:
     style.draw_text_right(draw, x1 + 8, 2, set_line, f_label, style.MID)
 
     # AQI 卡（原月相盘位置）：数值 + 等级 + 六段刻度条（PageSpec §1）
+    if not opts.get("show_aqi", True):
+        return img
     aqi = payload.get("aqi")
     ax = int(rect.w * 0.68)
     f_aqi_label = _font(sx, 22, font_path)

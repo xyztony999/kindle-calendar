@@ -22,12 +22,14 @@ from server.layout import (
     CUSTOM_PAGE_RE,
     MAX_PAGES,
     PRESET_IDS,
+    SYSTEM_OPTIONS,
     default_page,
     drop_unreferenced_assets,
     validate_layout_fields,
 )
 
 PAGE_IDS = PRESET_IDS
+SYSTEM_OPTION_WIDGETS = frozenset(SYSTEM_OPTIONS)
 QUOTE_MODES = ("online", "offline", "custom")
 SCHEMA_VERSION = 3
 ACCEPTED_SCHEMAS = (1, 2, 3)
@@ -304,6 +306,8 @@ def _normalize_block(block: dict) -> dict:
         "h": _as_int(block["h"]),
         "z": _as_int(block["z"]),
     }
+    if widget in SYSTEM_OPTION_WIDGETS and isinstance(block.get("options"), dict) and block["options"]:
+        item["options"] = block["options"]
     if widget == "image":
         item["asset"] = block["asset"]
     elif widget == "text":

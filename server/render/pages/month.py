@@ -52,7 +52,8 @@ def render_title(payload: dict, rect: Rect, font_path: str, offset: int = 0) -> 
     return img
 
 
-def render_grid(payload: dict, rect: Rect, font_path: str, offset: int = 0) -> Image.Image:
+def render_grid(payload: dict, rect: Rect, font_path: str, offset: int = 0, options: dict | None = None) -> Image.Image:
+    opts = options or {}
     img = Image.new("L", (rect.w, rect.h), style.PAPER)
     draw = ImageDraw.Draw(img)
     sx = rect.w / 646
@@ -89,7 +90,7 @@ def render_grid(payload: dict, rect: Rect, font_path: str, offset: int = 0) -> I
             is_today = offset == 0 and day == today.day
 
             # 班休徽标：左上角（右上角会与两位数日期重叠）
-            hol = info["holiday"]
+            hol = info["holiday"] if opts.get("show_badges", True) else None
             has_badge = hol is not None
             if has_badge:
                 badge = badge_en(hol["note"]) if is_en(payload) else hol["note"]

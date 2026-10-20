@@ -144,13 +144,27 @@
   .style-help { font-size: 12px; color: var(--mid); line-height: 1.5; }
   .style-sample .sample-row b { white-space: nowrap; }
   .sample-label { color: var(--mid); font-size: 10px; white-space: nowrap; }
-  .widget-item { display: inline-flex; align-items: stretch; position: relative; max-width: 100%; }
-  .widget-item > .btn { border-radius: 8px 0 0 8px; }
-  .widget-menu { position: relative; }
-  .widget-menu > summary { list-style: none; border-radius: 0 8px 8px 0; padding: 8px; border-left: 0; cursor: pointer; }
-  .widget-menu > summary::-webkit-details-marker { display: none; }
-  /* 下拉挂在 ⋯ 菜单正下方、左对齐（右对齐会在窄列被弹窗边缘裁剪） */
-  .widget-menu[open] > .widget-delete { position: absolute; top: 100%; left: 0; z-index: 6; margin-top: 4px; white-space: nowrap; min-width: max-content; box-shadow: 0 4px 12px rgba(0,0,0,.25); }
+  /* 我的积木：行式列表（名称 | 摘要 | ✏ 重命名 | 🗑 删除），无嵌套菜单 */
+  .widget-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+  .widget-row {
+    display: grid; grid-template-columns: minmax(64px, 1fr) auto auto auto;
+    align-items: center; gap: 8px;
+    border: 1px solid var(--line); border-radius: 10px;
+    background: var(--card); padding: 4px 6px 4px 12px;
+  }
+  .widget-row .w-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .widget-row .w-meta { color: var(--mid); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .widget-row .w-act {
+    width: 32px; height: 32px; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 15px; border-radius: 8px;
+  }
+  .widget-row .w-act.danger { color: var(--bad); }
+  .widget-row .w-add { cursor: grab; }
+  .widget-row .w-name-input {
+    border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px;
+    background: var(--card); width: 100%; font: inherit;
+  }
   .page-row, .quote-row, .loc-grid {
     display: grid;
     gap: 8px;
@@ -645,7 +659,7 @@
     <div class="canvas-tools" id="canvas-tools">
       <div class="canvas-panel">
         <div class="palette" id="palette-system"></div>
-        <div class="palette" id="palette-mine"></div>
+        <div class="widget-list" id="palette-mine"></div>
         <div class="palette" id="palette-center"></div>
       </div>
       <div class="canvas-panel canvas-stage-panel">
@@ -1491,21 +1505,34 @@
     renderBlockAppearance();
   }
 
+  function systemOptionSchema(widget) {
+    const entry = (catalog.system || []).find((item) => item.id === widget);
+    const list = entry && entry.options;
+    return Array.isArray(list) && list.length ? list : null;
+  }
+
   function renderBlockAppearance() {
     const block = selectedBlock();
     const definition = block && block.widget === "custom" && dataDefinition(block.def);
-    $("appearance-controls").hidden = !definition;
-    // 任何选中都给出可见反馈：系统积木显示「名称 · 固定样式」，数据积木显示样式选择
+    const sysOptions = block && systemOptionSchema(block.widget);
+    const showControls = !!(definition || sysOptions);
+    $("appearance-controls").hidden = !showControls;
+    // 任何选中都给出可见反馈：系统积木显示可配选项，数据积木显示样式选择
     if (!block) {
       $("appearance-note").textContent = T.select_data_block;
-    } else if (!definition) {
-      $("appearance-note").textContent = blockLabel(block) + " · " + T.fixed_style;
-    } else {
+    } else if (definition) {
       $("appearance-note").textContent = T.appearance_scope.replace("{name}", definition.name);
+    } else {
+      $("appearance-note").textContent = blockLabel(block) + " · " + T.system_options_title;
     }
     const options = $("block-styles");
     options.replaceChildren();
-    if (!definition) return;
+    $("appearance-fields").textContent = "";
+    $("appearance-current").textContent = "";
+    $("appearance-reason").textContent = "";
+    $("reset-block-style").hidden = true;
+    if (!block || (!definition && !sysOptions)) return;
+    if (!definition && sysOptions) { renderSystemOptions(block, sysOptions); return; }
     const fields = definition.fields || [];
     const choices = styleChoices(fields);
     const effective = block.style || definition.style || "rows";
@@ -1555,6 +1582,58 @@
       options.appendChild(option);
     });
   }
+  function renderSystemOptions(block, schema) {
+    const box = $("block-styles");
+    if (!block.options) block.options = {};
+    $("appearance-current").textContent = T.system_options_hint;
+    schema.forEach((opt) => {
+      const wrap = document.createElement("label");
+      wrap.className = "style-option";
+      if (opt.kind === "bool") {
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.id = "sys-opt-" + opt.key;
+        input.checked = block.options[opt.key] !== undefined ? block.options[opt.key] : opt.default;
+        input.addEventListener("change", () => {
+          block.options[opt.key] = input.checked;
+          markDirty();
+          renderCanvas();
+        });
+        const label = document.createElement("span");
+        label.className = "style-title";
+        label.setAttribute("for", input.id);
+        label.textContent = opt.label;
+        wrap.append(input, label);
+      } else if (opt.kind === "choice") {
+        const field = document.createElement("span");
+        field.className = "style-title";
+        field.textContent = opt.label;
+        field.style.paddingRight = "10px";
+        wrap.appendChild(field);
+        (opt.choices || []).forEach((value, index) => {
+          const radio = document.createElement("input");
+          radio.type = "radio";
+          radio.name = "sys-opt-" + opt.key;
+          radio.id = "sys-opt-" + opt.key + "-" + value;
+          const current = block.options[opt.key] !== undefined ? block.options[opt.key] : opt.default;
+          radio.checked = value === current;
+          radio.addEventListener("change", () => {
+            block.options[opt.key] = value;
+            markDirty();
+            renderCanvas();
+          });
+          const lab = document.createElement("span");
+          lab.className = "style-title";
+          lab.setAttribute("for", radio.id);
+          lab.textContent = [T.size_lg, T.size_md, T.size_sm][index] || value;
+          lab.style.padding = "0 10px 0 4px";
+          wrap.append(radio, lab);
+        });
+      }
+      box.appendChild(wrap);
+    });
+  }
+
   $("reset-block-style").addEventListener("click", () => {
     const block = selectedBlock();
     if (!block || block.widget !== "custom") return;
@@ -1868,24 +1947,64 @@
     mineTitle.className = "palette-title";
     mineTitle.textContent = T.my_blocks;
     mine.append(mineTitle, textBtn, imageBtn);
+    const renameWidget = (item) => {
+      const row = mine.querySelector('[data-def="' + item.id + '"]');
+      if (!row) return;
+      const nameEl = row.querySelector(".w-name");
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "w-name-input";
+      input.maxLength = 20;
+      input.value = item.name;
+      nameEl.replaceWith(input);
+      input.focus();
+      input.select();
+      const commit = () => {
+        const value = input.value.trim();
+        if (value && value !== item.name) {
+          item.name = value;
+          markDirty();
+        }
+        renderCanvas();
+      };
+      input.addEventListener("blur", commit);
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") { event.preventDefault(); input.blur(); }
+        if (event.key === "Escape") { input.value = item.name; input.blur(); }
+      });
+    };
+    const metaOf = (item) => {
+      const labels = (item.fields || []).map((id) => {
+        const field = (catalog.fields || []).find((f) => f.id === id);
+        return field ? field.label : id;
+      });
+      return labels.slice(0, 3).join(" · ") + (labels.length > 3 ? " …" : "");
+    };
     (state.widget_defs || []).forEach((item) => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "btn";
-      btn.textContent = item.name;
-      bindPaletteChip(btn, {widget: "custom", def: item.id, w: 280, h: 160}, false);
-      const entry = document.createElement("div");
-      entry.className = "widget-item";
-      const menu = document.createElement("details");
-      menu.className = "widget-menu";
-      const more = document.createElement("summary");
-      more.className = "btn";
-      more.textContent = "⋯";
-      more.setAttribute("aria-label", T.manage_widget.replace("{name}", item.name));
+      const row = document.createElement("div");
+      row.className = "widget-row";
+      row.dataset.def = item.id;
+      const name = document.createElement("span");
+      name.className = "w-name w-add";
+      name.textContent = item.name;
+      name.title = item.name;
+      bindPaletteChip(name, {widget: "custom", def: item.id, w: 280, h: 160}, false);
+      const meta = document.createElement("span");
+      meta.className = "w-meta";
+      meta.textContent = metaOf(item);
+      const rename = document.createElement("button");
+      rename.type = "button";
+      rename.className = "btn w-act";
+      rename.textContent = "✎";
+      rename.title = T.rename_widget;
+      rename.setAttribute("aria-label", T.rename_widget);
+      rename.addEventListener("click", () => renameWidget(item));
       const del = document.createElement("button");
       del.type = "button";
-      del.className = "btn danger widget-delete";
-      del.textContent = T.delete_widget;
+      del.className = "btn w-act danger";
+      del.textContent = "🗑";
+      del.title = T.delete_widget;
+      del.setAttribute("aria-label", T.delete_widget);
       del.addEventListener("click", () => {
         const count = state.pages.filter((p) => (p.layout || []).some((block) => block.def === item.id)).length;
         if (!window.confirm(T.delete_widget_confirm.replace("{name}", item.name).replace("{n}", String(count)))) return;
@@ -1894,17 +2013,22 @@
         markDirty();
         renderCanvas();
       });
-      menu.append(more, del);
-      entry.append(btn, menu);
-      mine.appendChild(entry);
+      row.append(name, meta, rename, del);
+      mine.appendChild(row);
     });
     (state.assets || []).forEach((asset) => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "btn";
-      btn.textContent = asset.id;
-      bindPaletteChip(btn, {widget: "image", asset: asset.id, w: 280, h: 180}, false);
-      mine.appendChild(btn);
+      const row = document.createElement("div");
+      row.className = "widget-row";
+      const name = document.createElement("span");
+      name.className = "w-name w-add";
+      name.textContent = asset.id;
+      name.title = asset.id;
+      bindPaletteChip(name, {widget: "image", asset: asset.id, w: 280, h: 180}, false);
+      const meta = document.createElement("span");
+      meta.className = "w-meta";
+      meta.textContent = T.image_asset;
+      row.append(name, meta);
+      mine.appendChild(row);
     });
     if ((catalog.center || []).length) {
       const centerTitle = document.createElement("span");

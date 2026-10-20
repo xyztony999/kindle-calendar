@@ -146,9 +146,11 @@
   .sample-label { color: var(--mid); font-size: 10px; white-space: nowrap; }
   .widget-item { display: inline-flex; align-items: stretch; position: relative; max-width: 100%; }
   .widget-item > .btn { border-radius: 8px 0 0 8px; }
+  .widget-menu { position: relative; }
   .widget-menu > summary { list-style: none; border-radius: 0 8px 8px 0; padding: 8px; border-left: 0; cursor: pointer; }
   .widget-menu > summary::-webkit-details-marker { display: none; }
-  .widget-menu[open] > .widget-delete { position: absolute; top: 100%; right: 0; z-index: 6; margin-top: 4px; white-space: nowrap; box-shadow: 0 4px 12px rgba(0,0,0,.15); }
+  /* 下拉挂在 ⋯ 菜单正下方、左对齐（右对齐会在窄列被弹窗边缘裁剪） */
+  .widget-menu[open] > .widget-delete { position: absolute; top: 100%; left: 0; z-index: 6; margin-top: 4px; white-space: nowrap; min-width: max-content; box-shadow: 0 4px 12px rgba(0,0,0,.25); }
   .page-row, .quote-row, .loc-grid {
     display: grid;
     gap: 8px;
@@ -578,10 +580,9 @@
           <span id="loc-flag" class="corner" hidden>{{ ui.loc_flag }}</span>
           <h2>{{ ui.city_h2 }}</h2>
           <div class="search-line">
-            <input id="geo-q" type="search" placeholder="{{ ui.geo_ph }}" maxlength="50" autocomplete="off" role="combobox" aria-label="{{ ui.geo_ph }}" aria-autocomplete="list" aria-controls="geo-list" aria-expanded="false" aria-describedby="geo-help geo-status">
+            <input id="geo-q" type="search" placeholder="{{ ui.geo_ph }}" maxlength="50" autocomplete="off" role="combobox" aria-label="{{ ui.geo_ph }}" aria-autocomplete="list" aria-controls="geo-list" aria-expanded="false" aria-describedby="geo-status">
             <div id="geo-list" role="listbox"></div>
           </div>
-          <p id="geo-help" class="muted">{{ ui.geo_help }}</p>
           <div id="geo-status" class="muted" role="status"></div>
           <div class="loc-grid">
             <label class="field">{{ ui.city_name }}
@@ -641,7 +642,6 @@
       </div>
       <div class="editor-actions"><button class="btn" id="cancel-editor" type="button">{{ ui.cancel_editor }}</button><button class="btn primary" id="close-editor" type="button">{{ ui.close_editor }}</button></div>
     </div>
-    <p class="muted editor-note">{{ ui.editor_note }}</p>
     <div class="canvas-tools" id="canvas-tools">
       <div class="canvas-panel">
         <div class="palette" id="palette-system"></div>
@@ -650,7 +650,6 @@
       </div>
       <div class="canvas-panel canvas-stage-panel">
         <div class="stage-toolbar">
-          <p class="muted" id="drop-hint">{{ ui.drop_hint }}</p>
           <button class="btn" id="draft-preview" type="button" aria-describedby="preview-note">{{ ui.draft_preview }}</button>
         </div>
         <p class="muted" id="preview-note">{{ ui.preview_note }}</p>
@@ -1160,11 +1159,7 @@
     const src = document.createElement("div");
     src.className = "muted";
     const ua = (data.last_user_agent || "").slice(0, 40);
-    src.textContent = [data.last_ip, ua].filter(Boolean).join(" · ") || "—";
-    const note = document.createElement("p");
-    note.className = "muted";
-    note.textContent = T.device_note;
-    body.append(line1, seen, fetched, applied, line2, ver, src, note);
+    src.textContent = [data.last_ip, ua].filter(Boolean).join(" · ") || "—"; body.append(line1, seen, fetched, applied, line2, ver, src);
     if (T.device_mode[data.mode]) {
       const mode = document.createElement("div");
       mode.className = "muted";
@@ -1500,7 +1495,14 @@
     const block = selectedBlock();
     const definition = block && block.widget === "custom" && dataDefinition(block.def);
     $("appearance-controls").hidden = !definition;
-    $("appearance-note").textContent = definition ? T.appearance_scope.replace("{name}", definition.name) : T.select_data_block;
+    // 任何选中都给出可见反馈：系统积木显示「名称 · 固定样式」，数据积木显示样式选择
+    if (!block) {
+      $("appearance-note").textContent = T.select_data_block;
+    } else if (!definition) {
+      $("appearance-note").textContent = blockLabel(block) + " · " + T.fixed_style;
+    } else {
+      $("appearance-note").textContent = T.appearance_scope.replace("{name}", definition.name);
+    }
     const options = $("block-styles");
     options.replaceChildren();
     if (!definition) return;
@@ -1940,7 +1942,7 @@
   function updateFieldHint() {
     const first = $("def-fields").querySelector("input:checked");
     const field = first && (catalog.fields || []).find((item) => item.id === first.value);
-    $("first-field").textContent = field ? T.first_field.replace("{name}", field.label) : T.field_order;
+    $("first-field").textContent = field ? T.first_field.replace("{name}", field.label) : "";
   }
   $("def-fields").addEventListener("change", updateFieldHint);
 

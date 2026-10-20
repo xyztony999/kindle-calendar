@@ -125,6 +125,31 @@ report_device() {
     return 0
 }
 
+# 轻量在线心跳：只刷新「最近通信」，不动拉取/确认时间戳与已确认版本。
+# 仅在网络已通时发送（不主动开网，按需 WiFi 模式不增加耗电），
+# 把在线状态判定粒度从拉取周期（默认 15 分钟）提高到 HEARTBEAT_S。
+HEARTBEAT_S=300
+heartbeat_last=0
+heartbeat_ping() {
+    now=$(date +%s)
+    [ $((now - heartbeat_last)) -ge "$HEARTBEAT_S" ] || return 0
+    ping -c 1 -W 3 223.5.5.5 >/dev/null 2>&1 || return 0
+    hb_base="${API_URL:-$SERVER_URL}"
+    hb_base=$(printf '%s' "$hb_base" | sed 's#^\(https\{0,1\}://[^/]*\).*#\1#')
+    hb_url="$hb_base/api/v1/device/heartbeat"
+    if command -v wget >/dev/null 2>&1; then
+        wget -q -T 8 --header="X-Kindle-Device: dash" \
+            --post-data="interval_s=$INTERVAL&mode=v2" -O /dev/null "$hb_url" 2>/dev/null \
+            && heartbeat_last=$now
+    elif command -v curl >/dev/null 2>&1; then
+        curl -fsS --connect-timeout 8 --max-time 12 -H "X-Kindle-Device: dash" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "interval_s=$INTERVAL&mode=v2" -o /dev/null "$hb_url" 2>/dev/null \
+            && heartbeat_last=$now
+    fi
+    return 0
+}
+
 wait_for_network() {
     i=0
     while [ "$i" -lt 10 ]; do
@@ -695,6 +720,7 @@ v21_loop() {
 
     while true; do
         prevent_sleep
+        heartbeat_ping
         poll_touch
         apply_gestures
         [ "$exit_request" = "1" ] && break

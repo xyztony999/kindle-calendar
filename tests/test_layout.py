@@ -211,6 +211,37 @@ class LayoutApiTests(unittest.TestCase):
         self.assertIn(missing.status_code, (400, 502))
         self.assertIn(missing.get_json()["error"]["code"], {"OSS_NOT_CONFIGURED", "ASSET_TYPE_INVALID"})
 
+    def test_asset_guards_and_catalog_storage_flag(self):
+        catalog = self.client.get("/admin/api/widget-catalog", headers=self._headers()).get_json()["data"]
+        self.assertEqual(catalog["storage"]["type"], "oss")
+        self.assertFalse(catalog["storage"]["configured"])
+
+        empty = self.client.post(
+            "/admin/api/assets",
+            data={},
+            headers=self._headers(),
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(empty.status_code, 400)
+        self.assertEqual(empty.get_json()["error"]["code"], "ASSET_EMPTY")
+
+        from server.storage import AssetError, inspect_image
+
+        with self.assertRaises(AssetError) as ctx:
+            inspect_image(b"")
+        self.assertEqual(ctx.exception.code, "ASSET_EMPTY")
+
+        from server.render.placed import paint_image
+        from server.render.regions import Rect
+
+        transparent = Image.new("RGBA", (10, 10), (0, 0, 0, 0))
+        flattened = paint_image(transparent, Rect(0, 0, 20, 20))
+        self.assertEqual(flattened.getpixel((5, 5)), 255)
+
+        placeholder = paint_image(None, Rect(0, 0, 20, 20))
+        self.assertEqual(placeholder.getpixel((10, 5)), 255)
+        self.assertNotEqual(placeholder.getpixel((7, 7)), 255)
+
     def test_import_schema1(self):
         raw = {
             "schema_version": 1,

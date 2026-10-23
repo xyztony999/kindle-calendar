@@ -95,7 +95,18 @@ def paint_text(text: str, align: str, rect: Rect, font_path: str) -> Image.Image
 def paint_image(source: Image.Image | None, rect: Rect) -> Image.Image:
     canvas = Image.new("L", (rect.w, rect.h), style.PAPER)
     if source is None:
+        # 素材缺失时画语言无关的缺图占位，避免静默白板无法排查
+        draw = ImageDraw.Draw(canvas)
+        inset = max(4, min(rect.w, rect.h) // 8)
+        box = (inset, inset, max(inset + 1, rect.w - inset - 1), max(inset + 1, rect.h - inset - 1))
+        draw.rectangle(box, outline=style.MID)
+        draw.line((box[0], box[1], box[2], box[3]), fill=style.MID)
+        draw.line((box[0], box[3], box[2], box[1]), fill=style.MID)
         return canvas
+    if source.mode in ("RGBA", "LA", "PA") or (source.mode == "P" and "transparency" in source.info):
+        source = source.convert("RGBA")
+        white = Image.new("RGBA", source.size, (255, 255, 255, 255))
+        source = Image.alpha_composite(white, source)
     image = source.convert("L")
     scale = min(rect.w / max(1, image.width), rect.h / max(1, image.height))
     tw, th = max(1, round(image.width * scale)), max(1, round(image.height * scale))

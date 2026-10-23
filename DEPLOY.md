@@ -134,6 +134,28 @@ git push
 
 看到最后一步输出 `==> 部署完成` 即成功。浏览器访问 `http://服务器IP:8080/dashboard.png` 确认。
 
+### 6. 图片素材存储（可选：管理端上传图片积木）
+
+图片积木的素材保存在阿里云 OSS（不经服务器磁盘），未配置时管理端会自动禁用「上传图片」按钮。需要用图片积木时：
+
+1. 开通 [对象存储 OSS](https://oss.console.aliyun.com)，创建一个**私有** Bucket（地域任选，与 ECS 同地域可用内网 Endpoint）
+2. RAM 访问控制创建子用户并生成 AccessKey，授权只需该 Bucket 的 `PutObject / GetObject / DeleteObject`（最小权限）
+3. 在服务器 `.env` 追加以下变量后重启容器：
+
+   ```bash
+   OSS_ENDPOINT=oss-cn-beijing.aliyuncs.com   # Bucket 概览页的 Endpoint
+   OSS_BUCKET=你的Bucket名
+   OSS_ACCESS_KEY_ID=子用户AccessKeyId
+   OSS_ACCESS_KEY_SECRET=子用户AccessKeySecret  # 只写在服务器 .env，不要提交、不要进 GitHub
+   OSS_PREFIX=calendar/                        # 可选，对象 key 前缀
+   ```
+
+   ```bash
+   cd /www/wwwroot/kindle-calendar && docker compose -f docker-compose.acr.yml up -d
+   ```
+
+> 各 docker-compose 编排文件已透传上述变量。素材读取失败时设备画面会显示「缺图占位框」而非无提示的白板，`docker logs kindle-calendar` 中有 `OSS 读取失败` / `OSS 未配置` 告警可排查。
+
 ## 日常使用
 
 - **改代码后**：`git push` 即可，约 2~3 分钟自动上线（构建有缓存会更快）
@@ -173,3 +195,5 @@ vi .env && docker compose -f docker-compose.acr.yml up -d
 | `docker compose` 不存在 | 宝塔安装 Docker 时勾选 docker-compose 插件；或使用 `docker-compose`（v1）命令 |
 | 服务器是 ARM 实例 | 把 workflow 里 `platforms: linux/amd64` 改为 `linux/arm64` |
 | ACR 拉取慢 | `.env` 的 `ACR_IMAGE` 可填控制台同页显示的 **VPC 地址**（同地域服务器内网拉取，不占公网带宽）。SSH 部署脚本会自动读取 `.env` 里的仓库主机并登录，公网/VPC 地址均支持 |
+| 管理端「上传图片」按钮置灰 | 服务器未配置 OSS：按上文「图片素材存储」在 `.env` 填 `OSS_*` 后重启容器。编排文件已透传这些变量 |
+| 设备上图片积木显示缺图占位框 | OSS 读取失败：`docker logs kindle-calendar` 搜 `OSS 读取失败`；确认 Endpoint 可达（`-internal` 内网地址仅同地域 ECS 可用）、AccessKey 有效、Bucket 未删 |

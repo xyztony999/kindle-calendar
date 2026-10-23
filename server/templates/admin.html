@@ -147,7 +147,7 @@
   /* 我的积木：行式列表（名称 | 摘要 | ✏ 重命名 | 🗑 删除），无嵌套菜单 */
   .widget-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
   .widget-row {
-    display: grid; grid-template-columns: minmax(64px, 1fr) auto auto auto;
+    display: grid; grid-template-columns: minmax(64px, 1fr) minmax(0, 2fr) auto auto auto;
     align-items: center; gap: 8px;
     border: 1px solid var(--line); border-radius: 10px;
     background: var(--card); padding: 4px 6px 4px 12px;
@@ -161,10 +161,12 @@
   }
   .widget-row .w-act.danger { color: var(--bad); }
   .widget-row .w-add { cursor: grab; }
-  .widget-row .w-name-input {
-    border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px;
-    background: var(--card); width: 100%; font: inherit;
-  }
+  .widget-row .w-used { color: var(--mid); font-size: 12px; white-space: nowrap; }
+  #widget-form { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; }
+  .snap-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; white-space: nowrap; cursor: pointer; }
+  .snap-guide { position: absolute; z-index: 3; pointer-events: none; background: #b3261e; }
+  .snap-guide-v { top: 0; bottom: 0; width: 1px; }
+  .snap-guide-h { left: 0; right: 0; height: 1px; }
   .page-row, .quote-row, .loc-grid {
     display: grid;
     gap: 8px;
@@ -590,6 +592,23 @@
             <input id="suppress" type="number" min="0" max="3600" step="1" data-field="rotation.suppress_s">
           </label>
         </section>
+        <section class="card" id="card-widgets">
+          <div class="section-head"><h2>{{ ui.widgets_h2 }}</h2><button class="btn" id="widget-add" type="button">+ {{ ui.add_data_widget }}</button></div>
+          <form id="widget-form" hidden>
+            <label class="field">{{ ui.widget_name }}
+              <input id="widget-name" type="text" maxlength="20">
+            </label>
+            <div id="widget-fields" class="field-checks"></div>
+            <p id="widget-hint" class="muted" role="status"></p>
+            <div class="settings-actions">
+              <button class="btn primary" id="widget-save" type="button">{{ ui.save_widget }}</button>
+              <button class="btn" id="widget-cancel" type="button">{{ ui.cancel_widget }}</button>
+            </div>
+          </form>
+          <div class="widget-list" id="widget-list"></div>
+          <h3 id="assets-title" hidden>{{ ui.image_assets_h2 }}</h3>
+          <div class="widget-list" id="asset-list"></div>
+        </section>
         <section class="card" id="card-location">
           <span id="loc-flag" class="corner" hidden>{{ ui.loc_flag }}</span>
           <h2>{{ ui.city_h2 }}</h2>
@@ -665,6 +684,7 @@
       <div class="canvas-panel canvas-stage-panel">
         <div class="stage-toolbar">
           <button class="btn" id="draft-preview" type="button" aria-describedby="preview-note">{{ ui.draft_preview }}</button>
+          <label class="snap-toggle" title="{{ ui.snap_hint }}"><input id="snap-toggle" type="checkbox" checked> {{ ui.snap_align }}</label>
         </div>
         <p class="muted" id="preview-note">{{ ui.preview_note }}</p>
         <div class="stage-wrap">
@@ -688,15 +708,6 @@
           <p class="muted" id="appearance-reason"></p>
           <button class="btn" id="reset-block-style" type="button">{{ ui.restore_block_style }}</button>
         </div>
-      </section>
-      <section class="canvas-panel" id="def-editor">
-        <h3>{{ ui.new_data }}</h3>
-        <label class="field">{{ ui.widget_name }}
-          <input id="def-name" type="text" maxlength="20">
-        </label>
-        <div id="def-fields" class="field-checks"></div>
-        <p id="first-field" class="muted" role="status"></p>
-        <button class="btn" id="def-save" type="button">{{ ui.save_widget }}</button>
       </section>
       </div>
     </div>
@@ -734,6 +745,9 @@
   let geoController = null;
   let geoComposing = false;
   let geoActive = -1;
+  let snapEnabled = true;
+  let editingWidgetId = null;
+  let sessionAssetIds = [];
 
   const $ = (id) => document.getElementById(id);
 
@@ -1212,6 +1226,7 @@
     state.pages.forEach((page) => { if (!Array.isArray(page.layout)) page.layout = []; });
     fillLocation();
     renderPages();
+    renderWidgets();
     renderQuoteModes();
     renderCustom();
     renderPreviews();
@@ -1296,6 +1311,7 @@
     $("degraded-banner").hidden = true;
     fillLocation();
     renderPages();
+    renderWidgets();
     renderQuoteModes();
     renderCustom();
     renderPreviews();
@@ -1396,8 +1412,7 @@
     editorSession += 1;
     selectedPageId = pageId;
     selectedBlockId = null;
-    $("def-name").value = "";
-    $("def-fields").querySelectorAll("input").forEach((input) => { input.checked = false; });
+    sessionAssetIds = [];
     renderPages();
     renderCanvas();
     clearPreview();
@@ -1408,7 +1423,9 @@
   }
 
   function closeEditor(accept = true) {
+    if (!accept && sessionAssetIds.length && !window.confirm(T.asset_discard_confirm)) return;
     const focusPageId = selectedPageId;
+    sessionAssetIds = [];
     if (!accept && editorSnapshot) {
       state = editorSnapshot.state;
       selectedPageId = editorSnapshot.selectedPageId;
@@ -1464,6 +1481,7 @@
     } catch (err) {
       if (!err.handled) catalog = {system: [], mine: [], center: [], fields: []};
     }
+    renderWidgets();
     renderCanvas();
   }
 
@@ -1698,7 +1716,6 @@
       stage.appendChild(el);
     });
     renderPalette(page);
-    renderDefEditor();
     renderBlockAppearance();
     if (!$("draft-img").hidden) $("stage").classList.add("has-preview");
   }
@@ -1709,6 +1726,92 @@
       x: (event.clientX - box.left) / box.width * 758,
       y: (event.clientY - box.top) / box.height * 1024
     };
+  }
+
+  // 对齐吸附：候选线 = 画布参考线（左右边距 56/702、中线、边界、顶部状态栏 44）+ 其他积木的三条边
+  const SNAP_GAP = 8;
+
+  function snapLines(page, block) {
+    const xs = new Set([0, 56, 379, 702, 758]);
+    const ys = new Set([44, 512, 1024]);
+    (page.layout || []).forEach((other) => {
+      if (other === block) return;
+      xs.add(other.x);
+      xs.add(Math.round(other.x + other.w / 2));
+      xs.add(other.x + other.w);
+      ys.add(other.y);
+      ys.add(Math.round(other.y + other.h / 2));
+      ys.add(other.y + other.h);
+    });
+    return {xs: Array.from(xs), ys: Array.from(ys)};
+  }
+
+  function snapAxis(value, size, lines) {
+    let best = null;
+    const edges = [value, value + size / 2, value + size];
+    lines.forEach((line) => {
+      edges.forEach((edge) => {
+        const delta = line - edge;
+        if (Math.abs(delta) <= SNAP_GAP && (!best || Math.abs(delta) < Math.abs(best.delta))) best = {delta: delta, line: line};
+      });
+    });
+    if (!best) return {value: value, line: null};
+    return {value: Math.round(value + best.delta), line: best.line};
+  }
+
+  function snapEdge(start, size, lines) {
+    let best = null;
+    lines.forEach((line) => {
+      const delta = line - (start + size);
+      if (Math.abs(delta) <= SNAP_GAP && (!best || Math.abs(delta) < Math.abs(best.delta))) best = {delta: delta, line: line};
+    });
+    if (!best) return {size: size, line: null};
+    return {size: Math.round(size + best.delta), line: best.line};
+  }
+
+  function snapMove(block, page, x, y, alt) {
+    if (snapEnabled && !alt) {
+      const lines = snapLines(page, block);
+      const sx = snapAxis(x, block.w, lines.xs);
+      const sy = snapAxis(y, block.h, lines.ys);
+      return {
+        x: Math.max(0, Math.min(758 - block.w, sx.value)),
+        y: Math.max(44, Math.min(1024 - block.h, sy.value)),
+        gx: sx.line, gy: sy.line
+      };
+    }
+    return {x: x, y: y, gx: null, gy: null};
+  }
+
+  function snapResize(block, page, w, h, minW, minH, alt) {
+    if (snapEnabled && !alt) {
+      const lines = snapLines(page, block);
+      const rx = snapEdge(block.x, w, lines.xs);
+      const by = snapEdge(block.y, h, lines.ys);
+      return {
+        w: Math.round(Math.min(758 - block.x, Math.max(minW, rx.size))),
+        h: Math.round(Math.min(1024 - block.y, Math.max(minH, by.size))),
+        gw: rx.line, gh: by.line
+      };
+    }
+    return {w: w, h: h, gw: null, gh: null};
+  }
+
+  function setGuide(axis, pos) {
+    const stage = $("stage");
+    const cls = ".snap-guide-" + axis;
+    let el = stage.querySelector(cls);
+    if (pos === null || pos === undefined) {
+      if (el) el.remove();
+      return;
+    }
+    if (!el) {
+      el = document.createElement("div");
+      el.className = "snap-guide " + cls.slice(1);
+      stage.appendChild(el);
+    }
+    if (axis === "v") el.style.left = (pos / 758 * 100) + "%";
+    else el.style.top = (pos / 1024 * 100) + "%";
   }
 
   function bindBlock(el, handle, block, page) {
@@ -1726,10 +1829,16 @@
       const origin = {x: block.x, y: block.y};
       function move(ev) {
         const now = point(ev);
-        block.x = Math.round(Math.min(758 - block.w, Math.max(0, origin.x + now.x - start.x)));
-        block.y = Math.round(Math.min(1024 - block.h, Math.max(44, origin.y + now.y - start.y)));
+        const snapped = snapMove(block, page,
+          Math.round(Math.min(758 - block.w, Math.max(0, origin.x + now.x - start.x))),
+          Math.round(Math.min(1024 - block.h, Math.max(44, origin.y + now.y - start.y))),
+          ev.altKey);
+        block.x = snapped.x;
+        block.y = snapped.y;
         el.style.left = (block.x / 758 * 100) + "%";
         el.style.top = (block.y / 1024 * 100) + "%";
+        setGuide("v", snapped.gx);
+        setGuide("h", snapped.gy);
         $("clock-warn").hidden = !clockBad(page.layout);
         el.classList.toggle("bad", block.widget === "clock" && clockBad(page.layout));
         markDirty();
@@ -1737,6 +1846,8 @@
       function up() {
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", up);
+        setGuide("v", null);
+        setGuide("h", null);
       }
       window.addEventListener("pointermove", move);
       window.addEventListener("pointerup", up);
@@ -1749,16 +1860,24 @@
       const origin = {w: block.w, h: block.h};
       function move(ev) {
         const now = point(ev);
-        block.w = Math.round(Math.min(758 - block.x, Math.max(minW, origin.w + now.x - start.x)));
-        block.h = Math.round(Math.min(1024 - block.y, Math.max(minH, origin.h + now.y - start.y)));
+        const snapped = snapResize(block, page,
+          Math.round(Math.min(758 - block.x, Math.max(minW, origin.w + now.x - start.x))),
+          Math.round(Math.min(1024 - block.y, Math.max(minH, origin.h + now.y - start.y))),
+          minW, minH, ev.altKey);
+        block.w = snapped.w;
+        block.h = snapped.h;
         el.style.width = (block.w / 758 * 100) + "%";
         el.style.height = (block.h / 1024 * 100) + "%";
+        setGuide("v", snapped.gw);
+        setGuide("h", snapped.gh);
         $("clock-warn").hidden = !clockBad(page.layout);
         markDirty();
       }
       function up() {
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", up);
+        setGuide("v", null);
+        setGuide("h", null);
       }
       window.addEventListener("pointermove", move);
       window.addEventListener("pointerup", up);
@@ -1785,8 +1904,12 @@
     let x = 56;
     let y = 160;
     if (at) {
-      x = Math.round(Math.min(758 - block.w, Math.max(0, at.x - block.w / 2)));
-      y = Math.round(Math.min(1024 - block.h, Math.max(44, at.y - 12)));
+      const snapped = snapMove(block, page,
+        Math.round(Math.min(758 - block.w, Math.max(0, at.x - block.w / 2))),
+        Math.round(Math.min(1024 - block.h, Math.max(44, at.y - 12))),
+        false);
+      x = snapped.x;
+      y = snapped.y;
     }
     const clock = page.layout.find((item) => item.widget === "clock");
     if (!at && clock && overlaps({x: x, y: y, w: block.w, h: block.h}, clock)) {
@@ -1942,37 +2065,22 @@
     imageBtn.type = "button";
     imageBtn.className = "btn";
     imageBtn.textContent = T.upload_image;
-    imageBtn.addEventListener("click", () => $("image-file").click());
+    const ossReady = !catalog.storage || catalog.storage.configured;
+    imageBtn.disabled = !ossReady;
+    if (!ossReady) imageBtn.title = T.oss_missing;
+    imageBtn.addEventListener("click", () => { if (!imageBtn.disabled) $("image-file").click(); });
+    const manageBtn = document.createElement("button");
+    manageBtn.type = "button";
+    manageBtn.className = "btn";
+    manageBtn.textContent = T.manage_widgets;
+    manageBtn.addEventListener("click", () => {
+      closeEditor(true);
+      $("card-widgets").scrollIntoView({behavior: "smooth", block: "start"});
+    });
     const mineTitle = document.createElement("span");
     mineTitle.className = "palette-title";
     mineTitle.textContent = T.my_blocks;
-    mine.append(mineTitle, textBtn, imageBtn);
-    const renameWidget = (item) => {
-      const row = mine.querySelector('[data-def="' + item.id + '"]');
-      if (!row) return;
-      const nameEl = row.querySelector(".w-name");
-      const input = document.createElement("input");
-      input.type = "text";
-      input.className = "w-name-input";
-      input.maxLength = 20;
-      input.value = item.name;
-      nameEl.replaceWith(input);
-      input.focus();
-      input.select();
-      const commit = () => {
-        const value = input.value.trim();
-        if (value && value !== item.name) {
-          item.name = value;
-          markDirty();
-        }
-        renderCanvas();
-      };
-      input.addEventListener("blur", commit);
-      input.addEventListener("keydown", (event) => {
-        if (event.key === "Enter") { event.preventDefault(); input.blur(); }
-        if (event.key === "Escape") { input.value = item.name; input.blur(); }
-      });
-    };
+    mine.append(mineTitle, textBtn, imageBtn, manageBtn);
     const metaOf = (item) => {
       const labels = (item.fields || []).map((id) => {
         const field = (catalog.fields || []).find((f) => f.id === id);
@@ -1992,28 +2100,7 @@
       const meta = document.createElement("span");
       meta.className = "w-meta";
       meta.textContent = metaOf(item);
-      const rename = document.createElement("button");
-      rename.type = "button";
-      rename.className = "btn w-act";
-      rename.textContent = "✎";
-      rename.title = T.rename_widget;
-      rename.setAttribute("aria-label", T.rename_widget);
-      rename.addEventListener("click", () => renameWidget(item));
-      const del = document.createElement("button");
-      del.type = "button";
-      del.className = "btn w-act danger";
-      del.textContent = "🗑";
-      del.title = T.delete_widget;
-      del.setAttribute("aria-label", T.delete_widget);
-      del.addEventListener("click", () => {
-        const count = state.pages.filter((p) => (p.layout || []).some((block) => block.def === item.id)).length;
-        if (!window.confirm(T.delete_widget_confirm.replace("{name}", item.name).replace("{n}", String(count)))) return;
-        state.widget_defs = state.widget_defs.filter((def) => def.id !== item.id);
-        state.pages.forEach((p) => { p.layout = (p.layout || []).filter((block) => block.def !== item.id); });
-        markDirty();
-        renderCanvas();
-      });
-      row.append(name, meta, rename, del);
+      row.append(name, meta);
       mine.appendChild(row);
     });
     (state.assets || []).forEach((asset) => {
@@ -2047,28 +2134,186 @@
     }
   }
 
-  function renderDefEditor() {
-    const box = $("def-fields");
-    if (!box.dataset.ready) {
-      (catalog.fields || []).forEach((field) => {
-        const label = document.createElement("label");
-        const input = document.createElement("input");
-        input.type = "checkbox";
-        input.value = field.id;
-        label.append(input, " " + field.label);
-        box.appendChild(label);
-      });
-      box.dataset.ready = "1";
-    }
-    updateFieldHint();
+  function widgetFieldLabel(id) {
+    const field = (catalog.fields || []).find((item) => item.id === id);
+    return field ? field.label : id;
   }
 
-  function updateFieldHint() {
-    const first = $("def-fields").querySelector("input:checked");
-    const field = first && (catalog.fields || []).find((item) => item.id === first.value);
-    $("first-field").textContent = field ? T.first_field.replace("{name}", field.label) : "";
+  function widgetUseCount(defId) {
+    return state.pages.filter((page) => (page.layout || []).some((block) => block.def === defId)).length;
   }
-  $("def-fields").addEventListener("change", updateFieldHint);
+
+  function assetUseCount(assetId) {
+    return state.pages.filter((page) => (page.layout || []).some((block) => block.widget === "image" && block.asset === assetId)).length;
+  }
+
+  function refreshWidgetFields(fields) {
+    const box = $("widget-fields");
+    box.replaceChildren();
+    (catalog.fields || []).forEach((field) => {
+      const label = document.createElement("label");
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.value = field.id;
+      input.checked = fields.includes(field.id);
+      input.addEventListener("change", updateWidgetHint);
+      label.append(input, " " + field.label);
+      box.appendChild(label);
+    });
+  }
+
+  function updateWidgetHint() {
+    const first = $("widget-fields").querySelector("input:checked");
+    $("widget-hint").textContent = first ? T.first_field.replace("{name}", widgetFieldLabel(first.value)) : "";
+  }
+
+  function openWidgetForm(def) {
+    editingWidgetId = def ? def.id : null;
+    $("widget-name").value = def ? def.name : "";
+    refreshWidgetFields(def ? def.fields : []);
+    updateWidgetHint();
+    $("widget-form").hidden = false;
+    $("widget-name").focus();
+  }
+
+  function closeWidgetForm() {
+    editingWidgetId = null;
+    $("widget-form").hidden = true;
+    $("widget-name").value = "";
+    $("widget-fields").replaceChildren();
+    $("widget-hint").textContent = "";
+  }
+
+  function revalidateDefStyles(def) {
+    const choices = styleChoices(def.fields);
+    const fallback = choices.recommended || "rows";
+    if (!choices.styles.some((item) => item.id === def.style)) def.style = fallback;
+    state.pages.forEach((page) => (page.layout || []).forEach((block) => {
+      if (block.def === def.id && block.style && !choices.styles.some((item) => item.id === block.style)) block.style = fallback;
+    }));
+  }
+
+  function renderWidgets() {
+    if (!state) return;
+    const list = $("widget-list");
+    list.replaceChildren();
+    (state.widget_defs || []).forEach((item) => {
+      const row = document.createElement("div");
+      row.className = "widget-row";
+      const name = document.createElement("span");
+      name.className = "w-name";
+      name.textContent = item.name;
+      name.title = item.name;
+      const meta = document.createElement("span");
+      meta.className = "w-meta";
+      meta.textContent = (item.fields || []).map(widgetFieldLabel).join(" · ");
+      const count = widgetUseCount(item.id);
+      const used = document.createElement("span");
+      used.className = "w-used";
+      used.textContent = count ? T.used_pages.replace("{n}", String(count)) : T.unused_widget;
+      const edit = document.createElement("button");
+      edit.type = "button";
+      edit.className = "btn w-act";
+      edit.textContent = "✎";
+      edit.title = T.edit_widget;
+      edit.setAttribute("aria-label", T.edit_widget);
+      edit.addEventListener("click", () => openWidgetForm(item));
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "btn w-act danger";
+      del.textContent = "🗑";
+      del.title = T.delete_widget;
+      del.setAttribute("aria-label", T.delete_widget);
+      del.addEventListener("click", () => {
+        const n = widgetUseCount(item.id);
+        if (!window.confirm(T.delete_widget_confirm.replace("{name}", item.name).replace("{n}", String(n)))) return;
+        state.widget_defs = state.widget_defs.filter((def) => def.id !== item.id);
+        state.pages.forEach((page) => { page.layout = (page.layout || []).filter((block) => block.def !== item.id); });
+        if (editingWidgetId === item.id) closeWidgetForm();
+        markDirty();
+        renderWidgets();
+        if (!$("canvas-modal").hidden) renderCanvas();
+      });
+      row.append(name, meta, used, edit, del);
+      list.appendChild(row);
+    });
+    const assets = state.assets || [];
+    $("assets-title").hidden = !assets.length;
+    const alist = $("asset-list");
+    alist.replaceChildren();
+    assets.forEach((asset) => {
+      const row = document.createElement("div");
+      row.className = "widget-row";
+      const name = document.createElement("span");
+      name.className = "w-name";
+      name.textContent = asset.id;
+      const meta = document.createElement("span");
+      meta.className = "w-meta";
+      meta.textContent = T.image_asset;
+      const count = assetUseCount(asset.id);
+      const used = document.createElement("span");
+      used.className = "w-used";
+      used.textContent = count ? T.used_pages.replace("{n}", String(count)) : T.unused_widget;
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "btn w-act danger";
+      del.textContent = "🗑";
+      del.title = T.delete_asset;
+      del.setAttribute("aria-label", T.delete_asset);
+      del.addEventListener("click", () => {
+        const n = assetUseCount(asset.id);
+        if (!window.confirm(T.delete_asset_confirm.replace("{id}", asset.id).replace("{n}", String(n)))) return;
+        state.assets = state.assets.filter((item) => item.id !== asset.id);
+        state.pages.forEach((page) => { page.layout = (page.layout || []).filter((block) => !(block.widget === "image" && block.asset === asset.id)); });
+        markDirty();
+        renderWidgets();
+        if (!$("canvas-modal").hidden) renderCanvas();
+      });
+      row.append(name, meta, used, del);
+      alist.appendChild(row);
+    });
+  }
+
+  $("widget-add").addEventListener("click", () => {
+    if (!$("widget-form").hidden && editingWidgetId === null) {
+      closeWidgetForm();
+      return;
+    }
+    if ((state.widget_defs || []).length >= (limits.max_defs || 12)) {
+      toast(T.max_defs, true);
+      return;
+    }
+    openWidgetForm(null);
+  });
+
+  $("widget-cancel").addEventListener("click", closeWidgetForm);
+
+  $("widget-save").addEventListener("click", () => {
+    const name = $("widget-name").value.trim();
+    const fields = Array.from($("widget-fields").querySelectorAll("input:checked")).map((input) => input.value);
+    if (!name || fields.length < 1 || fields.length > 6) {
+      toast(T.widget_fields_invalid, true);
+      return;
+    }
+    if (editingWidgetId) {
+      const def = (state.widget_defs || []).find((item) => item.id === editingWidgetId);
+      if (def) {
+        def.name = name;
+        def.fields = fields;
+        revalidateDefStyles(def);
+      }
+    } else {
+      if ((state.widget_defs || []).length >= (limits.max_defs || 12)) {
+        toast(T.max_defs, true);
+        return;
+      }
+      state.widget_defs.push({id: hexId("w"), name: name, style: styleChoices(fields).recommended, fields: fields});
+    }
+    closeWidgetForm();
+    markDirty();
+    renderWidgets();
+    if (!$("canvas-modal").hidden) renderCanvas();
+  });
 
   $("add-page").addEventListener("click", () => {
     if (!state || state.pages.length >= (limits.max_pages || 12)) {
@@ -2097,26 +2342,31 @@
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && !$("canvas-modal").hidden) closeEditor(false);
-  });
-
-  $("def-save").addEventListener("click", () => {
-    const name = $("def-name").value.trim();
-    const fields = Array.from($("def-fields").querySelectorAll("input:checked")).map((input) => input.value);
-    if (!name || fields.length < 1 || fields.length > 6) {
-      toast(T.save_failed, true);
-      return;
+    if (!$("canvas-modal").hidden && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].indexOf(event.key) >= 0) {
+      if (event.target.closest("input, textarea, select")) return;
+      const block = selectedBlock();
+      if (!block) return;
+      event.preventDefault();
+      const step = event.shiftKey ? 10 : 1;
+      if (event.key === "ArrowLeft") block.x = Math.max(0, block.x - step);
+      if (event.key === "ArrowRight") block.x = Math.min(758 - block.w, block.x + step);
+      if (event.key === "ArrowUp") block.y = Math.max(44, block.y - step);
+      if (event.key === "ArrowDown") block.y = Math.min(1024 - block.h, block.y + step);
+      markDirty();
+      renderCanvas();
+      const el = $("stage").querySelector('[data-block-id="' + block.id + '"]');
+      if (el) el.focus();
     }
-    if ((state.widget_defs || []).length >= (limits.max_defs || 12)) return;
-    state.widget_defs.push({id: hexId("w"), name: name, style: "rows", fields: fields});
-    $("def-name").value = "";
-    markDirty();
-    renderCanvas();
   });
 
   $("image-file").addEventListener("change", async () => {
     const file = $("image-file").files && $("image-file").files[0];
     $("image-file").value = "";
     if (!file) return;
+    if (catalog.storage && !catalog.storage.configured) {
+      toast(T.oss_missing, true);
+      return;
+    }
     const body = new FormData();
     body.append("file", file);
     const session = editorSession;
@@ -2125,6 +2375,7 @@
       if (session !== editorSession || $("canvas-modal").hidden) return;
       state.assets = state.assets || [];
       state.assets.push(data.data.asset);
+      sessionAssetIds.push(data.data.asset.id);
       place({widget: "image", id: hexId("b"), asset: data.data.asset.id, w: 280, h: 180});
     } catch (err) {
       if (session === editorSession && !err.handled) toast((err.data && err.data.error && err.data.error.message) || T.oss_missing, true);
@@ -2196,6 +2447,13 @@
   $("draft-preview").addEventListener("click", () => {
     clearTimeout(previewTimer);
     loadPreview();
+  });
+
+  try { snapEnabled = window.localStorage.getItem("kc-snap") !== "0"; } catch (err) { /* localStorage 不可用时保持默认开 */ }
+  $("snap-toggle").checked = snapEnabled;
+  $("snap-toggle").addEventListener("change", () => {
+    snapEnabled = $("snap-toggle").checked;
+    try { window.localStorage.setItem("kc-snap", snapEnabled ? "1" : "0"); } catch (err) { /* 忽略持久化失败 */ }
   });
 
   $("add-quote").addEventListener("click", () => {

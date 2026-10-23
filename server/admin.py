@@ -429,7 +429,14 @@ def create_admin_blueprint(service) -> Blueprint:
             copied["source"] = "center"
             center.append(copied)
         fields = [{"id": field_id, "label": field_label(field_id, lang), "kind": field_kind(field_id)} for field_id, _zh, _en in FIELD_DEFS]
-        return _api_ok({"system": system, "mine": mine, "center": center, "fields": fields, "data_styles": data_style_catalog(lang)})
+        return _api_ok({
+            "system": system,
+            "mine": mine,
+            "center": center,
+            "fields": fields,
+            "data_styles": data_style_catalog(lang),
+            "storage": {"type": "oss", "configured": storage.configured()},
+        })
 
     @bp.post("/admin/api/assets")
     def upload_asset():
@@ -437,7 +444,9 @@ def create_admin_blueprint(service) -> Blueprint:
         if blocked:
             return blocked
         upload = request.files.get("file")
-        raw = upload.read() if upload is not None else b""
+        if upload is None or not upload.filename:
+            return _api_error("ASSET_EMPTY", "未收到图片文件", 400)
+        raw = upload.read()
         try:
             asset = storage.put_image(raw)
         except AssetError as exc:

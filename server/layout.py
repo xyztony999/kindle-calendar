@@ -40,7 +40,6 @@ BLOCK_RE = re.compile(r"^b[0-9a-f]{8}$")
 ASSET_RE = re.compile(r"^a[0-9a-f]{8}$")
 CENTER_RE = re.compile(r"^center\.[a-z0-9][a-z0-9-]{0,32}$")
 ASSET_KEY_RE = re.compile(r"^[A-Za-z0-9_./-]{1,200}$")
-STYLES = ("hero", "rows")
 DATA_STYLES = ("hero", "rows", "horizontal", "grid")
 ALIGNS = ("left", "center", "right")
 FORBIDDEN_CENTER_KEYS = {"script", "code", "url", "entry", "callback", "command", "href", "src"}
@@ -344,7 +343,7 @@ def accept_center_item(raw: Any) -> dict | None:
         return None
     style = raw.get("style")
     fields = raw.get("fields")
-    if style not in STYLES or not isinstance(fields, list):
+    if style not in DATA_STYLES or not isinstance(fields, list):
         return None
     if any(not isinstance(field, str) or field not in FIELD_IDS for field in fields):
         return None
@@ -487,7 +486,7 @@ def validate_layout_fields(
             details.append(_detail(f"{prefix}.name", "WIDGET_DEF_INVALID", "数据积木名称须为 1–20 字"))
         style = item.get("style")
         fields = item.get("fields")
-        if style not in STYLES:
+        if style not in DATA_STYLES:
             details.append(_detail(f"{prefix}.style", "WIDGET_DEF_INVALID", "数据积木版式无效"))
             continue
         if not isinstance(fields, list) or any(not isinstance(field, str) or field not in FIELD_IDS for field in fields):

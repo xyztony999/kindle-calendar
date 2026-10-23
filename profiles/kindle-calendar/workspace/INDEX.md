@@ -1,5 +1,24 @@
 ---
 pipeline:
+  - module: widget-manager
+    title: "我的积木管理卡片、图片素材链路六项修复与版面编辑对齐吸附"
+    stages:
+      design:
+        status: complete
+        note: "2026-10-23 增量 Gate 1 PASS，用户确认按推荐执行（管理卡片+智能吸附+全量链路修复）。"
+      code:
+        status: complete
+        note: "2026-10-23 已实现并通过验证：90 项单测 OK、两个 Playwright E2E PASS（顺带修复两脚本自 81aab26 起的选择器过期）。过程中修复存量 bug：layout.py STYLES 过期常量拒绝 horizontal/grid 定义；compose 不透传 OSS_*。Gate 2 PASS 待用户验收，未提交。报告 05-reports/gate2-widget-manager.md"
+    artifacts:
+      prd:
+        - 02-detailed/prd/prd-widget-manager.md
+      api:
+        - 02-detailed/api/api-widget-manager.md
+      interaction:
+        - 02-detailed/interaction/interaction-widget-manager.md
+      reports:
+        - 05-reports/gate1-widget-manager.md
+        - 05-reports/gate2-widget-manager.md
   - module: adaptive-data-styles
     title: "按数据提供适用样式、画布实例外观与schema3兼容"
     stages:

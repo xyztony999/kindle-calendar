@@ -155,6 +155,11 @@ def create_app() -> Flask:
     app.config["SESSION_COOKIE_SAMESITE"] = "Strict"
     app.permanent_session_lifetime = timedelta(days=max(1, env_int("ADMIN_SESSION_DAYS", 7)))
     app.register_blueprint(create_admin_blueprint(service))
+    app.config["MAX_CONTENT_LENGTH"] = 4 * 1024 * 1024
+
+    @app.errorhandler(413)
+    def _request_too_large(_error):
+        return jsonify({"ok": False, "error": {"code": "REQUEST_TOO_LARGE", "message": "请求体过大"}}), 413
 
     @app.before_request
     def _secure_session_cookie():

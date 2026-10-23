@@ -29,17 +29,19 @@ fs.mkdirSync(output, {recursive:true});
   async function edit(index = 0) {
     await page.locator('#page-list button').filter({hasText:/编辑版面|Edit layout/}).nth(index).click();
     await page.locator('#canvas-modal').waitFor({state:'visible'});
-    await page.locator('#def-fields input').first().waitFor();
+    await page.locator('#stage').waitFor({state:'visible'});
   }
+  // 数据积木在主视图「我的积木」卡片新建/编辑，弹窗内只负责放置。
   async function create(name) {
-    await page.locator('#def-name').fill(name);
-    await page.locator('#def-fields input').first().check();
-    await page.locator('#def-save').click();
-    await page.locator('#palette-mine .widget-item > button').filter({hasText:name}).waitFor();
+    await page.locator('#widget-add').click();
+    await page.locator('#widget-name').fill(name);
+    await page.locator('#widget-fields input').first().check();
+    await page.locator('#widget-save').click();
+    await page.locator('#widget-form').waitFor({state:'hidden'});
+    await page.locator('#widget-list .widget-row .w-name').filter({hasText:name}).first().waitFor();
   }
-  async function removeDefinition() {
-    await page.locator('#palette-mine .widget-menu summary').click();
-    await page.locator('.widget-delete').click();
+  async function placeFirst() {
+    await page.locator('#palette-mine .widget-row .w-add').first().click();
   }
   await page.goto(base + '/admin?lang=zh');
   await page.locator('#password').fill(process.env.UI_TEST_PASSWORD || 'local-ui-verification');
@@ -60,44 +62,68 @@ fs.mkdirSync(output, {recursive:true});
   await dwell.fill('65');
   await edit();
   const blockCount = await page.locator('#stage .block').count();
+  assert.equal(await page.locator('#snap-toggle').isChecked(), true);
   await page.locator('#stage .block-remove').last().click();
-  await create('Cancel this block');
   await page.locator('#cancel-editor').click();
   assert.equal(await dwell.inputValue(), '65');
   assert.equal(await page.locator('#page-list .page-row button').first().evaluate(el => el === document.activeElement), true);
   assert.equal(await page.locator('#dirty-flag').isVisible(), true);
   await edit();
   assert.equal(await page.locator('#stage .block').count(), blockCount);
-  assert.equal(await page.locator('#palette-mine .widget-item').count(), 0);
-  assert.equal(await page.locator('#def-list').count(), 0);
+  assert.equal(await page.locator('#palette-mine .widget-row').count(), 0);
+  assert.equal(await page.locator('#def-editor').count(), 0);
+  await page.locator('#close-editor').click();
   await create('Shared test');
-  await page.locator('#palette-mine .widget-item > button').click();
+  await edit();
+  await placeFirst();
   await page.locator('#close-editor').click();
   await edit(1);
-  await page.locator('#palette-mine .widget-item > button').click();
+  await placeFirst();
   await page.locator('#close-editor').click();
   let payload = await save();
   const defId = payload.widget_defs[0].id;
   assert.equal(payload.pages.filter(p => p.layout.some(b => b.def === defId)).length, 2);
-  await edit(1);
-  await removeDefinition();
-  await page.locator('#cancel-editor').click();
-  payload = await save();
-  assert.equal(payload.pages.filter(p => p.layout.some(b => b.def === defId)).length, 2);
-  await edit(1);
-  await removeDefinition();
+
+  // 方向键微调：选中已放置积木后 ArrowRight 移动 1px。
+  await edit();
+  await page.locator('#stage .block').filter({hasText:'Shared test'}).last().click();
+  await page.keyboard.press('ArrowRight');
   await page.locator('#close-editor').click();
+  payload = await save();
+  const moved = payload.pages.flatMap(p => p.layout).find(b => b.def === defId);
+  assert.equal(moved.x, 57);
+
+  // 卡片删除数据积木（确认框由 dialog 处理器接受），保存后从所有页面移除。
+  await page.locator('#widget-list .widget-row .w-act.danger').first().click();
   payload = await save();
   assert.equal(payload.widget_defs.length, 0);
   assert.equal(payload.pages.some(p => p.layout.some(b => b.def === defId)), false);
 
-  // A late upload response must not recreate a cancelled draft or add an asset.
+  // 未配置 OSS：上传按钮禁用，选文件后不应发出上传请求。
+  let uploadHit = false;
   let finishUpload;
   const uploadGate = new Promise(resolve => { finishUpload = resolve; });
   await page.route('**/admin/api/assets', async route => {
+    uploadHit = true;
     await uploadGate;
     await route.fulfill({json:{ok:true,data:{asset:{id:'a12345678',key:'test.png'}}}});
   });
+  await edit();
+  assert.equal(await page.locator('#palette-mine button.btn', {hasText:/上传图片|Upload image/}).first().isDisabled(), true);
+  await page.locator('#image-file').setInputFiles({name:'test.png',mimeType:'image/png',buffer:Buffer.from('mock image')});
+  await page.waitForTimeout(300);
+  assert.equal(uploadHit, false);
+  await page.locator('#cancel-editor').click();
+
+  // 配置 OSS 后：迟到的上传响应不得进入已取消的编辑草稿。
+  await page.route('**/admin/api/widget-catalog', async route => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.data.storage = {type:'oss', configured:true};
+    await route.fulfill({json:body});
+  });
+  await page.reload();
+  await page.locator('#view-settings').waitFor({state:'visible'});
   await edit();
   const uploadRequest = page.waitForRequest('**/admin/api/assets');
   await page.locator('#image-file').setInputFiles({name:'test.png',mimeType:'image/png',buffer:Buffer.from('mock image')});
@@ -148,8 +174,10 @@ fs.mkdirSync(output, {recursive:true});
       await page.screenshot({path:path.join(output,`settings-${lang}-${colorScheme}.png`)});
       await edit();
       await page.locator('#draft-img:not([hidden])').waitFor();
+      await page.locator('#close-editor').click();
       await create('Style preview');
-      await page.locator('#palette-mine .widget-item > button').click();
+      await edit();
+      await placeFirst();
       await page.locator('#block-style-hero').focus();
       await page.keyboard.press('ArrowRight');
       assert.equal(await page.locator('#block-style-rows').isChecked(), true);
@@ -163,14 +191,16 @@ fs.mkdirSync(output, {recursive:true});
   assert.ok(toolbar.y >= 0 && toolbar.y < 16);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await edit();
+  await page.locator('#close-editor').click();
   await create('Mobile preview');
-  await page.locator('#palette-mine .widget-item > button').click();
-  await page.locator('#def-editor').scrollIntoViewIfNeeded();
+  await edit();
+  await placeFirst();
+  await page.locator('#block-appearance').scrollIntoViewIfNeeded();
   const styleBox = await page.locator('#block-styles').boundingBox();
   assert.ok(styleBox.x >= 0 && styleBox.x + styleBox.width <= 390);
   await page.screenshot({path:path.join(output,'editor-mobile.png')});
   await page.locator('#cancel-editor').click();
   assert.deepEqual(errors, []);
-  console.log('PASS: cancel/new page/prior draft/cross-page deletion/late upload/search race/IME/keyboard/zh-en/themes/mobile/sticky actions');
+  console.log('PASS: cancel/new page/prior draft/card create+place/arrow nudge/card deletion/oss gating/late upload/search race/IME/keyboard/zh-en/themes/mobile/sticky actions');
   await browser.close();
 })().catch(error => { console.error(error); process.exit(1); });

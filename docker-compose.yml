@@ -16,6 +16,13 @@ services:
       FONT_PATH: /usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       SECRET_KEY: ${SECRET_KEY:-}
+      # 图片素材（阿里云 OSS）；留空则管理端不能上传图片，见 .env.example
+      OSS_ENDPOINT: ${OSS_ENDPOINT:-}
+      OSS_BUCKET: ${OSS_BUCKET:-}
+      OSS_ACCESS_KEY_ID: ${OSS_ACCESS_KEY_ID:-}
+      OSS_ACCESS_KEY_SECRET: ${OSS_ACCESS_KEY_SECRET:-}
+      OSS_PREFIX: ${OSS_PREFIX:-calendar/}
+      WIDGET_CENTER_URL: ${WIDGET_CENTER_URL:-}
     volumes:
       - ./data:/app/data
     restart: unless-stopped

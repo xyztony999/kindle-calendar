@@ -38,7 +38,8 @@ fs.mkdirSync(output,{recursive:true});
   }
   async function edit(index=0) {
     await page.locator('#page-list button').filter({hasText:/编辑版面|Edit layout/}).nth(index).click();
-    await page.locator('#def-fields input').first().waitFor();
+    await page.locator('#canvas-modal').waitFor({state:'visible'});
+    await page.locator('#stage').waitFor({state:'visible'});
   }
   async function select(id) {
     const el = page.locator(`#stage .block[data-block-id="${id}"]`);
@@ -64,7 +65,7 @@ fs.mkdirSync(output,{recursive:true});
   await page.reload();
   await page.locator('#view-settings').waitFor({state:'visible'});
   await edit();
-  assert.equal(await page.locator('#def-editor input[type=radio]').count(),0);
+  assert.equal(await page.locator('#def-editor').count(),0);
   assert.equal(await page.locator('#appearance-controls').isVisible(),false);
   await select('b11111111');
   assert.equal(await page.locator('#block-styles input').count(),4);
@@ -108,12 +109,15 @@ fs.mkdirSync(output,{recursive:true});
   assert.equal(payload.pages[0].layout.find(b=>b.id==='b11111111').style,'horizontal');
 
   // Four compact fields get only list/grid choices and default to grid.
-  await edit();
-  await page.locator('#def-name').fill('Four metrics');
+  await page.locator('#widget-add').click();
+  await page.locator('#widget-name').fill('Four metrics');
   for(const id of ['weather.temperature','weather.description','weather.humidity','weather.wind_speed'])
-    await page.locator(`#def-fields input[value="${id}"]`).check();
-  await page.locator('#def-save').click();
-  await page.locator('#palette-mine .widget-item > button').filter({hasText:'Four metrics'}).click();
+    await page.locator(`#widget-fields input[value="${id}"]`).check();
+  await page.locator('#widget-save').click();
+  await page.locator('#widget-form').waitFor({state:'hidden'});
+  await page.locator('#widget-list .widget-row .w-name').filter({hasText:'Four metrics'}).waitFor();
+  await edit();
+  await page.locator('#palette-mine .widget-row .w-add').filter({hasText:'Four metrics'}).click();
   assert.deepEqual(await page.locator('#block-styles input').evaluateAll(inputs=>inputs.map(el=>el.value)),['rows','grid']);
   assert.equal(await page.locator('#block-style-grid').isChecked(),true);
   assert.match(await page.locator('#appearance-note').innerText(),/仅当前页面/);

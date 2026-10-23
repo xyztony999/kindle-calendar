@@ -46,7 +46,9 @@ def _bucket():
 
 
 def inspect_image(raw: bytes) -> tuple[str, str]:
-    if not raw or len(raw) > MAX_BYTES:
+    if not raw:
+        raise AssetError("ASSET_EMPTY", "未收到图片文件")
+    if len(raw) > MAX_BYTES:
         raise AssetError("ASSET_TOO_LARGE", "图片须小于 2MB")
     try:
         with Image.open(BytesIO(raw)) as img:
@@ -80,7 +82,10 @@ def put_image(raw: bytes) -> dict:
 
 
 def get_object(key: str) -> bytes | None:
-    if not configured() or not key:
+    if not key:
+        return None
+    if not configured():
+        log.warning("OSS 未配置，无法读取素材 key=%s", key)
         return None
     try:
         result = _bucket().get_object(key)

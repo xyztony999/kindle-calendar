@@ -16,6 +16,8 @@ def build_payload(
     now: datetime,
     aqi: AirQuality | None = None,
     settings: dict | None = None,
+    events: list[dict] | None = None,
+    countdowns: list[dict] | None = None,
 ) -> dict:
     lat, lon = config["latitude"], config["longitude"]
 
@@ -49,6 +51,18 @@ def build_payload(
         quote = quotes.get_quote(now)
         page_names = {}
 
+    almanac_data = almanac.almanac_for(now)
+    if events:
+        # 今天命中的纪念日并入节日备注行（页眉 notes / 月历角标优先级共用）
+        today_iso = now.date().isoformat()
+        anniv_today = [
+            str(e.get("title") or "")
+            for e in events
+            if isinstance(e, dict) and e.get("source") == "anniv" and e.get("iso_date") == today_iso and e.get("title")
+        ]
+        if anniv_today:
+            almanac_data = {**almanac_data, "festivals": list(almanac_data.get("festivals") or []) + anniv_today[:2]}
+
     return {
         "generated_at": now.isoformat(timespec="seconds"),
         "location": config["location_name"],
@@ -60,7 +74,7 @@ def build_payload(
             "minutes": now.hour * 60 + now.minute,
             "iso": now.isoformat(timespec="seconds"),
         },
-        "date": almanac.almanac_for(now),
+        "date": almanac_data,
         "holiday": holidays.day_info(now.date()),
         "weather": {
             "current": {
@@ -85,6 +99,8 @@ def build_payload(
         },
         "sun": astro.day_summary(now, lat, lon),
         "aqi": None if aqi is None else {"us_aqi": aqi.us_aqi, "level_zh": aqi.level, "fetched_at": now.isoformat(timespec="seconds")},
+        "events": events or [],
+        "countdowns": countdowns or [],
         "quote": quote,
     }
 

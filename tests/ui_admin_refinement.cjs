@@ -99,6 +99,27 @@ fs.mkdirSync(output, {recursive:true});
   assert.equal(payload.widget_defs.length, 0);
   assert.equal(payload.pages.some(p => p.layout.some(b => b.def === defId)), false);
 
+  // 编辑器内抽屉：不关闭弹窗完成新建、放置与层级调整。
+  await edit();
+  await page.locator('#palette-mine button.btn', {hasText:/管理我的积木|Manage my blocks/}).click();
+  await page.locator('#widget-drawer:not([hidden])').waitFor();
+  await page.locator('#wm-add').click();
+  await page.locator('#wm-name').fill('Drawer block');
+  await page.locator('#wm-fields input').first().check();
+  await page.locator('#wm-save').click();
+  await page.locator('#wm-list .widget-row .w-name').filter({hasText:'Drawer block'}).waitFor();
+  await page.locator('#palette-mine .widget-row .w-name').filter({hasText:'Drawer block'}).waitFor();
+  await page.locator('#wm-list .widget-row .w-place').first().click();
+  await page.locator('#stage .block').filter({hasText:'Drawer block'}).waitFor();
+  await page.locator('#stage .block').filter({hasText:'Drawer block'}).click();
+  await page.locator('#layer-down:enabled').click();
+  await page.locator('#layer-up:enabled').click();
+  await page.locator('#wm-back').click();
+  await page.locator('#close-editor').click();
+  payload = await save();
+  assert.equal(payload.widget_defs.some(d => d.name === 'Drawer block'), true);
+  assert.equal(payload.pages.some(p => p.layout.some(b => b.def === payload.widget_defs[0].id)), true);
+
   // 未配置 OSS：上传按钮禁用，选文件后不应发出上传请求。
   let uploadHit = false;
   let finishUpload;
@@ -165,6 +186,60 @@ fs.mkdirSync(output, {recursive:true});
   await geo.press('Escape');
   assert.equal(await geo.getAttribute('aria-expanded'), 'false');
   assert.equal((await geo.boundingBox()).height, 42);
+
+  // sysopt-layout-fix：系统/文字选项行式布局——单选钮不重叠、点档位文字激活该档、控件在标签盒内
+  await edit();
+  await page.locator('#stage .block').filter({hasText: /时钟|Clock/}).first().click();
+  await page.locator('#appearance-controls:not([hidden])').waitFor();
+  assert.match(await page.locator('#block-styles-legend').innerText(), /外观选项|Appearance options/);
+  const clockRows = await page.evaluate(() => [...document.querySelectorAll('#block-styles .opt-row')].map((row) => {
+    const rowR = row.getBoundingClientRect();
+    const inputs = [...row.querySelectorAll('input')].map((input) => {
+      const r = input.getBoundingClientRect();
+      return {id: input.id, type: input.type, cx: r.x + r.width / 2, cy: r.y + r.height / 2,
+        inside: r.x >= rowR.x - 0.5 && r.y >= rowR.y - 0.5 && r.x + r.width <= rowR.x + rowR.width + 0.5 && r.y + r.height <= rowR.y + rowR.height + 0.5};
+    });
+    return {text: row.textContent.replace(/\s+/g, ''), inputs};
+  }));
+  const sizeRow = clockRows.find((row) => row.inputs[0] && row.inputs[0].type === 'radio' && row.inputs.length >= 3);
+  assert.ok(sizeRow, 'clock size choice row missing');
+  assert.equal(sizeRow.inputs.length, 3, 'clock size should have 3 tiers');
+  assert.equal(new Set(sizeRow.inputs.map((i) => i.cx + ',' + i.cy)).size, sizeRow.inputs.length, 'clock size radios overlap');
+  assert.ok(clockRows.length >= 2, 'clock should also expose toggles (hour12)');
+  assert.ok(clockRows.every((row) => row.inputs.every((i) => i.inside)), 'clock input outside its row');
+  await page.locator('#block-styles .opt-pick').filter({hasText: '小'}).first().click();
+  assert.equal(await page.locator('#sys-opt-size-sm').isChecked(), true, 'clicking 小 label must pick sm');
+  assert.equal(await page.evaluate(() => document.activeElement && document.activeElement.id), 'sys-opt-size-sm');
+  await page.screenshot({path: path.join(output, 'sysopt-clock.png')});
+
+  await page.locator('#stage .block').filter({hasText: /天气|Weather/}).first().click();
+  await page.locator('#block-styles .opt-row input[type="checkbox"]').first().waitFor();
+  const boolInputs = await page.evaluate(() => [...document.querySelectorAll('#block-styles .opt-row')].map((row) => {
+    const rowR = row.getBoundingClientRect();
+    const input = row.querySelector('input');
+    const r = input.getBoundingClientRect();
+    return {id: input.id, inside: r.x >= rowR.x && r.y >= rowR.y && r.x + r.width <= rowR.x + rowR.width && r.y + r.height <= rowR.y + rowR.height};
+  }));
+  assert.ok(boolInputs.length >= 5, 'weather should expose several toggles');
+  assert.ok(boolInputs.every((i) => i.inside), 'weather checkbox outside its row');
+  await page.screenshot({path: path.join(output, 'sysopt-weather.png')});
+
+  await page.locator('#palette-mine .btn').filter({hasText: /文字|Text/}).click();
+  const textBlock = page.locator('#stage .block').filter({hasText: /这一页上的文字|Text on this page/}).last();
+  await textBlock.click();
+  await page.locator('#block-styles fieldset .opt-pick input').first().waitFor();
+  const textInputs = await page.evaluate(() => [...document.querySelectorAll('#block-styles .opt-pick')].map((pick) => {
+    const pickR = pick.getBoundingClientRect();
+    const input = pick.querySelector('input');
+    const r = input.getBoundingClientRect();
+    return {id: input.id, inside: r.x >= pickR.x && r.y >= pickR.y && r.x + r.width <= pickR.x + pickR.width && r.y + r.height <= pickR.y + pickR.height};
+  }));
+  assert.equal(textInputs.length, 6);
+  assert.ok(textInputs.every((i) => i.inside), 'text option radio outside its label');
+  await page.locator('#block-styles .opt-pick').filter({hasText: '右'}).first().click();
+  assert.equal(await page.locator('#block-align-right').isChecked(), true);
+  await page.screenshot({path: path.join(output, 'sysopt-text.png')});
+  await page.locator('#cancel-editor').click();
 
   for (const lang of ['zh','en']) {
     await page.goto(base + '/admin?lang=' + lang);

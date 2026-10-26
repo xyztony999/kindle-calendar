@@ -115,6 +115,9 @@ def defaults_from_config(config: dict) -> dict:
         "assets": [],
         "rotation": {"enabled": True, "suppress_s": 120},
         "quote": {"mode": "online", "custom": []},
+        "presets": [],
+        "ics": {"urls": []},
+        "anniversaries": [],
         "location": {
             "name": str(config.get("location_name") or "北京"),
             "latitude": float(config.get("latitude", 39.9042)),
@@ -292,6 +295,59 @@ def validate(data: Any) -> list[dict]:
             ZoneInfo(tz_name)
         except Exception:
             details.append(_detail("location.timezone", "LOCATION_TZ_INVALID", "时区无法识别"))
+
+    # 以下新键对旧配置缺失容错（缺失=默认，不降级）
+    presets = data.get("presets") or []
+    if not isinstance(presets, list):
+        details.append(_detail("presets", "PRESET_INVALID", "版面方案须为列表"))
+    else:
+        if len(presets) > 8:
+            details.append(_detail("presets", "PRESET_INVALID", "版面方案最多 8 套"))
+        for index, item in enumerate(presets):
+            if not isinstance(item, dict):
+                details.append(_detail(f"presets[{index}]", "PRESET_INVALID", "方案项格式不正确"))
+                continue
+            name = _clean_text(item.get("name"))
+            if not name or len(name) > 20 or "\n" in name or "\r" in name:
+                details.append(_detail(f"presets[{index}].name", "PRESET_INVALID", "方案名须为 1–20 字"))
+            snapshot = item.get("snapshot")
+            if not isinstance(snapshot, dict) or not isinstance(snapshot.get("pages"), list):
+                details.append(_detail(f"presets[{index}].snapshot", "PRESET_INVALID", "方案快照结构不完整"))
+
+    ics_raw = data.get("ics") or {}
+    urls = ics_raw.get("urls", []) if isinstance(ics_raw, dict) else []
+    if not isinstance(urls, list) or len(urls) > 3:
+        details.append(_detail("ics.urls", "ICS_INVALID", "订阅链接最多 3 个且须为列表"))
+    else:
+        for index, url in enumerate(urls):
+            if not isinstance(url, str) or not url.startswith("https://") or len(url) > 500:
+                details.append(_detail(f"ics.urls[{index}]", "ICS_INVALID", "订阅链接须为 https 且不超过 500 字符"))
+
+    anniversaries = data.get("anniversaries") or []
+    if not isinstance(anniversaries, list) or len(anniversaries) > 20:
+        details.append(_detail("anniversaries", "ANNIV_INVALID", "纪念日最多 20 条"))
+    else:
+        for index, item in enumerate(anniversaries):
+            if not isinstance(item, dict):
+                details.append(_detail(f"anniversaries[{index}]", "ANNIV_INVALID", "纪念日项格式不正确"))
+                continue
+            name = _clean_text(item.get("name"))
+            if not name or len(name) > 20 or "\n" in name or "\r" in name:
+                details.append(_detail(f"anniversaries[{index}].name", "ANNIV_INVALID", "纪念日名称须为 1–20 字"))
+            repeat = item.get("repeat")
+            date_text = _clean_text(item.get("date"))
+            if repeat not in ("none", "yearly", "lunar"):
+                details.append(_detail(f"anniversaries[{index}].repeat", "ANNIV_INVALID", "重复方式无效"))
+                continue
+            if repeat == "none":
+                from datetime import date as _date
+
+                try:
+                    _date.fromisoformat(date_text)
+                except ValueError:
+                    details.append(_detail(f"anniversaries[{index}].date", "ANNIV_INVALID", "日期须为 YYYY-MM-DD"))
+            elif len(date_text) != 5 or date_text[2] != "-" or not date_text[:2].isdigit() or not date_text[3:].isdigit() or not 1 <= int(date_text[:2]) <= 12 or not 1 <= int(date_text[3:]) <= 31:
+                details.append(_detail(f"anniversaries[{index}].date", "ANNIV_INVALID", "每年重复的日期须为 MM-DD"))
     return details
 
 
@@ -299,7 +355,7 @@ def _normalize_block(block: dict) -> dict:
     widget = block["widget"]
     item = {
         "widget": widget,
-        "id": widget if widget in ("header", "clock", "weather", "sun", "scene", "quote", "list", "chart", "title", "grid", "hourly", "indices", "main") else block["id"],
+        "id": widget if widget in ("header", "clock", "weather", "sun", "scene", "quote", "list", "chart", "title", "grid", "hourly", "indices", "main", "schedule", "countdown") else block["id"],
         "x": _as_int(block["x"]),
         "y": _as_int(block["y"]),
         "w": _as_int(block["w"]),
@@ -313,6 +369,7 @@ def _normalize_block(block: dict) -> dict:
     elif widget == "text":
         item["text"] = _clean_text(block.get("text"))
         item["align"] = block.get("align") if block.get("align") in ("left", "center", "right") else "left"
+        item["size"] = block.get("size") if block.get("size") in ("lg", "md", "sm") else "md"
     elif widget == "custom":
         item["def"] = block["def"]
         if "style" in block:
@@ -354,6 +411,26 @@ def normalize(data: dict) -> dict:
     assets = []
     for item in data.get("assets") or []:
         assets.append({"id": item["id"], "key": item["key"], "content_type": item["content_type"]})
+    presets_out = []
+    for item in data.get("presets") or []:
+        if isinstance(item, dict) and isinstance(item.get("snapshot"), dict):
+            presets_out.append({
+                "id": item.get("id"),
+                "name": _clean_text(item.get("name")),
+                "created_at": _clean_text(item.get("created_at")),
+                "snapshot": copy_settings(item["snapshot"]),
+            })
+    ics_data = data.get("ics") if isinstance(data.get("ics"), dict) else {}
+    ics_urls = [u for u in (ics_data.get("urls") or []) if isinstance(u, str) and u.startswith("https://")][:3]
+    anniversaries_out = []
+    for item in data.get("anniversaries") or []:
+        if isinstance(item, dict):
+            anniversaries_out.append({
+                "id": item.get("id"),
+                "name": _clean_text(item.get("name")),
+                "date": _clean_text(item.get("date")),
+                "repeat": item.get("repeat") if item.get("repeat") in ("none", "yearly", "lunar") else "none",
+            })
     return {
         "schema_version": SCHEMA_VERSION,
         "pages": pages,
@@ -364,6 +441,9 @@ def normalize(data: dict) -> dict:
             "suppress_s": _as_int(data["rotation"]["suppress_s"]),
         },
         "quote": {"mode": data["quote"]["mode"], "custom": custom},
+        "presets": presets_out,
+        "ics": {"urls": ics_urls},
+        "anniversaries": anniversaries_out,
         "location": {
             "name": _clean_text(location.get("name")),
             "latitude": round(float(location["latitude"]), 6),

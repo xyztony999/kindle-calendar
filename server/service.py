@@ -19,6 +19,7 @@ from PIL import Image
 from zoneinfo import ZoneInfo
 
 from server import data as data_mod
+from server import ics
 from server.aqi import AirQuality, fetch_aqi
 from server.settings import (
     HeartbeatLog,
@@ -211,6 +212,18 @@ class DashboardService:
             self._weather_at = now
             self._last_error = None
         log.info("天气已更新 (aqi=%s)", aqi.us_aqi if aqi else "无")
+        # ICS 独立线程刷新（TTL 6h 内部判定；失败保旧数据，不阻塞任何请求）
+        threading.Thread(target=self._refresh_ics, daemon=True, name="ics-refresh").start()
+
+    def _refresh_ics(self) -> None:
+        try:
+            tz = ZoneInfo(self.config["timezone"])
+            with self._lock:
+                settings = copy_settings(self._settings)
+            urls = (settings.get("ics") or {}).get("urls") or []
+            ics.refresh(urls, tz, datetime.now(tz))
+        except Exception as exc:
+            log.warning("ICS 刷新失败: %s", exc)
 
     def _ensure_weather(self) -> None:
         with self._weather_cond:
@@ -258,7 +271,10 @@ class DashboardService:
 
         with self._lock:
             settings = copy_settings(self._settings)
-        payload = data_mod.build_payload(self.config, weather, now, aqi, settings)
+        ics_events = ics.current_events()
+        anniv_events, countdowns = ics.anniversary_data(settings.get("anniversaries") or [], now.date())
+        events = ics.merge(ics_events, anniv_events, now.date())
+        payload = data_mod.build_payload(self.config, weather, now, aqi, settings, events, countdowns)
         if lang == "en":
             mode = "online"
             custom = None
@@ -367,6 +383,7 @@ class DashboardService:
         return regions.get((page, region))
 
     def _get_month_offset_region(self, page: str, region: str, offset: int, lang: str = "zh") -> RegionRender:
+        from server.layout import find_block
         from server.render.placed import paint_system
 
         lang = "en" if lang == "en" else "zh"
@@ -374,13 +391,15 @@ class DashboardService:
         record = self.page_record(page)
         payload = self.get_payload(lang)
         rect = placed_rect(record, region, self.width, self.height)
-        key = (page, region, offset, rect.x, rect.y, rect.w, rect.h, self._fingerprints[lang], lang)
+        block = find_block(record, region) if record else None
+        options = block_options(region, block.get("options")) if block else {}
+        key = (page, region, offset, rect.x, rect.y, rect.w, rect.h, self._fingerprints[lang], lang, tuple(sorted(options.items())))
         with self._lock:
             cached = self._month_offset_cache.get(key)
         if cached is not None:
             return cached
 
-        img = paint_system(region, payload, rect, self.font_path, page, offset)
+        img = paint_system(region, payload, rect, self.font_path, page, offset, options=options)
         png = _png_bytes(img)
         rendered = RegionRender(rect=rect, png=png, etag=hashlib.sha256(png).hexdigest()[:32])
         with self._lock:
@@ -395,14 +414,16 @@ class DashboardService:
         if block is None:
             return {}
         x, y, w, h = scale_box(int(block["x"]), int(block["y"]), int(block["w"]), int(block["h"]), self.width, self.height)
-        x, y, w, h = clock_rect_for_options(x, y, w, h, block_options("clock", block.get("options")))
-        metrics = metrics_in(Rect(x, y, w, h))
-        key = (page, metrics.digit_w, metrics.digit_h, metrics.colon_w, metrics.gap, self.font_path)
+        _opts = block_options("clock", block.get("options"))
+        hour12 = bool(_opts.get("hour12"))
+        x, y, w, h = clock_rect_for_options(x, y, w, h, _opts)
+        metrics = metrics_in(Rect(x, y, w, h), hour12)
+        key = (page, metrics.digit_w, metrics.digit_h, metrics.colon_w, metrics.gap, hour12, self.font_path)
         with self._lock:
             cached = self._glyph_sets.get(key)
             if cached:
                 return cached
-        glyphs = {ch: _png_bytes(img) for ch, img in render_glyphs(metrics, self.font_path).items()}
+        glyphs = {ch: _png_bytes(img) for ch, img in render_glyphs(metrics, self.font_path, hour12).items()}
         with self._lock:
             self._glyph_sets[key] = glyphs
         return glyphs
@@ -507,8 +528,9 @@ class DashboardService:
                 continue
             x, y, w, h = scale_box(int(block["x"]), int(block["y"]), int(block["w"]), int(block["h"]), self.width, self.height)
             _opts = block_options("clock", block.get("options"))
+            hour12 = bool(_opts.get("hour12"))
             x, y, w, h = clock_rect_for_options(x, y, w, h, _opts)
-            clock_metrics = metrics_in(Rect(x, y, w, h))
+            clock_metrics = metrics_in(Rect(x, y, w, h), hour12)
             prefix = f"{base}/r/{page_id}/clock/"
             clock_lines = [
                 f"CLOCK_{upper}_ENABLED=1",
@@ -518,6 +540,9 @@ class DashboardService:
                 f"CLOCK_{upper}_DIGIT_H={clock_metrics.digit_h}",
                 f"CLOCK_{upper}_COLON_W={clock_metrics.colon_w}",
                 f"CLOCK_{upper}_GAP={clock_metrics.gap}",
+                f"CLOCK_{upper}_HOUR12={1 if hour12 else 0}",
+                f"CLOCK_{upper}_SUF_W={clock_metrics.suf_w}",
+                f"CLOCK_{upper}_SUF_H={clock_metrics.suf_h}",
                 f'CLOCK_{upper}_GLYPH_URL_PREFIX="{prefix}"',
             ]
             lines += clock_lines
@@ -530,6 +555,9 @@ class DashboardService:
                     f"CLOCK_DIGIT_H={clock_metrics.digit_h}",
                     f"CLOCK_COLON_W={clock_metrics.colon_w}",
                     f"CLOCK_GAP={clock_metrics.gap}",
+                    f"CLOCK_HOUR12={1 if hour12 else 0}",
+                    f"CLOCK_SUF_W={clock_metrics.suf_w}",
+                    f"CLOCK_SUF_H={clock_metrics.suf_h}",
                     f'CLOCK_GLYPH_URL_PREFIX="{prefix}"',
                 ]
 

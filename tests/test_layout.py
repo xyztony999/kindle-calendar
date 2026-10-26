@@ -79,8 +79,22 @@ class LayoutUnitTests(unittest.TestCase):
         item = accept_center_item({"id": "center.ok", "kind": "data", "review": "approved", "name": "温度", "style": "hero", "fields": ["weather.temperature"]})
         self.assertEqual(item["placeable"], True)
 
+    def test_text_size_field_roundtrip(self):
+        raw = defaults_from_config(DEPLOY)
+        raw["pages"][0]["layout"] = [
+            {"widget": "text", "id": "b1234abcd", "x": 56, "y": 820, "w": 400, "h": 80, "z": 9, "text": "测试", "align": "center", "size": "lg"}
+        ]
+        self.assertEqual(validate(raw), [])
+        out = normalize(raw)
+        self.assertEqual(out["pages"][0]["layout"][0]["size"], "lg")
+        self.assertEqual(out["pages"][0]["layout"][0]["align"], "center")
+        raw["pages"][0]["layout"][0]["size"] = "huge"
+        self.assertTrue(any(error["field"].endswith(".size") for error in validate(raw)))
+        migrated = normalize(raw)
+        self.assertEqual(migrated["pages"][0]["layout"][0]["size"], "md")
+
     def test_field_capabilities_and_style_boundaries(self):
-        self.assertEqual(len(FIELD_IDS), 25)
+        self.assertEqual(len(FIELD_IDS), 28)
         self.assertEqual({field_kind(field) for field in FIELD_IDS}, {"number", "time", "date", "short_text", "text"})
         self.assertEqual(field_kind("unknown"), "text")
         compact = ["weather.temperature", "sun.sunrise", "date.month_day", "weather.humidity", "aqi.value", "sun.sunset"]
@@ -169,6 +183,7 @@ class LayoutApiTests(unittest.TestCase):
         env = self.client.get("/api/v1/dashboard.env").get_data(as_text=True)
         self.assertIn('PAGES="today week month detail almanac"', env)
         self.assertIn("CLOCK_TODAY_ENABLED=1", env)
+        self.assertIn("CLOCK_TODAY_HOUR12=0", env)
         self.assertIn("R_TODAY_HEADER_X=", env)
         self.assertIn("R_MONTH_TITLE_TMPL=", env)
 

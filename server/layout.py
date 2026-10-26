@@ -33,6 +33,8 @@ SYSTEM_WIDGETS = (
     "hourly",
     "indices",
     "main",
+    "schedule",
+    "countdown",
 )
 CUSTOM_PAGE_RE = re.compile(r"^c[0-9a-f]{8}$")
 DEF_RE = re.compile(r"^w[0-9a-f]{8}$")
@@ -42,6 +44,7 @@ CENTER_RE = re.compile(r"^center\.[a-z0-9][a-z0-9-]{0,32}$")
 ASSET_KEY_RE = re.compile(r"^[A-Za-z0-9_./-]{1,200}$")
 DATA_STYLES = ("hero", "rows", "horizontal", "grid")
 ALIGNS = ("left", "center", "right")
+TEXT_SIZES = ("lg", "md", "sm")
 FORBIDDEN_CENTER_KEYS = {"script", "code", "url", "entry", "callback", "command", "href", "src"}
 
 # 设计尺寸（宽, 高），与 regions.py 的横条一致。
@@ -59,6 +62,8 @@ DESIGN: dict[str, tuple[int, int]] = {
     "hourly": (CONTENT_W, 430),
     "indices": (CONTENT_W, 350),
     "main": (CONTENT_W, 800),
+    "schedule": (CONTENT_W, 244),
+    "countdown": (CONTENT_W, 132),
 }
 
 _DEFAULT_BANDS: dict[str, list[tuple[str, int, int]]] = {
@@ -121,13 +126,16 @@ FIELD_DEFS: tuple[tuple[str, str, str], ...] = (
     ("almanac.yi", "宜", "Good for"),
     ("almanac.ji", "忌", "Avoid"),
     ("location.name", "地点名", "Place"),
+    ("events.today_count", "今日日程数", "Events today"),
+    ("events.next_title", "下一场日程", "Next event"),
+    ("events.next_time", "下一场时间", "Next event time"),
 )
 FIELD_IDS = {item[0] for item in FIELD_DEFS}
 _FIELD_LABEL = {item[0]: (item[1], item[2]) for item in FIELD_DEFS}
 
-_NUMERIC_FIELDS = {"weather.temperature", "weather.humidity", "weather.wind_speed", "weather.precip_prob", "weather.temp_min", "weather.temp_max", "sun.illumination", "aqi.value"}
-_TIME_FIELDS = {"sun.sunrise", "sun.sunset"}
-_SHORT_FIELDS = {"weather.description", "date.weekday", "date.solar_term", "sun.moon", "aqi.level"}
+_NUMERIC_FIELDS = {"weather.temperature", "weather.humidity", "weather.wind_speed", "weather.precip_prob", "weather.temp_min", "weather.temp_max", "sun.illumination", "aqi.value", "events.today_count"}
+_TIME_FIELDS = {"sun.sunrise", "sun.sunset", "events.next_time"}
+_SHORT_FIELDS = {"weather.description", "date.weekday", "date.solar_term", "sun.moon", "aqi.level", "events.next_title"}
 FIELD_KINDS = {field: ("number" if field in _NUMERIC_FIELDS else "time" if field in _TIME_FIELDS else "date" if field == "date.month_day" else "short_text" if field in _SHORT_FIELDS else "text") for field in FIELD_IDS}
 
 
@@ -175,6 +183,8 @@ SYSTEM_LABELS = {
     "hourly": ("逐时", "Hourly"),
     "indices": ("指数", "Indices"),
     "main": ("黄历", "Almanac"),
+    "schedule": ("日程", "Schedule"),
+    "countdown": ("倒计时", "Countdown"),
 }
 
 # 系统积木外观选项（有限可配）：key → (中文标签, 英文标签, 类型, 默认值, 选项枚举)
@@ -183,28 +193,46 @@ SYSTEM_OPTIONS: dict[str, dict[str, tuple[str, str, str, object, tuple | None]]]
     "header": {
         "show_tabs": ("页面指示点", "Page indicator dots", "bool", True, None),
         "show_lunar": ("农历与干支行", "Lunar and ganzhi line", "bool", True, None),
+        "show_notes": ("节日与假期备注", "Festival and holiday notes", "bool", True, None),
     },
     "clock": {
         "size": ("数字大小", "Digit size", "choice", "lg", ("lg", "md", "sm")),
+        "hour12": ("12 小时制（1-12 + AM/PM）", "12-hour clock (1-12 + AM/PM)", "bool", False, None),
     },
     "weather": {
         "show_humidity": ("湿度", "Humidity", "bool", True, None),
         "show_wind": ("风速", "Wind", "bool", True, None),
         "show_precip": ("降水概率", "Precipitation", "bool", True, None),
+        "show_range": ("今日高低温", "Today's high and low", "bool", True, None),
+        "show_icon": ("天气图标", "Weather icon", "bool", True, None),
     },
     "sun": {
         "show_arc": ("日出日落弧线", "Sun arc", "bool", True, None),
         "show_aqi": ("AQI 卡", "AQI card", "bool", True, None),
     },
+    "quote": {
+        "size": ("字号", "Font size", "choice", "md", ("lg", "md", "sm")),
+    },
     "grid": {
         "show_badges": ("班休徽标", "Work/rest badges", "bool", True, None),
         "show_lunar": ("农历节气角标", "Lunar and term captions", "bool", True, None),
+        "week_start": ("周起始日", "Week starts on", "choice", "mon", ("mon", "sun")),
+        "show_event_dots": ("日程标记", "Event dots", "bool", False, None),
     },
     "main": {
         "show_yiji": ("宜忌双栏", "Yi/Ji columns", "bool", True, None),
         "show_wuhou": ("节气物候", "Solar term and phenology", "bool", True, None),
     },
+    "schedule": {
+        "show_tomorrow": ("显示明日", "Show tomorrow", "bool", False, None),
+    },
+    "countdown": {},
 }
+# 通用边框选项：paint_system 统一绘制；时钟走设备端字形拼装，边框无效，不提供
+_BORDER_OPTION = ("显示边框", "Show border", "bool", False, None)
+for _widget in SYSTEM_WIDGETS:
+    if _widget != "clock":
+        SYSTEM_OPTIONS.setdefault(_widget, {})["border"] = _BORDER_OPTION
 
 CLOCK_SIZE_FACTOR = {"lg": 1.0, "md": 0.75, "sm": 0.55}
 
@@ -421,6 +449,8 @@ def _validate_block(
             details.append(_detail(f"{prefix}.text", "LAYOUT_INVALID", f"文字须为 1–{BLOCK_TEXT_MAX} 字且不含换行"))
         if block.get("align", "left") not in ALIGNS:
             details.append(_detail(f"{prefix}.align", "LAYOUT_INVALID", "文字对齐无效"))
+        if block.get("size", "md") not in TEXT_SIZES:
+            details.append(_detail(f"{prefix}.size", "LAYOUT_INVALID", "文字字号无效"))
     if widget == "custom":
         def_id = block.get("def")
         if not isinstance(def_id, str) or (def_id not in def_ids and def_id not in center_defs):

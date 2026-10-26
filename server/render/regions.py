@@ -71,9 +71,12 @@ class ClockMetrics:
     digit_h: int
     colon_w: int
     gap: int
+    suf_w: int = 0  # AM/PM 后缀字形（12 小时制）
+    suf_h: int = 0
 
     def total_w(self) -> int:
-        return 4 * self.digit_w + self.colon_w + 4 * self.gap
+        extra = self.suf_w + 2 * self.gap if self.suf_w else 0
+        return 4 * self.digit_w + self.colon_w + 4 * self.gap + extra
 
 
 def page_regions(page: str, width: int, height: int) -> dict[str, Rect]:
@@ -106,13 +109,22 @@ def clock_metrics(width: int, height: int) -> ClockMetrics:
     )
 
 
-def metrics_in(rect: Rect) -> ClockMetrics:
-    """把四位时钟放进给定矩形，返回的 x/y 已是字形左上角。"""
+def metrics_in(rect: Rect, hour12: bool = False) -> ClockMetrics:
+    """把四位时钟放进给定矩形，返回的 x/y 已是字形左上角。
+
+    hour12 时按最宽形态（两位小时 + 后缀位）计算总宽，整体仍居中；
+    单位数字小时的居中由绘制端右移半个数字位实现。
+    """
     gap = max(2, rect.w // 40)
     colon_w = max(8, rect.w // 12)
     digit_w = max(8, (rect.w - colon_w - 4 * gap) // 4)
     digit_h = min(rect.h, max(16, round(digit_w * 196 / 118)))
+    suf_w = suf_h = 0
     total = 4 * digit_w + colon_w + 4 * gap
+    if hour12:
+        suf_h = max(10, round(digit_h * 0.24))
+        suf_w = max(20, round(digit_h * 0.30))
+        total += suf_w + 2 * gap
     return ClockMetrics(
         x=rect.x + max(0, (rect.w - total) // 2),
         y=rect.y + max(0, (rect.h - digit_h) // 2),
@@ -120,4 +132,6 @@ def metrics_in(rect: Rect) -> ClockMetrics:
         digit_h=digit_h,
         colon_w=colon_w,
         gap=gap,
+        suf_w=suf_w,
+        suf_h=suf_h,
     )

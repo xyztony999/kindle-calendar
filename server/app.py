@@ -87,7 +87,7 @@ def load_config() -> dict:
 
 
 _REGION_RE = re.compile(r"^[a-z0-9-]+$")
-_GLYPH_RE = re.compile(r"^[0-9:]$")
+_GLYPH_RE = re.compile(r"^(?:[0-9:]|am|pm)$")
 
 
 def _apply_lang_cookie(resp: Response) -> Response:

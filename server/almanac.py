@@ -76,17 +76,17 @@ def _day_cn(d: int) -> str:
 _grid_cache: dict[tuple[int, int], dict] = {}
 
 
-def month_grid_info(year: int, month: int) -> dict:
+def month_grid_info(year: int, month: int, firstweekday: int = 0) -> dict:
     """返回 {"weeks": [[day,...]], "days": {day: {lunar, jieqi, fest, holiday}}}。
 
-    weeks 为周一起始的月历矩阵（0 表示上月/下月占位）。
+    weeks 为按 firstweekday 起始的月历矩阵（0 表示上月/下月占位）。
     """
-    key = (year, month)
+    key = (year, month, firstweekday)
     cached = _grid_cache.get(key)
     if cached is not None:
         return cached
 
-    weeks = _calendar.Calendar(firstweekday=0).monthdayscalendar(year, month)
+    weeks = _calendar.Calendar(firstweekday=firstweekday).monthdayscalendar(year, month)
     days: dict[int, dict] = {}
     for week in weeks:
         for day in week:

@@ -147,13 +147,12 @@
   /* 我的积木：行式列表（名称 | 摘要 | ✏ 重命名 | 🗑 删除），无嵌套菜单 */
   .widget-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
   .widget-row {
-    display: grid; grid-template-columns: minmax(64px, 1fr) minmax(0, 2fr) auto auto auto;
-    align-items: center; gap: 8px;
+    display: flex; align-items: center; gap: 8px;
     border: 1px solid var(--line); border-radius: 10px;
     background: var(--card); padding: 4px 6px 4px 12px;
   }
-  .widget-row .w-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .widget-row .w-meta { color: var(--mid); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .widget-row .w-name { flex: 1 1 64px; min-width: 64px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .widget-row .w-meta { flex: 2 1 0; min-width: 0; color: var(--mid); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .widget-row .w-act {
     width: 32px; height: 32px; padding: 0;
     display: inline-flex; align-items: center; justify-content: center;
@@ -162,6 +161,17 @@
   .widget-row .w-act.danger { color: var(--bad); }
   .widget-row .w-add { cursor: grab; }
   .widget-row .w-used { color: var(--mid); font-size: 12px; white-space: nowrap; }
+  .widget-row .w-act.w-place { color: var(--ink); font-weight: 700; }
+  .palette-panel { position: relative; }
+  .wm-drawer {
+    position: absolute; inset: 0; z-index: 4;
+    display: flex; flex-direction: column; gap: 8px;
+    overflow: auto; border-radius: 10px;
+    background: var(--card); padding: 14px;
+  }
+  .wm-drawer-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .wm-drawer-head .palette-title { margin-top: 0; }
+  .layer-controls { display: flex; gap: 8px; margin-top: 10px; }
   #widget-form { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; }
   .snap-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; white-space: nowrap; cursor: pointer; }
   .snap-guide { position: absolute; z-index: 3; pointer-events: none; background: #b3261e; }
@@ -332,6 +342,11 @@
   .sample-row .sample-line { width: 30%; }
   .sample-row b { font-size: 14px; font-weight: 600; }
   .style-title { font-size: 13px; font-weight: 600; }
+  .opt-list { display: grid; gap: 8px; }
+  .opt-row { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 14px; font-size: 13px; }
+  .opt-name { font-weight: 600; }
+  .opt-pick { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+  .opt-pick input { margin: 0; flex: none; }
   #preview-note { margin: 0 0 10px; }
   body.editor-open { overflow: hidden; }
   @media (max-width: 900px) {
@@ -591,23 +606,35 @@
           <label class="field">{{ ui.suppress }}
             <input id="suppress" type="number" min="0" max="3600" step="1" data-field="rotation.suppress_s">
           </label>
+          <div class="section-head"><h3>{{ ui.presets_h2 }}</h3><button class="btn" id="save-preset" type="button">{{ ui.save_preset }}</button></div>
+          <div id="preset-list"></div>
         </section>
         <section class="card" id="card-widgets">
-          <div class="section-head"><h2>{{ ui.widgets_h2 }}</h2><button class="btn" id="widget-add" type="button">+ {{ ui.add_data_widget }}</button></div>
-          <form id="widget-form" hidden>
+          <div class="section-head"><h2>{{ ui.widgets_h2 }}</h2><button class="btn wm-add" id="widget-add" type="button">+ {{ ui.add_data_widget }}</button></div>
+          <form class="wm-form" id="widget-form" hidden>
             <label class="field">{{ ui.widget_name }}
-              <input id="widget-name" type="text" maxlength="20">
+              <input class="wm-name-input" id="widget-name" type="text" maxlength="20">
             </label>
-            <div id="widget-fields" class="field-checks"></div>
-            <p id="widget-hint" class="muted" role="status"></p>
+            <div class="wm-fields field-checks" id="widget-fields"></div>
+            <p class="wm-hint muted" id="widget-hint" role="status"></p>
             <div class="settings-actions">
-              <button class="btn primary" id="widget-save" type="button">{{ ui.save_widget }}</button>
-              <button class="btn" id="widget-cancel" type="button">{{ ui.cancel_widget }}</button>
+              <button class="btn primary wm-save" id="widget-save" type="button">{{ ui.save_widget }}</button>
+              <button class="btn wm-cancel" id="widget-cancel" type="button">{{ ui.cancel_widget }}</button>
             </div>
           </form>
-          <div class="widget-list" id="widget-list"></div>
-          <h3 id="assets-title" hidden>{{ ui.image_assets_h2 }}</h3>
-          <div class="widget-list" id="asset-list"></div>
+          <div class="widget-list wm-list" id="widget-list"></div>
+          <h3 class="wm-assets-title" id="assets-title" hidden>{{ ui.image_assets_h2 }}</h3>
+          <div class="widget-list wm-assets" id="asset-list"></div>
+        </section>
+        <section class="card" id="card-schedule">
+          <h2>{{ ui.schedule_h2 }}</h2>
+          <h3>{{ ui.ics_h2 }}</h3>
+          <div id="ics-list"></div>
+          <button class="btn" id="add-ics" type="button">+ {{ ui.add_ics }}</button>
+          <p class="muted">{{ ui.ics_hint }}</p>
+          <h3>{{ ui.anniv_h2 }}</h3>
+          <div id="anniv-list"></div>
+          <button class="btn" id="add-anniv" type="button">+ {{ ui.add_anniv }}</button>
         </section>
         <section class="card" id="card-location">
           <span id="loc-flag" class="corner" hidden>{{ ui.loc_flag }}</span>
@@ -676,7 +703,28 @@
       <div class="editor-actions"><button class="btn" id="cancel-editor" type="button">{{ ui.cancel_editor }}</button><button class="btn primary" id="close-editor" type="button">{{ ui.close_editor }}</button></div>
     </div>
     <div class="canvas-tools" id="canvas-tools">
-      <div class="canvas-panel">
+      <div class="canvas-panel palette-panel">
+        <div id="widget-drawer" class="wm-drawer" hidden>
+          <div class="wm-drawer-head">
+            <span class="palette-title">{{ ui.my_blocks }}</span>
+            <button class="btn" id="wm-back" type="button">{{ ui.manage_back }}</button>
+          </div>
+          <button class="btn wm-add" id="wm-add" type="button">+ {{ ui.add_data_widget }}</button>
+          <form class="wm-form" id="wm-form" hidden>
+            <label class="field">{{ ui.widget_name }}
+              <input class="wm-name-input" id="wm-name" type="text" maxlength="20">
+            </label>
+            <div class="wm-fields field-checks" id="wm-fields"></div>
+            <p class="wm-hint muted" id="wm-hint" role="status"></p>
+            <div class="settings-actions">
+              <button class="btn primary wm-save" id="wm-save" type="button">{{ ui.save_widget }}</button>
+              <button class="btn wm-cancel" id="wm-cancel" type="button">{{ ui.cancel_widget }}</button>
+            </div>
+          </form>
+          <div class="widget-list wm-list" id="wm-list"></div>
+          <h3 class="wm-assets-title" id="wm-assets-title" hidden>{{ ui.image_assets_h2 }}</h3>
+          <div class="widget-list wm-assets" id="wm-assets"></div>
+        </div>
         <div class="palette" id="palette-system"></div>
         <div class="widget-list" id="palette-mine"></div>
         <div class="palette" id="palette-center"></div>
@@ -702,11 +750,15 @@
           <p class="muted" id="appearance-fields"></p>
           <p class="muted" id="appearance-current" role="status"></p>
           <fieldset class="style-options">
-            <legend>{{ ui.display_style }}</legend>
+            <legend id="block-styles-legend">{{ ui.display_style }}</legend>
             <div class="style-grid" id="block-styles"></div>
           </fieldset>
           <p class="muted" id="appearance-reason"></p>
           <button class="btn" id="reset-block-style" type="button">{{ ui.restore_block_style }}</button>
+        </div>
+        <div class="layer-controls" id="layer-controls" hidden>
+          <button class="btn" id="layer-up" type="button">▲ {{ ui.layer_up }}</button>
+          <button class="btn" id="layer-down" type="button">▼ {{ ui.layer_down }}</button>
         </div>
       </section>
       </div>
@@ -1223,10 +1275,16 @@
     }
     state.widget_defs = state.widget_defs || [];
     state.assets = state.assets || [];
+    state.ics = state.ics || {urls: []};
+    state.ics.urls = state.ics.urls || [];
+    state.anniversaries = state.anniversaries || [];
+    state.presets = state.presets || [];
     state.pages.forEach((page) => { if (!Array.isArray(page.layout)) page.layout = []; });
     fillLocation();
     renderPages();
-    renderWidgets();
+    renderManagers();
+    renderPresets();
+    renderScheduleCard();
     renderQuoteModes();
     renderCustom();
     renderPreviews();
@@ -1311,7 +1369,9 @@
     $("degraded-banner").hidden = true;
     fillLocation();
     renderPages();
-    renderWidgets();
+    renderManagers();
+    renderPresets();
+    renderScheduleCard();
     renderQuoteModes();
     renderCustom();
     renderPreviews();
@@ -1413,6 +1473,8 @@
     selectedPageId = pageId;
     selectedBlockId = null;
     sessionAssetIds = [];
+    $("widget-drawer").hidden = true;
+    closeWidgetForm(drawerManager);
     renderPages();
     renderCanvas();
     clearPreview();
@@ -1481,7 +1543,7 @@
     } catch (err) {
       if (!err.handled) catalog = {system: [], mine: [], center: [], fields: []};
     }
-    renderWidgets();
+    renderManagers();
     renderCanvas();
   }
 
@@ -1531,15 +1593,19 @@
 
   function renderBlockAppearance() {
     const block = selectedBlock();
+    const page = selectedPage();
     const definition = block && block.widget === "custom" && dataDefinition(block.def);
     const sysOptions = block && systemOptionSchema(block.widget);
-    const showControls = !!(definition || sysOptions);
+    const isText = !!(block && block.widget === "text");
+    const showControls = !!(definition || sysOptions || isText);
     $("appearance-controls").hidden = !showControls;
-    // 任何选中都给出可见反馈：系统积木显示可配选项，数据积木显示样式选择
+    // 任何选中都给出可见反馈：系统积木显示可配选项，数据积木显示样式选择，文字积木显示对齐与字号
     if (!block) {
       $("appearance-note").textContent = T.select_data_block;
     } else if (definition) {
       $("appearance-note").textContent = T.appearance_scope.replace("{name}", definition.name);
+    } else if (isText) {
+      $("appearance-note").textContent = (block.text || T.add_text) + " · " + T.font_size;
     } else {
       $("appearance-note").textContent = blockLabel(block) + " · " + T.system_options_title;
     }
@@ -1549,7 +1615,13 @@
     $("appearance-current").textContent = "";
     $("appearance-reason").textContent = "";
     $("reset-block-style").hidden = true;
-    if (!block || (!definition && !sysOptions)) return;
+    const sorted = page && block ? (page.layout || []).slice().sort((a, b) => (a.z || 0) - (b.z || 0)) : [];
+    const zIndex = sorted.indexOf(block);
+    $("layer-controls").hidden = sorted.length < 2;
+    $("layer-up").disabled = zIndex < 0 || zIndex >= sorted.length - 1;
+    $("layer-down").disabled = zIndex <= 0;
+    if (!block || (!definition && !sysOptions && !isText)) return;
+    if (isText) { renderTextOptions(block); return; }
     if (!definition && sysOptions) { renderSystemOptions(block, sysOptions); return; }
     const fields = definition.fields || [];
     const choices = styleChoices(fields);
@@ -1565,6 +1637,8 @@
     const legacy = isInherited && !choices.styles.some((item) => item.id === effective);
     $("appearance-reason").textContent = legacy ? T.legacy_style : (choices.styles.length === 1 ? T.text_style_reason : T.style_preview_help);
     $("reset-block-style").hidden = isInherited;
+    options.className = "style-grid";
+    setStylesLegend(T.display_style);
     choices.styles.forEach((item) => {
       const option = document.createElement("label");
       option.className = "style-option";
@@ -1600,56 +1674,115 @@
       options.appendChild(option);
     });
   }
+  function setStylesLegend(text) {
+    const legend = $("block-styles-legend");
+    if (legend) legend.textContent = text;
+  }
+
   function renderSystemOptions(block, schema) {
     const box = $("block-styles");
+    box.className = "opt-list";
+    setStylesLegend(T.system_options_title);
+    const choiceLabels = {lg: T.size_lg, md: T.size_md, sm: T.size_sm, mon: T.week_mon, sun: T.week_sun};
     if (!block.options) block.options = {};
     $("appearance-current").textContent = T.system_options_hint;
     schema.forEach((opt) => {
-      const wrap = document.createElement("label");
-      wrap.className = "style-option";
+      const current = block.options[opt.key] !== undefined ? block.options[opt.key] : opt.default;
+      const refresh = (focusId) => {
+        markDirty();
+        renderCanvas();
+        const again = document.getElementById(focusId);
+        if (again) again.focus();
+      };
       if (opt.kind === "bool") {
+        const row = document.createElement("label");
+        row.className = "opt-row";
         const input = document.createElement("input");
         input.type = "checkbox";
         input.id = "sys-opt-" + opt.key;
-        input.checked = block.options[opt.key] !== undefined ? block.options[opt.key] : opt.default;
+        input.checked = !!current;
         input.addEventListener("change", () => {
           block.options[opt.key] = input.checked;
-          markDirty();
-          renderCanvas();
+          refresh(input.id);
         });
         const label = document.createElement("span");
-        label.className = "style-title";
-        label.setAttribute("for", input.id);
+        label.className = "opt-name";
         label.textContent = opt.label;
-        wrap.append(input, label);
+        row.append(input, label);
+        box.appendChild(row);
       } else if (opt.kind === "choice") {
-        const field = document.createElement("span");
-        field.className = "style-title";
-        field.textContent = opt.label;
-        field.style.paddingRight = "10px";
-        wrap.appendChild(field);
-        (opt.choices || []).forEach((value, index) => {
+        const row = document.createElement("div");
+        row.className = "opt-row";
+        const name = document.createElement("span");
+        name.className = "opt-name";
+        name.textContent = opt.label;
+        row.appendChild(name);
+        (opt.choices || []).forEach((value) => {
+          const pick = document.createElement("label");
+          pick.className = "opt-pick";
           const radio = document.createElement("input");
           radio.type = "radio";
           radio.name = "sys-opt-" + opt.key;
           radio.id = "sys-opt-" + opt.key + "-" + value;
-          const current = block.options[opt.key] !== undefined ? block.options[opt.key] : opt.default;
           radio.checked = value === current;
           radio.addEventListener("change", () => {
             block.options[opt.key] = value;
-            markDirty();
-            renderCanvas();
+            refresh(radio.id);
           });
           const lab = document.createElement("span");
-          lab.className = "style-title";
-          lab.setAttribute("for", radio.id);
-          lab.textContent = [T.size_lg, T.size_md, T.size_sm][index] || value;
-          lab.style.padding = "0 10px 0 4px";
-          wrap.append(radio, lab);
+          lab.textContent = choiceLabels[value] || value;
+          pick.append(radio, lab);
+          row.appendChild(pick);
         });
+        box.appendChild(row);
       }
-      box.appendChild(wrap);
     });
+  }
+
+  function renderTextOptions(block) {
+    const box = $("block-styles");
+    box.className = "opt-list";
+    setStylesLegend(T.display_style);
+    function radioGroup(legendText, name, entries, current, onPick) {
+      const wrap = document.createElement("fieldset");
+      wrap.className = "style-options";
+      const legend = document.createElement("legend");
+      legend.textContent = legendText;
+      wrap.appendChild(legend);
+      entries.forEach((entry) => {
+        const option = document.createElement("label");
+        option.className = "opt-pick";
+        const input = document.createElement("input");
+        input.type = "radio";
+        input.name = name;
+        input.id = name + "-" + entry.value;
+        input.value = entry.value;
+        input.checked = entry.value === current;
+        input.addEventListener("change", () => {
+          onPick(entry.value);
+          markDirty();
+          renderCanvas();
+          renderBlockAppearance();
+          const again = document.getElementById(input.id);
+          if (again) again.focus();
+        });
+        const lab = document.createElement("span");
+        lab.textContent = entry.label;
+        option.append(input, lab);
+        wrap.appendChild(option);
+      });
+      box.appendChild(wrap);
+    }
+    radioGroup(T.align_label, "block-align", [
+      {value: "left", label: T.align_left},
+      {value: "center", label: T.align_center},
+      {value: "right", label: T.align_right},
+    ], block.align || "left", (value) => { block.align = value; });
+    radioGroup(T.font_size, "block-text-size", [
+      {value: "lg", label: T.size_lg},
+      {value: "md", label: T.size_md},
+      {value: "sm", label: T.size_sm},
+    ], block.size || "md", (value) => { block.size = value; });
   }
 
   $("reset-block-style").addEventListener("click", () => {
@@ -2074,8 +2207,9 @@
     manageBtn.className = "btn";
     manageBtn.textContent = T.manage_widgets;
     manageBtn.addEventListener("click", () => {
-      closeEditor(true);
-      $("card-widgets").scrollIntoView({behavior: "smooth", block: "start"});
+      renderManagerList(drawerManager);
+      $("widget-drawer").hidden = false;
+      $("wm-back").focus();
     });
     const mineTitle = document.createElement("span");
     mineTitle.className = "palette-title";
@@ -2147,8 +2281,23 @@
     return state.pages.filter((page) => (page.layout || []).some((block) => block.widget === "image" && block.asset === assetId)).length;
   }
 
-  function refreshWidgetFields(fields) {
-    const box = $("widget-fields");
+  function managerScope(root) {
+    return {
+      form: root.querySelector(".wm-form"),
+      name: root.querySelector(".wm-name-input"),
+      fields: root.querySelector(".wm-fields"),
+      hint: root.querySelector(".wm-hint"),
+      list: root.querySelector(".wm-list"),
+      assets: root.querySelector(".wm-assets"),
+      assetsTitle: root.querySelector(".wm-assets-title"),
+    };
+  }
+  const cardManager = managerScope($("card-widgets"));
+  const drawerManager = managerScope($("widget-drawer"));
+  const managerScopes = [cardManager, drawerManager];
+
+  function refreshWidgetFields(scope, fields) {
+    const box = scope.fields;
     box.replaceChildren();
     (catalog.fields || []).forEach((field) => {
       const label = document.createElement("label");
@@ -2156,32 +2305,33 @@
       input.type = "checkbox";
       input.value = field.id;
       input.checked = fields.includes(field.id);
-      input.addEventListener("change", updateWidgetHint);
+      input.addEventListener("change", () => updateWidgetHint(scope));
       label.append(input, " " + field.label);
       box.appendChild(label);
     });
   }
 
-  function updateWidgetHint() {
-    const first = $("widget-fields").querySelector("input:checked");
-    $("widget-hint").textContent = first ? T.first_field.replace("{name}", widgetFieldLabel(first.value)) : "";
+  function updateWidgetHint(scope) {
+    const first = scope.fields.querySelector("input:checked");
+    scope.hint.textContent = first ? T.first_field.replace("{name}", widgetFieldLabel(first.value)) : "";
   }
 
-  function openWidgetForm(def) {
+  function openWidgetForm(scope, def) {
+    managerScopes.forEach(closeWidgetForm);
     editingWidgetId = def ? def.id : null;
-    $("widget-name").value = def ? def.name : "";
-    refreshWidgetFields(def ? def.fields : []);
-    updateWidgetHint();
-    $("widget-form").hidden = false;
-    $("widget-name").focus();
+    scope.name.value = def ? def.name : "";
+    refreshWidgetFields(scope, def ? def.fields : []);
+    updateWidgetHint(scope);
+    scope.form.hidden = false;
+    scope.name.focus();
   }
 
-  function closeWidgetForm() {
+  function closeWidgetForm(scope) {
+    scope.form.hidden = true;
+    scope.name.value = "";
+    scope.fields.replaceChildren();
+    scope.hint.textContent = "";
     editingWidgetId = null;
-    $("widget-form").hidden = true;
-    $("widget-name").value = "";
-    $("widget-fields").replaceChildren();
-    $("widget-hint").textContent = "";
   }
 
   function revalidateDefStyles(def) {
@@ -2193,9 +2343,41 @@
     }));
   }
 
-  function renderWidgets() {
+  function managerPlaceButton(spec) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn w-act w-place";
+    btn.textContent = "＋";
+    btn.title = T.place_block;
+    btn.setAttribute("aria-label", T.place_block);
+    btn.addEventListener("click", () => place(cloneSpec(spec)));
+    return btn;
+  }
+
+  function managerDeleteButton(title, onDelete) {
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "btn w-act danger";
+    del.textContent = "🗑";
+    del.title = title;
+    del.setAttribute("aria-label", title);
+    del.addEventListener("click", onDelete);
+    return del;
+  }
+
+  function afterManagerChange() {
+    markDirty();
+    renderManagers();
+    if (!$("canvas-modal").hidden) renderCanvas();
+  }
+
+  function renderManagers() {
     if (!state) return;
-    const list = $("widget-list");
+    managerScopes.forEach((scope) => renderManagerList(scope));
+  }
+
+  function renderManagerList(scope) {
+    const list = scope.list;
     list.replaceChildren();
     (state.widget_defs || []).forEach((item) => {
       const row = document.createElement("div");
@@ -2211,35 +2393,29 @@
       const used = document.createElement("span");
       used.className = "w-used";
       used.textContent = count ? T.used_pages.replace("{n}", String(count)) : T.unused_widget;
+      row.append(name, meta, used);
+      if (scope === drawerManager) row.appendChild(managerPlaceButton({widget: "custom", def: item.id, w: 280, h: 160}));
       const edit = document.createElement("button");
       edit.type = "button";
       edit.className = "btn w-act";
       edit.textContent = "✎";
       edit.title = T.edit_widget;
       edit.setAttribute("aria-label", T.edit_widget);
-      edit.addEventListener("click", () => openWidgetForm(item));
-      const del = document.createElement("button");
-      del.type = "button";
-      del.className = "btn w-act danger";
-      del.textContent = "🗑";
-      del.title = T.delete_widget;
-      del.setAttribute("aria-label", T.delete_widget);
-      del.addEventListener("click", () => {
+      edit.addEventListener("click", () => openWidgetForm(scope, item));
+      row.appendChild(edit);
+      row.appendChild(managerDeleteButton(T.delete_widget, () => {
         const n = widgetUseCount(item.id);
         if (!window.confirm(T.delete_widget_confirm.replace("{name}", item.name).replace("{n}", String(n)))) return;
         state.widget_defs = state.widget_defs.filter((def) => def.id !== item.id);
         state.pages.forEach((page) => { page.layout = (page.layout || []).filter((block) => block.def !== item.id); });
-        if (editingWidgetId === item.id) closeWidgetForm();
-        markDirty();
-        renderWidgets();
-        if (!$("canvas-modal").hidden) renderCanvas();
-      });
-      row.append(name, meta, used, edit, del);
+        if (editingWidgetId === item.id) managerScopes.forEach(closeWidgetForm);
+        afterManagerChange();
+      }));
       list.appendChild(row);
     });
     const assets = state.assets || [];
-    $("assets-title").hidden = !assets.length;
-    const alist = $("asset-list");
+    scope.assetsTitle.hidden = !assets.length;
+    const alist = scope.assets;
     alist.replaceChildren();
     assets.forEach((asset) => {
       const row = document.createElement("div");
@@ -2254,43 +2430,34 @@
       const used = document.createElement("span");
       used.className = "w-used";
       used.textContent = count ? T.used_pages.replace("{n}", String(count)) : T.unused_widget;
-      const del = document.createElement("button");
-      del.type = "button";
-      del.className = "btn w-act danger";
-      del.textContent = "🗑";
-      del.title = T.delete_asset;
-      del.setAttribute("aria-label", T.delete_asset);
-      del.addEventListener("click", () => {
+      row.append(name, meta, used);
+      if (scope === drawerManager) row.appendChild(managerPlaceButton({widget: "image", asset: asset.id, w: 280, h: 180}));
+      row.appendChild(managerDeleteButton(T.delete_asset, () => {
         const n = assetUseCount(asset.id);
         if (!window.confirm(T.delete_asset_confirm.replace("{id}", asset.id).replace("{n}", String(n)))) return;
         state.assets = state.assets.filter((item) => item.id !== asset.id);
         state.pages.forEach((page) => { page.layout = (page.layout || []).filter((block) => !(block.widget === "image" && block.asset === asset.id)); });
-        markDirty();
-        renderWidgets();
-        if (!$("canvas-modal").hidden) renderCanvas();
-      });
-      row.append(name, meta, used, del);
+        afterManagerChange();
+      }));
       alist.appendChild(row);
     });
   }
 
-  $("widget-add").addEventListener("click", () => {
-    if (!$("widget-form").hidden && editingWidgetId === null) {
-      closeWidgetForm();
+  function onWidgetAdd(scope) {
+    if (!scope.form.hidden && editingWidgetId === null) {
+      closeWidgetForm(scope);
       return;
     }
     if ((state.widget_defs || []).length >= (limits.max_defs || 12)) {
       toast(T.max_defs, true);
       return;
     }
-    openWidgetForm(null);
-  });
+    openWidgetForm(scope, null);
+  }
 
-  $("widget-cancel").addEventListener("click", closeWidgetForm);
-
-  $("widget-save").addEventListener("click", () => {
-    const name = $("widget-name").value.trim();
-    const fields = Array.from($("widget-fields").querySelectorAll("input:checked")).map((input) => input.value);
+  function onWidgetSave(scope) {
+    const name = scope.name.value.trim();
+    const fields = Array.from(scope.fields.querySelectorAll("input:checked")).map((input) => input.value);
     if (!name || fields.length < 1 || fields.length > 6) {
       toast(T.widget_fields_invalid, true);
       return;
@@ -2309,10 +2476,289 @@
       }
       state.widget_defs.push({id: hexId("w"), name: name, style: styleChoices(fields).recommended, fields: fields});
     }
-    closeWidgetForm();
+    closeWidgetForm(scope);
+    afterManagerChange();
+  }
+
+  $("widget-add").addEventListener("click", () => onWidgetAdd(cardManager));
+  $("widget-cancel").addEventListener("click", () => closeWidgetForm(cardManager));
+  $("widget-save").addEventListener("click", () => onWidgetSave(cardManager));
+  $("wm-add").addEventListener("click", () => onWidgetAdd(drawerManager));
+  $("wm-cancel").addEventListener("click", () => closeWidgetForm(drawerManager));
+  $("wm-save").addEventListener("click", () => onWidgetSave(drawerManager));
+  $("wm-back").addEventListener("click", () => { $("widget-drawer").hidden = true; });
+
+  function moveLayer(dir) {
+    const page = selectedPage();
+    const block = selectedBlock();
+    if (!page || !block) return;
+    const sorted = (page.layout || []).slice().sort((a, b) => (a.z || 0) - (b.z || 0));
+    const index = sorted.indexOf(block);
+    const target = index + dir;
+    if (target < 0 || target >= sorted.length) return;
+    sorted[index] = sorted[target];
+    sorted[target] = block;
+    sorted.forEach((item, i) => { item.z = i + 1; });
     markDirty();
-    renderWidgets();
-    if (!$("canvas-modal").hidden) renderCanvas();
+    renderCanvas();
+    renderBlockAppearance();
+  }
+  $("layer-up").addEventListener("click", () => moveLayer(1));
+  $("layer-down").addEventListener("click", () => moveLayer(-1));
+
+  // ── 版面快照 ──
+  function snapshotOfCurrent() {
+    return {
+      pages: JSON.parse(JSON.stringify(state.pages)),
+      widget_defs: JSON.parse(JSON.stringify(state.widget_defs || [])),
+      assets: JSON.parse(JSON.stringify(state.assets || [])),
+    };
+  }
+
+  function renderPresets() {
+    if (!state) return;
+    const list = $("preset-list");
+    list.replaceChildren();
+    (state.presets || []).forEach((item) => {
+      const row = document.createElement("div");
+      row.className = "widget-row";
+      const name = document.createElement("span");
+      name.className = "w-name";
+      name.textContent = item.name;
+      name.title = item.name;
+      const meta = document.createElement("span");
+      meta.className = "w-meta";
+      meta.textContent = item.created_at || "";
+      const apply = document.createElement("button");
+      apply.type = "button";
+      apply.className = "btn w-act w-place";
+      apply.textContent = "▶";
+      apply.title = T.apply_preset;
+      apply.setAttribute("aria-label", T.apply_preset);
+      apply.addEventListener("click", () => {
+        if (!$("canvas-modal").hidden) closeEditor(true);
+        state.pages = JSON.parse(JSON.stringify(item.snapshot.pages || []));
+        state.widget_defs = JSON.parse(JSON.stringify(item.snapshot.widget_defs || []));
+        state.assets = JSON.parse(JSON.stringify(item.snapshot.assets || []));
+        state.pages.forEach((page) => { if (!Array.isArray(page.layout)) page.layout = []; });
+        markDirty();
+        renderPages();
+        renderManagers();
+        renderPresets();
+        renderPreviews();
+        toast(T.preset_applied.replace("{name}", item.name));
+      });
+      const overwrite = document.createElement("button");
+      overwrite.type = "button";
+      overwrite.className = "btn w-act";
+      overwrite.textContent = "⟳";
+      overwrite.title = T.overwrite_preset;
+      overwrite.setAttribute("aria-label", T.overwrite_preset);
+      overwrite.addEventListener("click", () => {
+        item.snapshot = snapshotOfCurrent();
+        item.created_at = new Date().toISOString().slice(0, 16).replace("T", " ");
+        markDirty();
+        renderPresets();
+        toast(T.preset_overwritten.replace("{name}", item.name));
+      });
+      const exportBtn = document.createElement("button");
+      exportBtn.type = "button";
+      exportBtn.className = "btn w-act";
+      exportBtn.textContent = "⭳";
+      exportBtn.title = T.export;
+      exportBtn.setAttribute("aria-label", T.export);
+      exportBtn.addEventListener("click", () => {
+        const blob = new Blob([JSON.stringify({kind: "kindle-preset", name: item.name, snapshot: item.snapshot}, null, 2)], {type: "application/json"});
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = (item.name || "preset") + ".json";
+        link.click();
+        URL.revokeObjectURL(link.href);
+      });
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "btn w-act danger";
+      del.textContent = "🗑";
+      del.title = T.delete_preset;
+      del.setAttribute("aria-label", T.delete_preset);
+      del.addEventListener("click", () => {
+        if (!window.confirm(T.delete_preset_confirm.replace("{name}", item.name))) return;
+        state.presets = state.presets.filter((entry) => entry !== item);
+        markDirty();
+        renderPresets();
+      });
+      row.append(name, meta, apply, overwrite, exportBtn, del);
+      list.appendChild(row);
+    });
+  }
+
+  $("save-preset").addEventListener("click", () => {
+    if ((state.presets || []).length >= 8) {
+      toast(T.max_presets, true);
+      return;
+    }
+    const name = (window.prompt(T.preset_name_ph, "") || "").trim().slice(0, 20);
+    if (!name) return;
+    state.presets = state.presets || [];
+    state.presets.push({
+      id: hexId("p"),
+      name: name,
+      created_at: new Date().toISOString().slice(0, 16).replace("T", " "),
+      snapshot: snapshotOfCurrent(),
+    });
+    markDirty();
+    renderPresets();
+  });
+
+  // ── 日程卡：ICS 订阅 + 纪念日 ──
+  function annivRepeatLabel(repeat) {
+    if (repeat === "yearly") return T.repeat_yearly;
+    if (repeat === "lunar") return T.repeat_lunar;
+    return T.repeat_none;
+  }
+
+  function annivDaysLeft(item) {
+    // 农历重复的精确换算在服务端做；前端只对 none/yearly 给出即时天数
+    if (item.repeat === "lunar") return null;
+    const t0 = new Date();
+    t0.setHours(0, 0, 0, 0);
+    try {
+      if (item.repeat === "none") {
+        const [yy, mm, dd] = String(item.date || "").split("-").map(Number);
+        const d = new Date(yy, mm - 1, dd);
+        if (Number.isNaN(d.getTime())) return null;
+        const days = Math.round((d - t0) / 86400000);
+        return days >= 0 ? days : null;
+      }
+      const [mm, dd] = String(item.date || "").split("-").map(Number);
+      let d = new Date(t0.getFullYear(), mm - 1, dd);
+      if (Number.isNaN(d.getTime())) return null;
+      if (d < t0) d = new Date(t0.getFullYear() + 1, mm - 1, dd);
+      return Math.round((d - t0) / 86400000);
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function renderScheduleCard() {
+    if (!state) return;
+    const icsList = $("ics-list");
+    icsList.replaceChildren();
+    ((state.ics || {}).urls || []).forEach((url, index) => {
+      const row = document.createElement("div");
+      row.className = "widget-row";
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "w-name";
+      input.value = url;
+      input.placeholder = T.ics_ph;
+      input.dataset.field = "ics.urls[" + index + "]";
+      input.addEventListener("change", () => {
+        state.ics.urls[index] = input.value.trim();
+        markDirty();
+      });
+      const meta = document.createElement("span");
+      meta.className = "w-meta";
+      meta.textContent = "ICS";
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "btn w-act danger";
+      del.textContent = "🗑";
+      del.title = T.delete_page;
+      del.setAttribute("aria-label", T.delete_page);
+      del.addEventListener("click", () => {
+        state.ics.urls.splice(index, 1);
+        markDirty();
+        renderScheduleCard();
+      });
+      row.append(input, meta, del);
+      icsList.appendChild(row);
+    });
+    const annivList = $("anniv-list");
+    annivList.replaceChildren();
+    (state.anniversaries || []).forEach((item, index) => {
+      const row = document.createElement("div");
+      row.className = "widget-row";
+      const name = document.createElement("input");
+      name.type = "text";
+      name.className = "w-name";
+      name.value = item.name || "";
+      name.maxLength = 20;
+      name.placeholder = T.anniv_name;
+      name.dataset.field = "anniversaries[" + index + "].name";
+      name.addEventListener("change", () => {
+        item.name = name.value.trim();
+        markDirty();
+      });
+      const dateInput = document.createElement("input");
+      dateInput.type = "text";
+      dateInput.className = "w-meta";
+      dateInput.value = item.date || "";
+      dateInput.placeholder = item.repeat === "none" ? "YYYY-MM-DD" : "MM-DD";
+      dateInput.dataset.field = "anniversaries[" + index + "].date";
+      dateInput.addEventListener("change", () => {
+        item.date = dateInput.value.trim();
+        markDirty();
+      });
+      const repeat = document.createElement("select");
+      ["none", "yearly", "lunar"].forEach((value) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = annivRepeatLabel(value);
+        repeat.appendChild(option);
+      });
+      repeat.value = item.repeat || "none";
+      repeat.addEventListener("change", () => {
+        item.repeat = repeat.value;
+        dateInput.placeholder = item.repeat === "none" ? "YYYY-MM-DD" : "MM-DD";
+        markDirty();
+        renderScheduleCard();
+      });
+      const days = annivDaysLeft(item);
+      const used = document.createElement("span");
+      used.className = "w-used";
+      used.textContent = days === null ? annivRepeatLabel(item.repeat) : (days === 0 ? T.days_today : T.days_left.replace("{n}", String(days)));
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "btn w-act danger";
+      del.textContent = "🗑";
+      del.title = T.delete_page;
+      del.setAttribute("aria-label", T.delete_page);
+      del.addEventListener("click", () => {
+        state.anniversaries.splice(index, 1);
+        markDirty();
+        renderScheduleCard();
+      });
+      row.append(name, dateInput, repeat, used, del);
+      annivList.appendChild(row);
+    });
+  }
+
+  $("add-ics").addEventListener("click", () => {
+    state.ics = state.ics || {urls: []};
+    state.ics.urls = state.ics.urls || [];
+    if (state.ics.urls.length >= 3) {
+      toast(T.max_ics, true);
+      return;
+    }
+    state.ics.urls.push("");
+    markDirty();
+    renderScheduleCard();
+    const inputs = $("ics-list").querySelectorAll("input");
+    if (inputs.length) inputs[inputs.length - 1].focus();
+  });
+
+  $("add-anniv").addEventListener("click", () => {
+    state.anniversaries = state.anniversaries || [];
+    if (state.anniversaries.length >= 20) {
+      toast(T.max_anniv, true);
+      return;
+    }
+    state.anniversaries.push({id: hexId("e"), name: "", date: "", repeat: "none"});
+    markDirty();
+    renderScheduleCard();
+    const inputs = $("anniv-list").querySelectorAll("input");
+    if (inputs.length) inputs[inputs.length - 1].focus();
   });
 
   $("add-page").addEventListener("click", () => {

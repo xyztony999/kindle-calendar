@@ -193,12 +193,15 @@ apply_clock() {
             eval CLOCK_DIGIT_H=\"\$CLOCK_${upper}_DIGIT_H\"
             eval CLOCK_COLON_W=\"\$CLOCK_${upper}_COLON_W\"
             eval CLOCK_GAP=\"\$CLOCK_${upper}_GAP\"
+            eval CLOCK_HOUR12=\"\$CLOCK_${upper}_HOUR12\"
+            eval CLOCK_SUF_W=\"\$CLOCK_${upper}_SUF_W\"
+            eval CLOCK_SUF_H=\"\$CLOCK_${upper}_SUF_H\"
             eval CLOCK_GLYPH_URL_PREFIX=\"\$CLOCK_${upper}_GLYPH_URL_PREFIX\"
         fi
     elif [ "${CUR_PAGE:-today}" != "today" ]; then
         CLOCK_ENABLED=0
     fi
-    geom="${CLOCK_X:-}.${CLOCK_Y:-}.${CLOCK_DIGIT_W:-}.${CLOCK_DIGIT_H:-}.${CLOCK_COLON_W:-}.${CLOCK_GAP:-}"
+    geom="${CLOCK_X:-}.${CLOCK_Y:-}.${CLOCK_DIGIT_W:-}.${CLOCK_DIGIT_H:-}.${CLOCK_COLON_W:-}.${CLOCK_GAP:-}.${CLOCK_HOUR12:-0}.${CLOCK_SUF_W:-}.${CLOCK_SUF_H:-}"
     oldgeom=""
     [ -f "$STATE_DIR/clock.geom" ] && oldgeom="$(cat "$STATE_DIR/clock.geom")"
     if [ "$oldgeom" != "$geom" ]; then
@@ -327,15 +330,19 @@ ensure_month_asset() {
 }
 
 sync_glyphs() {
-    key="${CLOCK_DIGIT_W:-0}.${CLOCK_DIGIT_H:-0}.${CLOCK_COLON_W:-0}.${CLOCK_GAP:-0}"
+    key="${CLOCK_DIGIT_W:-0}.${CLOCK_DIGIT_H:-0}.${CLOCK_COLON_W:-0}.${CLOCK_GAP:-0}.${CLOCK_HOUR12:-0}.${CLOCK_SUF_W:-0}.${CLOCK_SUF_H:-0}"
     [ -n "$CLOCK_GLYPH_URL_PREFIX" ] || return 1
     old=""
     [ -f "$STATE_DIR/glyph.key" ] && old="$(cat "$STATE_DIR/glyph.key")"
 
-    # 几何 key 相同还不够：11 个字形文件必须全部在盘（文件名方案变更、
+    # 12 小时制额外需要 am/pm 两个后缀字形
+    want="0 1 2 3 4 5 6 7 8 9 :"
+    [ "${CLOCK_HOUR12:-0}" = "1" ] && want="$want am pm"
+
+    # 几何 key 相同还不够：字形文件必须全部在盘（文件名方案变更、
     # 半途失败等都会造成缺文件——例如冒号曾因文件名含':'下载失败）
     complete=1
-    for g in 0 1 2 3 4 5 6 7 8 9 :; do
+    for g in $want; do
         if [ "$g" = ":" ]; then name="colon"; else name="$g"; fi
         [ -f "$GLYPH_DIR/$name.png" ] || complete=0
     done
@@ -346,15 +353,16 @@ sync_glyphs() {
     mkdir -p "$GLYPH_DIR"
     # 原子同步：全部拉取成功才替换旧字形，失败保留旧集（避免半套字形白块）
     # 注意：冒号字形本地存为 colon.png —— /mnt/us 文件系统不允许文件名含 ':'
+    need=$(printf '%s\n' $want | wc -l | tr -d ' ')
     ok=0
-    for g in 0 1 2 3 4 5 6 7 8 9 :; do
+    for g in $want; do
         if [ "$g" = ":" ]; then name="colon"; else name="$g"; fi
         if fetch_url "$GLYPH_DIR/$name.new" "${CLOCK_GLYPH_URL_PREFIX}$g.png"; then
             ok=$((ok + 1))
         fi
     done
-    if [ "$ok" -eq 11 ]; then
-        for g in 0 1 2 3 4 5 6 7 8 9 :; do
+    if [ "$ok" -eq "$need" ]; then
+        for g in $want; do
             if [ "$g" = ":" ]; then name="colon"; else name="$g"; fi
             mv "$GLYPH_DIR/$name.new" "$GLYPH_DIR/$name.png"
         done
@@ -366,30 +374,52 @@ sync_glyphs() {
     return 1
 }
 
-# 每分钟更新时钟：只重绘发生变化的字形（A2 快速局刷）
+# 每分钟更新时钟：只重绘发生变化的字形（A2 快速局刷）。
+# 12 小时制（CLOCK_HOUR12=1）：小时 1-12 去前导零，后缀 AM/PM 小字底对齐；
+# 单数字小时起点右移半个数字位保持整体居中；位数或模式变化时整只重画。
 draw_clock() {
     apply_clock
     [ "$CLOCK_ENABLED" = "0" ] && return 0
     [ -n "$CLOCK_X" ] || return 0
-    str="$(date +%H%M)"
+    h="$(date +%H)"; m="$(date +%M)"
+    suffix=""
+    x="$CLOCK_X"
+    if [ "${CLOCK_HOUR12:-0}" = "1" ]; then
+        suffix="am"; [ "$h" -ge 12 ] && suffix="pm"
+        h=$(( ${h#0} % 12 )); [ "$h" -eq 0 ] && h=12
+        if [ "$h" -lt 10 ]; then
+            x=$(( x + (CLOCK_DIGIT_W + CLOCK_GAP) / 2 ))
+        fi
+    fi
+    core="$h:$m"
+    str="$core${suffix:+ $suffix}"
     last=""
     [ -f "$STATE_DIR/clock.last" ] && last="$(cat "$STATE_DIR/clock.last")"
     [ "$str" = "$last" ] && return 0
 
-    x="$CLOCK_X"
+    # 拆上次绘制串的主体与后缀；位数/模式变化 → 整只重画，否则按位差分
+    last_core=""; last_suffix=""
+    case "$last" in
+        *" "*) last_core="${last%% *}"; last_suffix="${last##* }" ;;
+        "") : ;;
+        *) last_core="$last" ;;
+    esac
+    redraw=0
+    [ -z "$last_core" ] && redraw=1
+    [ "${#core}" -ne "${#last_core}" ] && redraw=1
+    [ -n "$suffix" ] && [ -z "$last_suffix" ] && redraw=1
+    [ -z "$suffix" ] && [ -n "$last_suffix" ] && redraw=1
+
     i=1
-    while [ "$i" -le 5 ]; do
-        if [ "$i" -eq 3 ]; then
-            c=":"
+    n=${#core}
+    while [ "$i" -le "$n" ]; do
+        c="$(printf '%s' "$core" | cut -c "$i")"
+        prev=""
+        [ "$redraw" -eq 0 ] && prev="$(printf '%s' "$last_core" | cut -c "$i")"
+        if [ "$c" = ":" ]; then
             file="colon"  # 冒号字形本地文件名（文件系统不允许 ':'）
             w="$CLOCK_COLON_W"
-            # 首次绘制（last 空）时屏幕上没有冒号，必须视为"变化"补画；
-            # 之后再按位比较恒等跳过
-            prev="$(printf '%s' "$last" | cut -c 3)"
         else
-            if [ "$i" -le 2 ]; then idx="$i"; else idx=$((i - 1)); fi
-            c="$(printf '%s' "$str" | cut -c "$idx")"
-            prev="$(printf '%s' "$last" | cut -c "$idx")"
             file="$c"
             w="$CLOCK_DIGIT_W"
         fi
@@ -400,6 +430,12 @@ draw_clock() {
         x=$((x + w + CLOCK_GAP))
         i=$((i + 1))
     done
+    if [ -n "$suffix" ]; then
+        [ -f "$GLYPH_DIR/$suffix.png" ] || return 1
+        if [ "$redraw" -eq 1 ] || [ "$suffix" != "$last_suffix" ]; then
+            fbink_img "$GLYPH_DIR/$suffix.png" "$x" "$(( CLOCK_Y + CLOCK_DIGIT_H - CLOCK_SUF_H ))" A2 0 || return 1
+        fi
+    fi
     echo "$str" > "$STATE_DIR/clock.last"
 }
 

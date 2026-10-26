@@ -31,6 +31,7 @@ def field_text(payload: dict, field_id: str) -> str:
     aqi = payload.get("aqi") or {}
     quote = payload.get("quote") or {}
     holiday = payload.get("holiday") or {}
+    events = payload.get("events") or []
 
     if field_id == "weather.temperature":
         text = _temp(current.get("temperature"))
@@ -103,6 +104,18 @@ def field_text(payload: dict, field_id: str) -> str:
         text = _join(date.get("ji"))
     elif field_id == "location.name":
         text = str(payload.get("location") or "")
+    elif field_id == "events.today_count":
+        iso = str(date.get("iso") or "")
+        text = str(sum(1 for e in events if isinstance(e, dict) and e.get("iso_date") == iso)) if iso else ""
+    elif field_id in ("events.next_title", "events.next_time"):
+        iso = str(date.get("iso") or "")
+        day = [e for e in events if isinstance(e, dict) and e.get("iso_date") == iso]
+        day.sort(key=lambda e: (0 if e.get("all_day") else 1, str(e.get("time") or "00:00")))
+        nxt = day[0] if day else None
+        if field_id == "events.next_title":
+            text = str(nxt.get("title") or "") if nxt else ""
+        else:
+            text = str(nxt.get("time") or "") if nxt and not nxt.get("all_day") else ""
     else:
         text = ""
     return text or DASH

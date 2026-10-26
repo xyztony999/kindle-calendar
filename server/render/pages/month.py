@@ -60,7 +60,8 @@ def render_grid(payload: dict, rect: Rect, font_path: str, offset: int = 0, opti
 
     today = date.fromisoformat(payload["date"]["iso"])
     viewing = _shift_month(today, offset)
-    grid = almanac.month_grid_info(viewing.year, viewing.month)
+    sun_first = str(opts.get("week_start") or "mon") == "sun"
+    grid = almanac.month_grid_info(viewing.year, viewing.month, firstweekday=6 if sun_first else 0)
 
     header_h = int(rect.h * 0.07)
     n_weeks = len(grid["weeks"])
@@ -71,10 +72,14 @@ def render_grid(payload: dict, rect: Rect, font_path: str, offset: int = 0, opti
     f_day = _font(sx, 30, font_path)
     f_sub = _font(sx, 19, font_path)
 
-    # 表头（周一起始，周末 MID）
-    headers = [weekday_en(j) for j in range(7)] if is_en(payload) else WEEKDAYS_CN
+    # 表头（默认周一起始，周末 MID；周日起始时首列为周日）
+    if is_en(payload):
+        headers = [weekday_en(6)] + [weekday_en(j) for j in range(6)] if sun_first else [weekday_en(j) for j in range(7)]
+    else:
+        headers = ["日"] + WEEKDAYS_CN[:6] if sun_first else WEEKDAYS_CN
     for j, wd in enumerate(headers):
-        style.draw_text_center(draw, j * col_w + col_w // 2, 8, wd, f_wd, style.MID if j >= 5 else style.INK)
+        weekend = (j == 0 or j == 6) if sun_first else j >= 5
+        style.draw_text_center(draw, j * col_w + col_w // 2, 8, wd, f_wd, style.MID if weekend else style.INK)
 
     style.hairline(draw, 0, header_h - 4, rect.w)
 
@@ -86,7 +91,7 @@ def render_grid(payload: dict, rect: Rect, font_path: str, offset: int = 0, opti
             info = grid["days"][day]
             x0 = col * col_w
             cx = x0 + col_w // 2
-            is_weekend = col >= 5
+            is_weekend = (col == 0 or col == 6) if sun_first else col >= 5
             is_today = offset == 0 and day == today.day
 
             # 班休徽标：左上角（右上角会与两位数日期重叠）
@@ -118,18 +123,27 @@ def render_grid(payload: dict, rect: Rect, font_path: str, offset: int = 0, opti
                 r = max(dw, dh) // 2 + int(9 * sx)
                 draw.ellipse((ncx - r, ncy - r, ncx + r, ncy + r), outline=style.INK, width=3)
 
+            # 日程标记：该日在 payload.events 命中（ICS 或纪念日）→ 右上角小实心点
+            if opts.get("show_event_dots", False):
+                iso_day = f"{viewing.year:04d}-{viewing.month:02d}-{day:02d}"
+                if any(isinstance(e, dict) and e.get("iso_date") == iso_day for e in (payload.get("events") or [])):
+                    dot_r = max(3, int(5 * sx))
+                    dx = x0 + col_w - dot_r * 2 - 6
+                    draw.ellipse((dx, y0 + 8, dx + dot_r * 2, y0 + 8 + dot_r * 2), fill=style.MID)
+
             # 角标文本：节气 > 节日 > 农历。英文按同一优先级换词。
-            if is_en(payload):
-                if info["jieqi"]:
-                    sub = solar_term_en(info["jieqi"])
-                elif info["fest"]:
-                    sub = festival_en(info["fest"])
+            if opts.get("show_lunar", True):
+                if is_en(payload):
+                    if info["jieqi"]:
+                        sub = solar_term_en(info["jieqi"])
+                    elif info["fest"]:
+                        sub = festival_en(info["fest"])
+                    else:
+                        sub = lunar_cell(info["lunar"])
                 else:
-                    sub = lunar_cell(info["lunar"])
-            else:
-                sub = info["jieqi"] or info["fest"] or info["lunar"]
-            sub_fill = style.INK if (info["jieqi"] or info["fest"]) else style.MID
-            style.draw_text_center(draw, cx, y0 + row_h - int(34 * sx), sub, f_sub, sub_fill)
+                    sub = info["jieqi"] or info["fest"] or info["lunar"]
+                sub_fill = style.INK if (info["jieqi"] or info["fest"]) else style.MID
+                style.draw_text_center(draw, cx, y0 + row_h - int(34 * sx), sub, f_sub, sub_fill)
 
         if row < n_weeks - 1:
             style.hairline(draw, 0, y0 + row_h, rect.w, style.RULE)

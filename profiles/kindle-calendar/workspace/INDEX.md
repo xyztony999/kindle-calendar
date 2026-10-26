@@ -1,5 +1,58 @@
 ---
 pipeline:
+  - module: sysopt-layout-fix
+    title: "外观面板系统/文字选项排版修复（时钟 choice 单选钮重叠·点档位文字激活错误项·开关漂移）"
+    stages:
+      design:
+        status: complete
+        note: "2026-10-26 增量。D0 实测复现定根因（renderSystemOptions/renderTextOptions 复用样式卡 CSS）；Gate 1 PASS，用户确认方案 A（行式选项布局与样式卡解耦）。无架构/接口/文案变更，不单独出 api/interaction 文档。"
+      code:
+        status: complete
+        note: "2026-10-26 已实现并验证：opt-list/opt-row/opt-pick 行式布局+改选焦点恢复+legend 切换；两条 E2E PASS（含时钟三档钮两两不重叠/点档位文字激活该档/控件 inside 断言）；数据样式卡与服务端零改动。Gate 2 PASS 待用户验收，未提交。注意：layout.py 的 hour12 为并行模块 schedule-presets-clock12 于会话中途加入，本修复 schema 驱动自动适配；7 项单测失败归属该并行进行中工作。报告 05-reports/gate2-sysopt-layout-fix.md"
+    artifacts:
+      prd:
+        - 02-detailed/prd/prd-sysopt-layout-fix.md
+      reports:
+        - 05-reports/gate1-sysopt-layout-fix.md
+        - 05-reports/gate2-sysopt-layout-fix.md
+  - module: schedule-presets-clock12
+    title: "个人日程（ICS+纪念日/倒计时+月历标记）、版面快照与时钟 12 小时制（AM/PM 完整版）"
+    stages:
+      design:
+        status: complete
+        note: "2026-10-25 增量 Gate 1 PASS，用户拍板 1A/2A/3B/4A；叠加未提交的 editor-manage 一轮开发。"
+      code:
+        status: complete
+        note: "2026-10-26 三阶段实现并验证：时钟 12h 完整版（服务端 schema/metrics/字形/env/预览 + dash.sh 可变 token 循环，旧设备静默兼容）；版面快照 presets（整包快照+管理端应用/覆盖/导出）；个人日程（ics.py SSRF 加固 + icalendar/recurring-ical-events + 纪念日/倒计时/月历事件点/新字段/日程卡）。108 项单测 OK + 两条 E2E PASS + dash.sh harness 时钟三模式；过程中修 settings ics 缺键容错（防旧配置降级）与 12h 后缀冗余局刷，并修复上轮遗留 fetch harness 损坏。Gate 2 PASS 待用户验收，未提交；12h 需拷贝新版 dash.sh 到设备。报告 05-reports/gate2-schedule-presets-clock12.md"
+    artifacts:
+      prd:
+        - 02-detailed/prd/prd-schedule-presets-clock12.md
+      api:
+        - 02-detailed/api/api-schedule-presets-clock12.md
+      interaction:
+        - 02-detailed/interaction/interaction-schedule-presets-clock12.md
+      reports:
+        - 05-reports/gate1-schedule-presets-clock12.md
+        - 05-reports/gate2-schedule-presets-clock12.md
+  - module: editor-manage
+    title: "编辑器内管理抽屉与系统积木自定义扩展（选项包+周起始日+文字字号+通用边框+z序）"
+    stages:
+      design:
+        status: complete
+        note: "2026-10-24 增量 Gate 1 PASS，用户拍板 1A+2B；勘察发现 grid.show_lunar 死选项与月历偏移漏传 options 两个存量 bug 一并修复。"
+      code:
+        status: complete
+        note: "2026-10-24 已实现并通过验证：100 项单测 OK、两条 E2E PASS（含抽屉全流程）。系统选项新增 show_notes/show_range/show_icon/quote size/week_start/border(除clock)/文字 size+align UI/z 序按钮；修复 grid.show_lunar 死选项与月历偏移漏传 options。Gate 2 PASS 待用户验收，未提交。报告 05-reports/gate2-editor-manage.md"
+    artifacts:
+      prd:
+        - 02-detailed/prd/prd-editor-manage.md
+      api:
+        - 02-detailed/api/api-editor-manage.md
+      interaction:
+        - 02-detailed/interaction/interaction-editor-manage.md
+      reports:
+        - 05-reports/gate1-editor-manage.md
+        - 05-reports/gate2-editor-manage.md
   - module: widget-manager
     title: "我的积木管理卡片、图片素材链路六项修复与版面编辑对齐吸附"
     stages:
@@ -8,7 +61,7 @@ pipeline:
         note: "2026-10-23 增量 Gate 1 PASS，用户确认按推荐执行（管理卡片+智能吸附+全量链路修复）。"
       code:
         status: complete
-        note: "2026-10-23 已实现并通过验证：90 项单测 OK、两个 Playwright E2E PASS（顺带修复两脚本自 81aab26 起的选择器过期）。过程中修复存量 bug：layout.py STYLES 过期常量拒绝 horizontal/grid 定义；compose 不透传 OSS_*。Gate 2 PASS 待用户验收，未提交。报告 05-reports/gate2-widget-manager.md"
+        note: "2026-10-23 已实现并通过验证：90 项单测 OK、两个 Playwright E2E PASS（顺带修复两脚本自 81aab26 起的选择器过期）。过程中修复存量 bug：layout.py STYLES 过期常量拒绝 horizontal/grid 定义；compose 不透传 OSS_*。Gate 2 PASS，用户 commit & push 确认（71337a1），CI/CD 自动部署。报告 05-reports/gate2-widget-manager.md"
     artifacts:
       prd:
         - 02-detailed/prd/prd-widget-manager.md

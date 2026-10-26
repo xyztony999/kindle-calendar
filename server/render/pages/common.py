@@ -21,6 +21,7 @@ def render_header(payload: dict, rect: Rect, font_path: str, page: str, options:
     opts = options or {}
     show_tabs = opts.get("show_tabs", True)
     show_lunar = opts.get("show_lunar", True)
+    show_notes = opts.get("show_notes", True)
     img = Image.new("L", (rect.w, rect.h), style.PAPER)
     draw = ImageDraw.Draw(img)
     sx = rect.w / 646
@@ -50,7 +51,7 @@ def render_header(payload: dict, rect: Rect, font_path: str, page: str, options:
             notes.append(f"{holiday['name']} {badge_en(holiday['note'])}")
         else:
             notes.append(f"{holiday['name']}{holiday['note']}")
-    if notes:
+    if show_notes and notes:
         weekday_line += " · " + " · ".join(notes[:2])
     draw.text((2, 4), big_date, fill=style.INK, font=f_big)
     draw.text((4, 42), weekday_line, fill=style.INK, font=f_small)
@@ -94,7 +95,10 @@ def render_blank(payload: dict, rect: Rect, font_path: str) -> Image.Image:
     return Image.new("L", (rect.w, rect.h), style.PAPER)
 
 
-def render_quote(payload: dict, rect: Rect, font_path: str) -> Image.Image:
+QUOTE_SIZE_START = {"lg": 32, "md": 27, "sm": 22}
+
+
+def render_quote(payload: dict, rect: Rect, font_path: str, options: dict | None = None) -> Image.Image:
     img = Image.new("L", (rect.w, rect.h), style.PAPER)
     draw = ImageDraw.Draw(img)
     sx = rect.w / 646
@@ -104,10 +108,12 @@ def render_quote(payload: dict, rect: Rect, font_path: str) -> Image.Image:
     if quote.get("from"):
         text += f" ——{quote['from']}"
 
-    # 长句自适应：字号从基准向下收缩直至放得下（最低 60%）
-    size = 27
+    # 长句自适应：字号从基准向下收缩直至放得下；下限按档位取 60%，避免长句把各档位收敛成同一字号
+    start = QUOTE_SIZE_START.get(str((options or {}).get("size") or "md"), 27)
+    size = start
+    floor = max(15, round(start * 0.6))
     f_quote = _font(sx, size, font_path)
-    while size > 16 and style.tracked_width(draw, text, f_quote) > rect.w - 12:
+    while size > floor and style.tracked_width(draw, text, f_quote) > rect.w - 12:
         size -= 2
         f_quote = _font(sx, size, font_path)
 

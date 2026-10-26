@@ -64,12 +64,14 @@ def render_weather(payload: dict, rect: Rect, font_path: str, options: dict | No
             f"降水 {payload['weather'].get('precip_prob', 0)}%" if opts.get("show_precip", True) else None,
         ]
     stats = [s for s in stats if s]
-    draw.text((8, 198), range_line, fill=style.MID, font=f_info)
+    if opts.get("show_range", True):
+        draw.text((8, 198), range_line, fill=style.MID, font=f_info)
     for i, line in enumerate(stats):
         style.draw_text_right(draw, rect.w - 150 * sx, 34 + i * 44 * sx, line, f_info, style.MID)
 
-    icon_size = 132 * sx
-    draw_weather_icon(draw, cur["code"], int(rect.w - icon_size / 2 - 6), int(56 * sx), int(icon_size))
+    if opts.get("show_icon", True):
+        icon_size = 132 * sx
+        draw_weather_icon(draw, cur["code"], int(rect.w - icon_size / 2 - 6), int(56 * sx), int(icon_size))
     return img
 
 
@@ -209,8 +211,8 @@ def render_regions(payload: dict, width: int, height: int, font_path: str) -> di
     return out
 
 
-def render_glyphs(metrics: ClockMetrics, font_path: str) -> dict[str, Image.Image]:
-    """时钟字形集合：10 个数字 + 冒号，白底黑字，供设备端 A2 拼装。"""
+def render_glyphs(metrics: ClockMetrics, font_path: str, hour12: bool = False) -> dict[str, Image.Image]:
+    """时钟字形集合：10 个数字 + 冒号（12h 另含 AM/PM 小字），白底黑字，供设备端 A2 拼装。"""
     out: dict[str, Image.Image] = {}
     font = style.get_font(int(metrics.digit_h * 0.92), font_path)
     for glyph in GLYPHS:
@@ -223,6 +225,16 @@ def render_glyphs(metrics: ClockMetrics, font_path: str) -> dict[str, Image.Imag
         y = (metrics.digit_h - th) // 2 - bbox[1]
         draw.text((x, y), glyph, fill=style.INK, font=font)
         out[glyph] = img
+    if hour12:
+        small = style.get_font(int(metrics.suf_h * 0.92), font_path)
+        for key in ("am", "pm"):
+            img = Image.new("L", (metrics.suf_w, metrics.suf_h), style.PAPER)
+            draw = ImageDraw.Draw(img)
+            text = key.upper()
+            bbox = draw.textbbox((0, 0), text, font=small)
+            tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+            draw.text(((metrics.suf_w - tw) // 2 - bbox[0], (metrics.suf_h - th) // 2 - bbox[1]), text, fill=style.INK, font=small)
+            out[key] = img
     return out
 
 

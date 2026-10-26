@@ -24,6 +24,17 @@ def _payload() -> dict:
     return build_payload({"latitude": 39.9, "longitude": 116.4, "location_name": "北京"}, weather, now)
 
 
+def _payload_holiday() -> dict:
+    tz = ZoneInfo("Asia/Shanghai")
+    now = datetime(2026, 10, 1, 16, 0, tzinfo=tz)
+    weather = WeatherData(
+        CurrentWeather(20, 50, 5, 0, "晴"),
+        [DailyForecast("2026-10-01", 24, 14, 0, "晴")],
+        [HourlyPoint("2026-10-01T16:00", 20, 0, 0)],
+    )
+    return build_payload({"latitude": 39.9, "longitude": 116.4, "location_name": "北京"}, weather, now)
+
+
 def _ink(img, box) -> int:
     px = img.load()
     x0, y0, x1, y1 = box
@@ -53,12 +64,56 @@ class OptionsSchemaTest(unittest.TestCase):
         items = system_options_catalog("clock", "zh")
         self.assertEqual(items[0]["key"], "size")
         self.assertEqual(items[0]["choices"], ["lg", "md", "sm"])
-        self.assertEqual(system_options_catalog("quote", "zh"), [])
+        quote = system_options_catalog("quote", "zh")
+        self.assertEqual([item["key"] for item in quote], ["size", "border"])
+        grid = {item["key"]: item for item in system_options_catalog("grid", "zh")}
+        self.assertEqual(grid["week_start"]["choices"], ["mon", "sun"])
 
     def test_block_options_normalization(self):
-        self.assertEqual(block_options("header", {"show_tabs": False}), {"show_tabs": False, "show_lunar": True})
-        self.assertEqual(block_options("header", {"bogus": 1}), {"show_tabs": True, "show_lunar": True})
-        self.assertEqual(block_options("clock", {"size": "xx"}), {"size": "lg"})
+        self.assertEqual(
+            block_options("header", {"show_tabs": False}),
+            {"show_tabs": False, "show_lunar": True, "show_notes": True, "border": False},
+        )
+        self.assertEqual(
+            block_options("header", {"bogus": 1}),
+            {"show_tabs": True, "show_lunar": True, "show_notes": True, "border": False},
+        )
+        self.assertEqual(block_options("clock", {"size": "xx"}), {"size": "lg", "hour12": False})
+        self.assertEqual(block_options("clock", {"hour12": True}), {"size": "lg", "hour12": True})
+        self.assertEqual(block_options("schedule", {}), {"show_tomorrow": False, "border": False})
+        self.assertEqual(block_options("quote", {"size": "lg"}), {"size": "lg", "border": False})
+        self.assertEqual(block_options("grid", {"week_start": "sun"}), {
+            "show_badges": True, "show_lunar": True, "week_start": "sun", "show_event_dots": False, "border": False,
+        })
+
+    def test_border_schema_excludes_clock(self):
+        self.assertNotIn("border", SYSTEM_OPTIONS["clock"])
+        for widget in ("header", "weather", "sun", "scene", "quote", "list", "chart", "title", "grid", "hourly", "indices", "main", "schedule", "countdown"):
+            self.assertIn("border", SYSTEM_OPTIONS[widget])
+
+    def test_clock_glyphs_hour12(self):
+        from server.render.pages.today import render_glyphs
+        from server.render.regions import Rect, metrics_in
+
+        rect = Rect(0, 0, 600, 200)
+        base = render_glyphs(metrics_in(rect), "")
+        self.assertEqual(sorted(base), sorted([str(i) for i in range(10)] + [":"]))
+        metrics = metrics_in(rect, True)
+        h12 = render_glyphs(metrics, "", True)
+        self.assertIn("am", h12)
+        self.assertIn("pm", h12)
+        self.assertEqual(h12["am"].size, (metrics.suf_w, metrics.suf_h))
+        self.assertGreater(metrics.total_w(), metrics_in(rect).total_w())
+
+    def test_validate_text_size_field(self):
+        details: list = []
+        good = {"widget": "text", "id": "b00000001", "x": 0, "y": 200, "w": 280, "h": 80, "z": 0, "text": "你好", "align": "left", "size": "lg"}
+        _validate_block(good, 0, 0, details, set(), set(), set(), {})
+        self.assertFalse(any(".size" in str(d) for d in details))
+        details = []
+        bad = dict(good, size="huge")
+        _validate_block(bad, 0, 0, details, set(), set(), set(), {})
+        self.assertTrue(any(".size" in str(d) for d in details))
 
     def test_validate_rejects_bad_options(self):
         details: list = []
@@ -111,6 +166,62 @@ class OptionsRenderTest(unittest.TestCase):
         full = month.render_grid(self.payload, rect, "")
         off = month.render_grid(self.payload, rect, "", options={"show_badges": False, "show_lunar": False})
         self.assertLess(_ink(off, (0, 50, 646, 730)), _ink(full, (0, 50, 646, 730)))
+        only_captions = month.render_grid(self.payload, rect, "", options={"show_lunar": False})
+        self.assertLess(_ink(only_captions, (0, 50, 646, 730)), _ink(full, (0, 50, 646, 730)))
+
+    def test_header_notes_hide(self):
+        rect = Rect(0, 0, 646, 78)
+        payload = _payload_holiday()
+        full = common.render_header(payload, rect, "", page="today")
+        off = common.render_header(payload, rect, "", page="today", options={"show_notes": False})
+        self.assertLess(_ink(off, (0, 30, 646, 78)), _ink(full, (0, 30, 646, 78)))
+
+    def test_weather_range_icon_hide(self):
+        rect = Rect(0, 0, 646, 244)
+        full = today.render_weather(self.payload, rect, "")
+        off_range = today.render_weather(self.payload, rect, "", options={"show_range": False})
+        self.assertLess(_ink(off_range, (0, 190, 400, 244)), _ink(full, (0, 190, 400, 244)))
+        off_icon = today.render_weather(self.payload, rect, "", options={"show_icon": False})
+        self.assertLess(_ink(off_icon, (460, 0, 646, 200)), _ink(full, (460, 0, 646, 200)))
+
+    def test_quote_size_tiers(self):
+        rect = Rect(0, 0, 646, 52)
+        # 固定短句：在线一言可能超长，长句会触发自适应缩字号，lg/sm 收敛到同一字号
+        payload = dict(self.payload, quote={"text": "此心安处是吾乡。", "from": "苏轼"})
+        lg = common.render_quote(payload, rect, "", options={"size": "lg"})
+        sm = common.render_quote(payload, rect, "", options={"size": "sm"})
+        self.assertGreater(_ink(lg, (0, 0, 646, 52)), _ink(sm, (0, 0, 646, 52)))
+
+    def test_grid_week_start_sunday(self):
+        rect = Rect(0, 0, 646, 730)
+        mon = month.render_grid(self.payload, rect, "")
+        sun = month.render_grid(self.payload, rect, "", options={"week_start": "sun"})
+        self.assertNotEqual(_ink(mon, (0, 0, 92, 44)), _ink(sun, (0, 0, 92, 44)))
+
+    def test_month_grid_firstweekday(self):
+        from server import almanac as al
+
+        mon = al.month_grid_info(2026, 10)
+        sun = al.month_grid_info(2026, 10, firstweekday=6)
+        self.assertEqual(mon["weeks"][0].index(1), 3)  # 2026-10-01 周四
+        self.assertEqual(sun["weeks"][0].index(1), 4)
+        self.assertNotEqual(mon, sun)
+
+    def test_paint_system_border(self):
+        from server.render.placed import paint_system
+
+        rect = Rect(0, 0, 646, 78)
+        full = paint_system("header", self.payload, rect, "", "today")
+        bordered = paint_system("header", self.payload, rect, "", "today", options={"border": True})
+        self.assertGreater(_ink(bordered, (0, 0, 646, 78)), _ink(full, (0, 0, 646, 78)))
+
+    def test_paint_text_size_tiers(self):
+        from server.render.placed import paint_text
+
+        rect = Rect(0, 0, 280, 80)
+        lg = paint_text("字号测试", "center", rect, "", "lg")
+        sm = paint_text("字号测试", "center", rect, "", "sm")
+        self.assertGreater(_ink(lg, (0, 0, 280, 80)), _ink(sm, (0, 0, 280, 80)))
 
 
 if __name__ == "__main__":

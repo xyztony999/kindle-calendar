@@ -9,7 +9,7 @@ from server.layout import DESIGN, block_options, block_region_key, clock_rect_fo
 from server.locale import is_en
 from server.render import style as style
 from server.render.pages import almanac as almanac_page
-from server.render.pages import common, detail as detail_page, month as month_page, today, week as week_page
+from server.render.pages import common, detail as detail_page, month as month_page, schedule as schedule_page, today, week as week_page
 from server.render.regions import Rect
 
 
@@ -23,7 +23,7 @@ def _system_image(widget: str, payload: dict, rect: Rect, font_path: str, page: 
     if widget == "scene":
         return today.render_scene_region(payload, rect, font_path)
     if widget == "quote":
-        return common.render_quote(payload, rect, font_path)
+        return common.render_quote(payload, rect, font_path, options=options)
     if widget == "list":
         return week_page.render_list(payload, rect, font_path)
     if widget == "chart":
@@ -38,6 +38,10 @@ def _system_image(widget: str, payload: dict, rect: Rect, font_path: str, page: 
         return detail_page.render_indices(payload, rect, font_path)
     if widget == "main":
         return almanac_page.render_main(payload, rect, font_path, options=options)
+    if widget == "schedule":
+        return schedule_page.render_schedule(payload, rect, font_path, options=options)
+    if widget == "countdown":
+        return schedule_page.render_countdown(payload, rect, font_path, options=options)
     return Image.new("L", (rect.w, rect.h), style.PAPER)
 
 
@@ -46,6 +50,9 @@ def paint_system(widget: str, payload: dict, target: Rect, font_path: str, page:
     image = _system_image(widget, payload, Rect(0, 0, width, height), font_path, page, offset, options)
     if image.size != (target.w, target.h):
         image = image.resize((target.w, target.h), Image.Resampling.NEAREST)
+    if options and options.get("border"):
+        draw = ImageDraw.Draw(image)
+        draw.rectangle((1, 1, target.w - 2, target.h - 2), outline=style.INK, width=2)
     return image
 
 
@@ -75,11 +82,15 @@ def _fit_font(draw, text: str, font_path: str, width: int, height: int, start: i
     return font, lines, size
 
 
-def paint_text(text: str, align: str, rect: Rect, font_path: str) -> Image.Image:
+TEXT_SIZE_FACTOR = {"lg": 1.35, "md": 1.0, "sm": 0.7}
+
+
+def paint_text(text: str, align: str, rect: Rect, font_path: str, size: str = "md") -> Image.Image:
     image = Image.new("L", (rect.w, rect.h), style.PAPER)
     draw = ImageDraw.Draw(image)
-    font, lines, size = _fit_font(draw, text, font_path, rect.w - 8, rect.h - 8, max(18, rect.h // 3))
-    line_h = size + 4
+    start = max(18, round(rect.h / 3 * TEXT_SIZE_FACTOR.get(size, 1.0)))
+    font, lines, size_used = _fit_font(draw, text, font_path, rect.w - 8, rect.h - 8, start)
+    line_h = size_used + 4
     y = max(0, (rect.h - line_h * len(lines)) // 2)
     for line in lines:
         if align == "center":
@@ -262,7 +273,7 @@ def render_placed(page, payload, width, height, font_path, definitions, images) 
         if widget in DESIGN:
             out[region] = paint_system(widget, payload, target, font_path, page_id, _offset_for(region), block_options(widget, block.get("options")))
         elif widget == "text":
-            out[region] = paint_text(str(block.get("text") or ""), str(block.get("align") or "left"), target, font_path)
+            out[region] = paint_text(str(block.get("text") or ""), str(block.get("align") or "left"), target, font_path, str(block.get("size") or "md"))
         elif widget == "image":
             out[region] = paint_image(images.get(str(block.get("asset") or "")), target)
         elif widget == "custom":
@@ -303,19 +314,34 @@ def paste_page(page, payload, width, height, font_path, definitions, images, gly
     if clock is not None:
         rect = _target(clock, width, height)
         options = block_options("clock", clock.get("options"))
+        hour12 = bool(options.get("hour12"))
         x, y, w, h = clock_rect_for_options(rect.x, rect.y, rect.w, rect.h, options)
-        metrics = metrics_for(Rect(x, y, w, h))
+        metrics = metrics_for(Rect(x, y, w, h), hour12)
         if glyphs is None:
-            glyphs = render_glyphs(metrics, font_path)
+            glyphs = render_glyphs(metrics, font_path, hour12)
         hhmm = str((payload.get("clock") or {}).get("now") or "00:00")
         if len(hhmm) < 5:
             hhmm = "00:00"
-        x = metrics.x
-        for glyph in (hhmm[0], hhmm[1], ":", hhmm[3], hhmm[4]):
-            cell = glyphs.get(glyph)
-            if cell is None:
-                continue
-            canvas.paste(cell, (x, metrics.y))
-            cell_w = metrics.colon_w if glyph == ":" else metrics.digit_w
+        # 12 小时制：1-12 去前导零 + AM/PM 后缀（底对齐）；单数字小时右移半格保持居中
+        hour = int(hhmm[:2])
+        suffix = ""
+        if hour12:
+            suffix = "am" if hour < 12 else "pm"
+            hour = hour % 12 or 12
+        core = (f"{hour:02d}" if not hour12 or hour >= 10 else str(hour)) + ":" + hhmm[3:5]
+        x = metrics.x + ((metrics.digit_w + metrics.gap) // 2 if hour12 and hour < 10 else 0)
+        for ch in core:
+            if ch == ":":
+                cell = glyphs.get(":")
+                cell_w = metrics.colon_w
+            else:
+                cell = glyphs.get(ch)
+                cell_w = metrics.digit_w
+            if cell is not None:
+                canvas.paste(cell, (x, metrics.y))
             x += cell_w + metrics.gap
+        if suffix:
+            cell = glyphs.get(suffix)
+            if cell is not None:
+                canvas.paste(cell, (x, metrics.y + metrics.digit_h - metrics.suf_h))
     return canvas

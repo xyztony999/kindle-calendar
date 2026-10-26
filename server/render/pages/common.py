@@ -51,6 +51,15 @@ def render_header(payload: dict, rect: Rect, font_path: str, page: str, options:
             notes.append(f"{holiday['name']} {badge_en(holiday['note'])}")
         else:
             notes.append(f"{holiday['name']}{holiday['note']}")
+    # 天气突变提醒（较昨日降温 / 降水概率），与节日共用备注行并受 show_notes 开关控制
+    if show_notes:
+        for alert in payload.get("weather_alerts") or []:
+            if not isinstance(alert, dict):
+                continue
+            if alert.get("kind") == "cool" and alert.get("drop") is not None:
+                notes.append(f"较昨日降 {alert['drop']:.0f}°" if not english else f"Down {alert['drop']:.0f}°")
+            elif alert.get("kind") == "rain" and alert.get("prob") is not None:
+                notes.append(f"降水 {alert['prob']:.0f}%" if not english else f"Rain {alert['prob']:.0f}%")
     if show_notes and notes:
         weekday_line += " · " + " · ".join(notes[:2])
     draw.text((2, 4), big_date, fill=style.INK, font=f_big)

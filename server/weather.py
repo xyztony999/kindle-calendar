@@ -96,6 +96,7 @@ class CurrentWeather:
     wind_speed: float
     code: int
     description: str
+    apparent: float | None = None  # 体感温度，API 缺字段时为 None
 
 
 @dataclass
@@ -120,16 +121,18 @@ class WeatherData:
     current: CurrentWeather
     daily: list[DailyForecast]
     hourly: list[HourlyPoint]
+    yesterday: DailyForecast | None = None  # past_days=1 的昨天，仅用于突变提醒；daily 始终 [0]=今天
 
 
 def fetch_weather(latitude: float, longitude: float, timezone: str, timeout: float = 15) -> WeatherData:
     params = {
         "latitude": latitude,
         "longitude": longitude,
-        "current": "temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m",
+        "current": "temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,apparent_temperature",
         "daily": "weather_code,temperature_2m_max,temperature_2m_min",
         "hourly": "temperature_2m,precipitation_probability,weather_code",
         "timezone": timezone,
+        "past_days": 1,
         "forecast_days": 7,
         "forecast_hours": 24,
     }
@@ -148,6 +151,7 @@ def fetch_weather(latitude: float, longitude: float, timezone: str, timeout: flo
         wind_speed=current["wind_speed_10m"],
         code=current["weather_code"],
         description=describe_weather(current["weather_code"]),
+        apparent=current.get("apparent_temperature"),
     )
 
     forecasts: list[DailyForecast] = []
@@ -175,4 +179,15 @@ def fetch_weather(latitude: float, longitude: float, timezone: str, timeout: flo
         for i in range(n)
     ]
 
-    return WeatherData(current=current_weather, daily=forecasts, hourly=hourly_points)
+    # past_days=1 时首个预报是昨天：按日期校验后切出单独存，daily 保持 [0]=今天
+    yesterday: DailyForecast | None = None
+    if forecasts:
+        from datetime import datetime, timedelta
+        from zoneinfo import ZoneInfo
+
+        yesterday_iso = (datetime.now(ZoneInfo(timezone)) - timedelta(days=1)).date().isoformat()
+        if forecasts[0].date == yesterday_iso:
+            yesterday = forecasts[0]
+            forecasts = forecasts[1:]
+
+    return WeatherData(current=current_weather, daily=forecasts, hourly=hourly_points, yesterday=yesterday)

@@ -81,15 +81,20 @@ class IcsTests(unittest.TestCase):
         self.assertEqual([e["title"] for e in merged], ["周会", "妈妈生日"])
 
     def test_refresh_failure_keeps_old_and_ttl(self):
+        ics.refresh([], TZ, datetime(2026, 10, 26, 8, 0, tzinfo=TZ))
+        self.assertFalse(ics.health()["enabled"])
         ics._events = [{"iso_date": "2026-10-26", "time": None, "all_day": True, "title": "旧", "source": "ics"}]
         ics._fetched_at = 0.0
         now = datetime(2026, 10, 26, 9, 0, tzinfo=TZ)
         with patch.object(ics, "_fetch_ics", side_effect=RuntimeError("boom")):
             out = ics.refresh(["https://example.com/a.ics"], TZ, now)
         self.assertEqual(out[0]["title"], "旧")
+        self.assertFalse(ics.health()["ok"])
         with patch.object(ics, "_fetch_ics", return_value=ICS_FIXTURE) as fetch:
             out = ics.refresh(["https://example.com/a.ics"], TZ, now)
             self.assertTrue(fetch.called)
+            self.assertTrue(ics.health()["ok"])
+            self.assertTrue(ics.health()["enabled"])
             fetch.reset_mock()
             ics.refresh(["https://example.com/a.ics"], TZ, now)
             self.assertFalse(fetch.called)  # TTL 内不再发请求

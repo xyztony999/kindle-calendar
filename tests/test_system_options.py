@@ -120,6 +120,21 @@ class OptionsSchemaTest(unittest.TestCase):
         _validate_block(_block("header", {"show_tabs": "yes"}), 0, 0, details, set(), set(), set(), {})
         self.assertTrue(any("options.show_tabs" in str(d) for d in details))
 
+    def test_header_weather_alerts(self):
+        rect = Rect(0, 0, 646, 78)
+        payload = dict(_payload(), weather_alerts=[{"kind": "cool", "drop": 6}, {"kind": "rain", "prob": 70}])
+        full = common.render_header(payload, rect, "", page="today")
+        off = common.render_header(payload, rect, "", page="today", options={"show_notes": False})
+        self.assertLess(_ink(off, (0, 30, 646, 78)), _ink(full, (0, 30, 646, 78)))
+
+    def test_weather_feels_toggle(self):
+        rect = Rect(0, 0, 646, 244)
+        payload = _payload()
+        payload["weather"]["current"]["apparent"] = 18
+        on = today.render_weather(payload, rect, "", options={"show_feels": True})
+        off = today.render_weather(payload, rect, "", options={"show_feels": False})
+        self.assertGreater(_ink(on, (430, 100, 620, 230)), _ink(off, (430, 100, 620, 230)))
+
     def test_validate_rejects_options_on_custom(self):
         details: list = []
         _validate_block(

@@ -1,5 +1,24 @@
 ---
 pipeline:
+  - module: weather-sources-selfupdate
+    title: "体感温度、天气突变提醒（页眉）、数据源健康卡与 dash.sh 自更新"
+    stages:
+      design:
+        status: complete
+        note: "2026-10-26 增量 Gate 1 PASS，用户按推荐执行（自更新校验+自动重启/提醒走页眉/体感字段+开关/顺序体感→提醒→健康→自更新）。"
+      code:
+        status: complete
+        note: "2026-10-26 四项实现并验证：体感（字段+show_feels）、突变提醒（past_days 昨日切分+页眉 notes）、健康页（quotes/aqi/ics 状态+/admin/api/sources+侧栏卡）、dash.sh 自更新（镜像内置+/api/v1/script+md5 校验原子替换重启，harness 四分支）。112 单测 + 2 E2E PASS。Gate 2 PASS 待用户验收，未提交；设备需最后一次手动 scp 引导自更新。报告 05-reports/gate2-weather-sources-selfupdate.md"
+    artifacts:
+      prd:
+        - 02-detailed/prd/prd-weather-sources-selfupdate.md
+      api:
+        - 02-detailed/api/api-weather-sources-selfupdate.md
+      interaction:
+        - 02-detailed/interaction/interaction-weather-sources-selfupdate.md
+      reports:
+        - 05-reports/gate1-weather-sources-selfupdate.md
+        - 05-reports/gate2-weather-sources-selfupdate.md
   - module: sysopt-layout-fix
     title: "外观面板系统/文字选项排版修复（时钟 choice 单选钮重叠·点档位文字激活错误项·开关漂移）"
     stages:
@@ -8,7 +27,7 @@ pipeline:
         note: "2026-10-26 增量。D0 实测复现定根因（renderSystemOptions/renderTextOptions 复用样式卡 CSS）；Gate 1 PASS，用户确认方案 A（行式选项布局与样式卡解耦）。无架构/接口/文案变更，不单独出 api/interaction 文档。"
       code:
         status: complete
-        note: "2026-10-26 已实现并验证：opt-list/opt-row/opt-pick 行式布局+改选焦点恢复+legend 切换；两条 E2E PASS（含时钟三档钮两两不重叠/点档位文字激活该档/控件 inside 断言）；数据样式卡与服务端零改动。Gate 2 PASS 待用户验收，未提交。注意：layout.py 的 hour12 为并行模块 schedule-presets-clock12 于会话中途加入，本修复 schema 驱动自动适配；7 项单测失败归属该并行进行中工作。报告 05-reports/gate2-sysopt-layout-fix.md"
+        note: "2026-10-26 已实现并验证：opt-list/opt-row/opt-pick 行式布局+改选焦点恢复+legend 切换；两条 E2E PASS（含时钟三档钮两两不重叠/点档位文字激活该档/控件 inside 断言）；数据样式卡与服务端零改动。Gate 2 PASS，随 8277d50 提交推送。报告 05-reports/gate2-sysopt-layout-fix.md"
     artifacts:
       prd:
         - 02-detailed/prd/prd-sysopt-layout-fix.md
@@ -23,7 +42,7 @@ pipeline:
         note: "2026-10-25 增量 Gate 1 PASS，用户拍板 1A/2A/3B/4A；叠加未提交的 editor-manage 一轮开发。"
       code:
         status: complete
-        note: "2026-10-26 三阶段实现并验证：时钟 12h 完整版（服务端 schema/metrics/字形/env/预览 + dash.sh 可变 token 循环，旧设备静默兼容）；版面快照 presets（整包快照+管理端应用/覆盖/导出）；个人日程（ics.py SSRF 加固 + icalendar/recurring-ical-events + 纪念日/倒计时/月历事件点/新字段/日程卡）。108 项单测 OK + 两条 E2E PASS + dash.sh harness 时钟三模式；过程中修 settings ics 缺键容错（防旧配置降级）与 12h 后缀冗余局刷，并修复上轮遗留 fetch harness 损坏。Gate 2 PASS 待用户验收，未提交；12h 需拷贝新版 dash.sh 到设备。报告 05-reports/gate2-schedule-presets-clock12.md"
+        note: "2026-10-26 三阶段实现并验证：时钟 12h 完整版（服务端 schema/metrics/字形/env/预览 + dash.sh 可变 token 循环，旧设备静默兼容）；版面快照 presets（整包快照+管理端应用/覆盖/导出）；个人日程（ics.py SSRF 加固 + icalendar/recurring-ical-events + 纪念日/倒计时/月历事件点/新字段/日程卡）。108 项单测 OK + 两条 E2E PASS + dash.sh harness 时钟三模式；过程中修 settings ics 缺键容错（防旧配置降级）与 12h 后缀冗余局刷，并修复上轮遗留 fetch harness 损坏。Gate 2 PASS，随 8277d50 提交推送；12h 需拷贝新版 dash.sh 到设备。报告 05-reports/gate2-schedule-presets-clock12.md"
     artifacts:
       prd:
         - 02-detailed/prd/prd-schedule-presets-clock12.md
@@ -42,7 +61,7 @@ pipeline:
         note: "2026-10-24 增量 Gate 1 PASS，用户拍板 1A+2B；勘察发现 grid.show_lunar 死选项与月历偏移漏传 options 两个存量 bug 一并修复。"
       code:
         status: complete
-        note: "2026-10-24 已实现并通过验证：100 项单测 OK、两条 E2E PASS（含抽屉全流程）。系统选项新增 show_notes/show_range/show_icon/quote size/week_start/border(除clock)/文字 size+align UI/z 序按钮；修复 grid.show_lunar 死选项与月历偏移漏传 options。Gate 2 PASS 待用户验收，未提交。报告 05-reports/gate2-editor-manage.md"
+        note: "2026-10-24 已实现并通过验证：100 项单测 OK、两条 E2E PASS（含抽屉全流程）。系统选项新增 show_notes/show_range/show_icon/quote size/week_start/border(除clock)/文字 size+align UI/z 序按钮；修复 grid.show_lunar 死选项与月历偏移漏传 options。Gate 2 PASS，随 8277d50 提交推送。报告 05-reports/gate2-editor-manage.md"
     artifacts:
       prd:
         - 02-detailed/prd/prd-editor-manage.md

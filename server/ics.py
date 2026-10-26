@@ -35,6 +35,12 @@ TITLE_MAX = 40
 _lock = threading.Lock()
 _events: list[dict] = []
 _fetched_at: float = 0.0
+_status: dict = {"ok": True, "at": None, "error": "", "enabled": False}
+
+
+def health() -> dict:
+    with _lock:
+        return dict(_status)
 
 
 def _fetch_ics(url: str) -> str:
@@ -107,25 +113,31 @@ def refresh(urls: list[str], tz: ZoneInfo, now: datetime) -> list[dict]:
         with _lock:
             _events = []
             _fetched_at = time.time()
+            _status.update(ok=True, error="", enabled=False, at=now.isoformat(timespec="seconds"))
         return []
     if fresh:
         return cached
 
     fetched: list[dict] = []
     ok_any = False
+    last_error = ""
     for url in urls:
         try:
             raw = _fetch_ics(url)
             fetched.extend(_parse_events(raw, now.astimezone(dt_timezone.utc) - timedelta(days=1), now.astimezone(dt_timezone.utc) + timedelta(days=WINDOW_DAYS + 1), tz))
             ok_any = True
         except Exception as exc:
+            last_error = str(exc)
             log.warning("ICS 拉取/解析失败 url=%s…: %s", url[:48], exc)
     if ok_any:
         with _lock:
             _events = fetched
             _fetched_at = time.time()
+            _status.update(ok=True, error=last_error, enabled=True, at=now.isoformat(timespec="seconds"))
         return fetched
     log.warning("ICS 全部源拉取失败，沿用 %d 条旧数据", len(cached))
+    with _lock:
+        _status.update(ok=False, error=last_error or "全部源拉取失败", enabled=True, at=now.isoformat(timespec="seconds"))
     return cached
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import json
 import os
@@ -316,6 +317,22 @@ def create_app() -> Flask:
         if viewer_wants_html():
             return _html_page(render_viewer_missing(), 404)
         return Response("not found", status=404)
+
+    @app.get("/api/v1/script")
+    def device_script():
+        """下发镜像内 dash.sh（供设备端自更新校验比对）。"""
+        try:
+            body = (ROOT / "kindle" / "dash.sh").read_bytes()
+        except OSError:
+            return _machine_text("script missing"), 404
+        # md5 仅作内容校验和：busybox md5sum 是设备端唯一保证可用的工具；传输走自有服务器 https，非对抗场景
+        digest = hashlib.md5(body).hexdigest()
+        resp = Response(body, mimetype="text/plain; charset=utf-8")
+        resp.headers["ETag"] = f'"{digest}"'
+        resp.headers["X-Script-Md5"] = digest
+        resp.headers["Cache-Control"] = "no-store"
+        resp.headers["Vary"] = "Accept"
+        return resp
 
     @app.get("/r/<page>/<region>.png")
     def region_png(page: str, region: str):

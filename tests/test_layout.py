@@ -73,6 +73,18 @@ class LayoutUnitTests(unittest.TestCase):
         )
         self.assertEqual(validate(raw), [])
 
+    def test_weather_alerts_rules(self):
+        from server.data import _weather_alerts
+
+        yesterday = DailyForecast("2026-10-25", 28.0, 18.0, 0, "晴")
+        today = DailyForecast("2026-10-26", 20.0, 12.0, 61, "小雨")
+        with_drop = WeatherData(current=FAKE_WEATHER.current, daily=[today], hourly=[], yesterday=yesterday)
+        self.assertEqual(_weather_alerts(with_drop, 70), [{"kind": "cool", "drop": 8}, {"kind": "rain", "prob": 70}])
+        no_yesterday = WeatherData(current=FAKE_WEATHER.current, daily=[today], hourly=[])
+        self.assertEqual(_weather_alerts(no_yesterday, 10), [])
+        mild = WeatherData(current=FAKE_WEATHER.current, daily=[DailyForecast("2026-10-26", 27.0, 18.0, 0, "晴")], hourly=[], yesterday=yesterday)
+        self.assertEqual(_weather_alerts(mild, 30), [])
+
     def test_center_item_rejects_code(self):
         self.assertIsNone(accept_center_item({"id": "center.bad", "kind": "data", "review": "approved", "name": "坏", "style": "rows", "fields": ["weather.temperature"], "script": "print(1)"}))
         self.assertIsNone(accept_center_item({"id": "center.ok", "kind": "data", "review": "pending", "name": "等", "style": "rows", "fields": ["weather.temperature"]}))
@@ -94,7 +106,7 @@ class LayoutUnitTests(unittest.TestCase):
         self.assertEqual(migrated["pages"][0]["layout"][0]["size"], "md")
 
     def test_field_capabilities_and_style_boundaries(self):
-        self.assertEqual(len(FIELD_IDS), 28)
+        self.assertEqual(len(FIELD_IDS), 29)
         self.assertEqual({field_kind(field) for field in FIELD_IDS}, {"number", "time", "date", "short_text", "text"})
         self.assertEqual(field_kind("unknown"), "text")
         compact = ["weather.temperature", "sun.sunrise", "date.month_day", "weather.humidity", "aqi.value", "sun.sunset"]
@@ -184,7 +196,20 @@ class LayoutApiTests(unittest.TestCase):
         self.assertIn('PAGES="today week month detail almanac"', env)
         self.assertIn("CLOCK_TODAY_ENABLED=1", env)
         self.assertIn("CLOCK_TODAY_HOUR12=0", env)
+        self.assertIn('DASH_MD5="', env)
+        self.assertIn("DASH_SCRIPT_URL=", env)
         self.assertIn("R_TODAY_HEADER_X=", env)
+
+        script = self.client.get("/api/v1/script")
+        self.assertEqual(script.status_code, 200)
+        body = script.get_data()
+        self.assertIn(b"dash.sh", body)
+        self.assertEqual(script.headers["X-Script-Md5"], __import__("hashlib").md5(body).hexdigest())
+
+        sources = self.client.get("/admin/api/sources", headers=self._headers())
+        self.assertEqual(sources.status_code, 200)
+        ids = {item["id"] for item in sources.get_json()["data"]["sources"]}
+        self.assertEqual(ids, {"weather", "aqi", "quote", "ics"})
         self.assertIn("R_MONTH_TITLE_TMPL=", env)
 
         catalog = self.client.get("/admin/api/widget-catalog", headers=self._headers())

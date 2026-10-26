@@ -34,10 +34,11 @@ RUN if [ -n "$PIP_INDEX_URL" ]; then pip config set global.index-url "$PIP_INDEX
     && pip install --no-cache-dir -r requirements.txt gunicorn
 
 COPY server/ server/
+COPY kindle/dash.sh kindle/dash.sh
 COPY config.example.yaml config.example.yaml
 COPY start.sh start.sh
 # Windows 检出的脚本可能带 CRLF，exec 会报 no such file or directory，构建时统一剥掉
-RUN sed -i 's/\r$//' start.sh && chmod +x start.sh
+RUN sed -i 's/\r$//' start.sh kindle/dash.sh && chmod +x start.sh kindle/dash.sh
 
 EXPOSE 8080
 

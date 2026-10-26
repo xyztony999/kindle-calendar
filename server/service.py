@@ -14,6 +14,7 @@ import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 
 from PIL import Image
 from zoneinfo import ZoneInfo
@@ -180,6 +181,26 @@ class DashboardService:
     def regions_version(self) -> str:
         with self._lock:
             return self._regions_fingerprint
+
+    def sources_health(self) -> dict:
+        """四数据源健康快照（内存态）：weather/aqi/quote/ics。"""
+        from server import aqi as aqi_mod
+        from server import quotes as quotes_mod
+
+        with self._weather_cond:
+            weather_ok = self._weather is not None and not self._last_error
+            weather_at = (
+                datetime.fromtimestamp(self._weather_at, tz=ZoneInfo("UTC")).isoformat(timespec="seconds") if self._weather_at else None
+            )
+            weather_error = self._last_error or ""
+        return {
+            "sources": [
+                {"id": "weather", "ok": weather_ok, "at": weather_at, "error": weather_error},
+                {"id": "aqi", **aqi_mod.health()},
+                {"id": "quote", **quotes_mod.health()},
+                {"id": "ics", **ics.health()},
+            ]
+        }
 
     def device_status(self) -> dict:
         with self._lock:
@@ -485,6 +506,15 @@ class DashboardService:
             f"SCREEN_W={self.width}",
             f"SCREEN_H={self.height}",
             f'PAGES="{" ".join(pages)}"',
+        ]
+        # dash.sh 自更新契约：内容校验和（busybox md5sum 设备端必有，非安全哈希用途）+ 下载地址（旧脚本静默忽略）
+        try:
+            dash_md5 = hashlib.md5((Path(__file__).resolve().parent.parent / "kindle" / "dash.sh").read_bytes()).hexdigest()
+        except OSError:
+            dash_md5 = ""
+        lines += [
+            f'DASH_MD5="{dash_md5}"',
+            f'DASH_SCRIPT_URL="{base}/api/v1/script"',
         ]
 
         # 每页分区清单 + 各分区变量（title/grid 统一三预裁键 PREV/CUR/NEXT）

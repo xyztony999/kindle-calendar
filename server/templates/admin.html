@@ -172,6 +172,9 @@
   .wm-drawer-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .wm-drawer-head .palette-title { margin-top: 0; }
   .layer-controls { display: flex; gap: 8px; margin-top: 10px; }
+  .source-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+  .source-row .badge { min-width: 52px; text-align: center; }
+  .source-error { flex-basis: 100%; font-size: 12px; margin-top: -2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #widget-form { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; }
   .snap-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; white-space: nowrap; cursor: pointer; }
   .snap-guide { position: absolute; z-index: 3; pointer-events: none; background: #b3261e; }
@@ -683,6 +686,10 @@
         <section class="card" id="card-device">
           <h2>{{ ui.device_h2 }}</h2>
           <div id="device-body" class="muted">—</div>
+        </section>
+        <section class="card" id="card-sources">
+          <h2>{{ ui.sources_h2 }}</h2>
+          <div id="sources-body" class="muted">—</div>
         </section>
         <section class="card">
           <h2>{{ ui.preview_h2 }}</h2>
@@ -1292,6 +1299,52 @@
     markDirty();
   }
 
+  function renderSources(sources) {
+    const body = $("sources-body");
+    body.replaceChildren();
+    (sources || []).forEach((item) => {
+      const row = document.createElement("div");
+      row.className = "source-row";
+      const name = document.createElement("span");
+      name.textContent = T["source_" + item.id] || item.id;
+      const badgeEl = document.createElement("span");
+      let badgeClass = "";
+      let badgeText = T.source_fail;
+      if (item.enabled === false) {
+        badgeClass = "";
+        badgeText = T.source_off;
+      } else if (item.ok) {
+        badgeClass = "ok";
+        badgeText = T.source_ok;
+      } else {
+        badgeClass = "bad";
+      }
+      badgeEl.className = "badge " + badgeClass;
+      badgeEl.textContent = badgeText;
+      const when = document.createElement("span");
+      when.className = "muted";
+      when.textContent = item.at ? relTime(item.at) : T.source_never;
+      row.append(name, badgeEl, when);
+      if (item.enabled !== false && !item.ok && item.error) {
+        const errEl = document.createElement("div");
+        errEl.className = "muted source-error";
+        errEl.textContent = String(item.error).slice(0, 80);
+        errEl.title = item.error;
+        row.appendChild(errEl);
+      }
+      body.appendChild(row);
+    });
+  }
+
+  async function refreshSources() {
+    try {
+      const data = await api("GET", "/admin/api/sources");
+      renderSources((data.data || {}).sources);
+    } catch (err) {
+      if (!err.handled) $("sources-body").textContent = T.status_unavailable;
+    }
+  }
+
   async function refreshDevice() {
     try {
       const data = await api("GET", "/admin/api/device");
@@ -1306,7 +1359,10 @@
   function startPoll() {
     stopPoll();
     pollTimer = setInterval(() => {
-      if (!document.hidden) refreshDevice();
+      if (!document.hidden) {
+        refreshDevice();
+        refreshSources();
+      }
     }, 30000);
   }
 
@@ -1389,6 +1445,7 @@
     const data = await api("GET", "/admin/api/settings");
     applySettings(data.data, keepDraft);
     await refreshDevice();
+    refreshSources();
     startPoll();
   }
 
@@ -3074,7 +3131,10 @@
     if (event.key === "Escape") $("lightbox").hidden = true;
   });
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden && !$("view-settings").hidden) refreshDevice();
+    if (!document.hidden && !$("view-settings").hidden) {
+      refreshDevice();
+      refreshSources();
+    }
   });
 
   $("back-home").addEventListener("click", () => {

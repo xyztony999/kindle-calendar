@@ -46,6 +46,8 @@ def field_text(payload: dict, field_id: str) -> str:
     elif field_id == "weather.precip_prob":
         precip = weather.get("precip_prob")
         text = f"{precip}%" if isinstance(precip, (int, float)) and not isinstance(precip, bool) else ""
+    elif field_id == "weather.apparent":
+        text = _temp(current.get("apparent"))
     elif field_id == "weather.temp_min":
         text = _temp(daily.get("temp_min"))
     elif field_id == "weather.temp_max":

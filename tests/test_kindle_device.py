@@ -128,6 +128,35 @@ fbink_img() { return 1; }
         self.assertIn("failed", output)
         self.assertNotIn("bad", output)
 
+    def test_self_update_flow(self):
+        setup = """
+STATE_DIR=$(mktemp -d)
+DASH_DIR=$(mktemp -d)
+printf 'old-script\\n' > "$DASH_DIR/dash.sh"
+md5sum() { case "$1" in *dash.sh.new*) printf '%s  %s\\n' "$NEW_MD5" "$1";; *) printf '%s  %s\\n' "$OLD_MD5" "$1";; esac; }
+log() { echo "log:$*"; }
+fetch_url() { printf 'new-script\\n' > "$1"; return 0; }
+"""
+        base = setup + function("self_update")
+        run = 'OLD_MD5=%s NEW_MD5=%s DASH_AUTOUPDATE=%s DASH_MD5=%s DASH_SCRIPT_URL="http://x/s"; self_update; echo AFTER'
+        # md5 一致：零动作
+        out = self.run_shell(base + "\n" + run % ("abc", "abc", "1", "abc"))
+        self.assertNotIn("downloaded", out)
+        self.assertIn("AFTER", out)
+        # 不一致且校验通过：替换备份并重启（脚本 exit，不再执行后续）
+        out = self.run_shell(base + "\n" + run % ("aaa", "bbb", "1", "bbb"))
+        self.assertIn("log:dash.sh 自更新: 本地=aaa 服务端=bbb", out)
+        self.assertIn("log:自更新完成，重启", out)
+        self.assertNotIn("AFTER", out)
+        # 校验失败：保留旧版，流程继续
+        out = self.run_shell(base + "\n" + run % ("aaa", "WRONG", "1", "bbb"))
+        self.assertIn("校验失败", out)
+        self.assertIn("AFTER", out)
+        # 开关关闭：跳过
+        out = self.run_shell(base + "\n" + run % ("aaa", "bbb", "0", "bbb"))
+        self.assertNotIn("自更新完成", out)
+        self.assertIn("AFTER", out)
+
     def test_draw_clock_24h_and_12h(self):
         setup = """
 CLOCK_ENABLED=1

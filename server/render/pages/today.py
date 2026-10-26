@@ -55,6 +55,7 @@ def render_weather(payload: dict, rect: Rect, font_path: str, options: dict | No
             f"Humidity {cur['humidity']}%" if opts.get("show_humidity", True) else None,
             f"Wind {cur['wind_speed']:.0f} km/h" if opts.get("show_wind", True) else None,
             f"Rain {payload['weather'].get('precip_prob', 0)}%" if opts.get("show_precip", True) else None,
+            f"Feels {cur.get('apparent'):.0f}°" if opts.get("show_feels", False) and cur.get("apparent") is not None else None,
         ]
     else:
         range_line = f"今日 {today['temp_min']:.0f}° / {today['temp_max']:.0f}°"
@@ -62,6 +63,7 @@ def render_weather(payload: dict, rect: Rect, font_path: str, options: dict | No
             f"湿度 {cur['humidity']}%" if opts.get("show_humidity", True) else None,
             f"风 {cur['wind_speed']:.0f} km/h" if opts.get("show_wind", True) else None,
             f"降水 {payload['weather'].get('precip_prob', 0)}%" if opts.get("show_precip", True) else None,
+            f"体感 {cur.get('apparent'):.0f}°" if opts.get("show_feels", False) and cur.get("apparent") is not None else None,
         ]
     stats = [s for s in stats if s]
     if opts.get("show_range", True):

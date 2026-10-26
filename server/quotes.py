@@ -96,6 +96,14 @@ def footer_fits(text: str, source: str, width: int = 758) -> bool:
     return style.tracked_width(draw, line, font) <= width - 12
 
 
+# 数据源健康状态（内存态，供管理端展示）
+_status: dict = {"ok": True, "at": None, "error": "", "enabled": True}
+
+
+def health() -> dict:
+    return dict(_status)
+
+
 def _fetch_zenquotes() -> dict | None:
     if not _check_url(ZENQUOTES_URL, ZENQUOTES_HOSTS):
         return None
@@ -152,6 +160,7 @@ def english_quote(
 
 def get_quote(now: datetime, mode: str = "online", custom: list | None = None) -> dict:
     """按来源取当日一言。online 当天内缓存；offline/custom 按年内第几天轮换。"""
+    _status["enabled"] = mode == "online"
     if mode == "offline":
         return dict(OFFLINE_QUOTES[now.timetuple().tm_yday % len(OFFLINE_QUOTES)])
     if mode == "custom":
@@ -167,6 +176,8 @@ def get_quote(now: datetime, mode: str = "online", custom: list | None = None) -
         return cached
 
     quote: dict | None = None
+    ok = False
+    error = ""
     if _check_url(HITOKOTO_URL):
         try:
             resp = requests.get(HITOKOTO_URL, timeout=8, allow_redirects=False)
@@ -175,8 +186,15 @@ def get_quote(now: datetime, mode: str = "online", custom: list | None = None) -
             text = (data.get("hitokoto") or "").strip()
             if text:
                 quote = {"text": text[:32], "from": (data.get("from") or "").strip()[:16]}
+                ok = True
+            else:
+                error = "hitokoto 空响应"
         except Exception as exc:
+            error = str(exc)
             log.warning("hitokoto 拉取失败: %s", exc)
+    else:
+        error = "目标地址被安全策略拦截"
+    _status.update(ok=ok, error=error, at=now.isoformat(timespec="seconds"))
 
     if quote is None:
         quote = OFFLINE_QUOTES[now.timetuple().tm_yday % len(OFFLINE_QUOTES)]

@@ -4,7 +4,8 @@ __pycache__
 *.pyc
 preview.png
 config.yaml
-kindle/
+kindle/*
+!kindle/dash.sh
 scripts/
 README.md
 render.yaml

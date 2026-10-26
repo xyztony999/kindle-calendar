@@ -371,11 +371,18 @@ def create_admin_blueprint(service) -> Blueprint:
         return _api_ok({"candidates": candidates})
 
     @bp.get("/admin/api/device")
-    def device():
+    def device_status():
         blocked = require_session()
         if blocked:
             return blocked
         return _api_ok(service.device_status())
+
+    @bp.get("/admin/api/sources")
+    def sources_health():
+        blocked = require_session()
+        if blocked:
+            return blocked
+        return _api_ok(service.sources_health())
 
     @bp.get("/admin/api/widget-catalog")
     def widget_catalog():

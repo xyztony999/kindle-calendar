@@ -156,6 +156,14 @@ git push
 
 > 各 docker-compose 编排文件已透传上述变量。素材读取失败时设备画面会显示「缺图占位框」而非无提示的白板，`docker logs kindle-calendar` 中有 `OSS 读取失败` / `OSS 未配置` 告警可排查。
 
+### 7. 设备脚本自更新（2026-10 起）
+
+镜像内置 `kindle/dash.sh` 并通过 `/api/v1/script` 下发；env 携带 `DASH_MD5`。设备端每个拉取周期比对校验和，不一致时自动下载→md5 校验→原子替换（备份 `dash.sh.old`）→重启，日志见设备端 `dash.log` / `update.log`。
+
+- **引导**：现役设备上的旧版 dash.sh 没有自更新逻辑，**升级到本机制需要最后一次手动拷贝**新版 dash.sh；此后服务端更新设备脚本全自动。
+- 关闭：设备 `config.sh` 加 `DASH_AUTOUPDATE=0`。
+- 校验失败保留旧版，下个周期自动重试；`lib/display.sh` 等其他设备文件不在自更新范围。
+
 ## 日常使用
 
 - **改代码后**：`git push` 即可，约 2~3 分钟自动上线（构建有缓存会更快）

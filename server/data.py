@@ -10,6 +10,19 @@ from server.settings import PAGE_IDS, enabled_pages, settings_version
 from server.weather import WeatherData
 
 
+def _weather_alerts(weather: WeatherData, precip_prob: int | float) -> list[dict]:
+    """突变提醒：较昨日最高温降 ≥5°、今日降水概率 ≥50%。昨日缺失时静默跳过。"""
+    alerts: list[dict] = []
+    today = weather.daily[0] if weather.daily else None
+    if weather.yesterday is not None and today is not None:
+        drop = float(weather.yesterday.temp_max) - float(today.temp_max)
+        if drop >= 5:
+            alerts.append({"kind": "cool", "drop": round(drop)})
+    if precip_prob is not None and precip_prob >= 50:
+        alerts.append({"kind": "rain", "prob": int(precip_prob)})
+    return alerts
+
+
 def build_payload(
     config: dict,
     weather: WeatherData,
@@ -83,6 +96,7 @@ def build_payload(
                 "wind_speed": weather.current.wind_speed,
                 "code": weather.current.code,
                 "description": weather.current.description,
+                "apparent": weather.current.apparent,
             },
             "daily": [
                 {
@@ -99,6 +113,7 @@ def build_payload(
         },
         "sun": astro.day_summary(now, lat, lon),
         "aqi": None if aqi is None else {"us_aqi": aqi.us_aqi, "level_zh": aqi.level, "fetched_at": now.isoformat(timespec="seconds")},
+        "weather_alerts": _weather_alerts(weather, precip_prob),
         "events": events or [],
         "countdowns": countdowns or [],
         "quote": quote,

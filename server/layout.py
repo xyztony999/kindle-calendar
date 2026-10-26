@@ -108,6 +108,7 @@ FIELD_DEFS: tuple[tuple[str, str, str], ...] = (
     ("weather.precip_prob", "降水概率", "Rain chance"),
     ("weather.temp_min", "今日最低温", "Today's low"),
     ("weather.temp_max", "今日最高温", "Today's high"),
+    ("weather.apparent", "体感温度", "Feels like"),
     ("date.month_day", "公历月日", "Date"),
     ("date.weekday", "星期", "Weekday"),
     ("date.lunar", "农历", "Lunar date"),
@@ -133,7 +134,7 @@ FIELD_DEFS: tuple[tuple[str, str, str], ...] = (
 FIELD_IDS = {item[0] for item in FIELD_DEFS}
 _FIELD_LABEL = {item[0]: (item[1], item[2]) for item in FIELD_DEFS}
 
-_NUMERIC_FIELDS = {"weather.temperature", "weather.humidity", "weather.wind_speed", "weather.precip_prob", "weather.temp_min", "weather.temp_max", "sun.illumination", "aqi.value", "events.today_count"}
+_NUMERIC_FIELDS = {"weather.temperature", "weather.humidity", "weather.wind_speed", "weather.precip_prob", "weather.temp_min", "weather.temp_max", "weather.apparent", "sun.illumination", "aqi.value", "events.today_count"}
 _TIME_FIELDS = {"sun.sunrise", "sun.sunset", "events.next_time"}
 _SHORT_FIELDS = {"weather.description", "date.weekday", "date.solar_term", "sun.moon", "aqi.level", "events.next_title"}
 FIELD_KINDS = {field: ("number" if field in _NUMERIC_FIELDS else "time" if field in _TIME_FIELDS else "date" if field == "date.month_day" else "short_text" if field in _SHORT_FIELDS else "text") for field in FIELD_IDS}
@@ -205,6 +206,7 @@ SYSTEM_OPTIONS: dict[str, dict[str, tuple[str, str, str, object, tuple | None]]]
         "show_precip": ("降水概率", "Precipitation", "bool", True, None),
         "show_range": ("今日高低温", "Today's high and low", "bool", True, None),
         "show_icon": ("天气图标", "Weather icon", "bool", True, None),
+        "show_feels": ("体感温度", "Feels like", "bool", False, None),
     },
     "sun": {
         "show_arc": ("日出日落弧线", "Sun arc", "bool", True, None),

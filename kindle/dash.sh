@@ -39,6 +39,7 @@ MONTH_LIMIT=24  # 翻月范围（±N 月），env 可覆盖；±1 为预裁资�
 TOUCH_MODE=force      # force：tapread 在位即沉浸（tapread 已真机验证）；auto：先验证；off：纯轮播
 TOUCH_VERIFY_S=90     # auto 模式验证窗口
 TOUCH_DEAD_S=0        # 沉浸后无触摸事件自动恢复的秒数；0=关闭（tapread 已稳定，避免误踢回书库）
+DASH_AUTOUPDATE=1     # 检测到服务端新脚本时自动更新自身（md5 校验后原子替换并重启）；0=关闭
 
 _BOOK_LANG_PRESET="${KC_BOOK_LANG-}"
 [ -f "$CONFIG" ] && . "$CONFIG"
@@ -497,6 +498,36 @@ fetch_backoff() {
     fi
 }
 
+# 自更新：env 下发的 DASH_MD5 与本地 dash.sh 不一致时，下载、校验并原子替换后重启。
+# 校验失败绝不切换（保留旧版，下个周期重试）；DASH_AUTOUPDATE=0 关闭。
+self_update() {
+    [ "${DASH_AUTOUPDATE:-1}" = "1" ] || return 0
+    [ -n "${DASH_MD5:-}" ] || return 0
+    [ -n "${DASH_SCRIPT_URL:-}" ] || return 0
+    md5bin="$(command -v md5sum)" || return 0
+    local_md5="$("$md5bin" "$DASH_DIR/dash.sh" | cut -d' ' -f1)"
+    [ "$local_md5" = "$DASH_MD5" ] && return 0
+    log "dash.sh 自更新: 本地=$local_md5 服务端=$DASH_MD5"
+    if ! fetch_url "$DASH_DIR/dash.sh.new" "$DASH_SCRIPT_URL"; then
+        rm -f "$DASH_DIR/dash.sh.new"
+        log "自更新下载失败，保留旧版"
+        return 1
+    fi
+    new_md5="$("$md5bin" "$DASH_DIR/dash.sh.new" | cut -d' ' -f1)"
+    if [ "$new_md5" != "$DASH_MD5" ]; then
+        rm -f "$DASH_DIR/dash.sh.new"
+        log "自更新校验失败($new_md5)，保留旧版"
+        return 1
+    fi
+    cp "$DASH_DIR/dash.sh" "$DASH_DIR/dash.sh.old"
+    mv "$DASH_DIR/dash.sh.new" "$DASH_DIR/dash.sh"
+    chmod +x "$DASH_DIR/dash.sh" 2>/dev/null
+    log "自更新完成，重启"
+    touch "$STATE_DIR/updated.flag"
+    nohup "$DASH_DIR/dash.sh" >> "$DASH_DIR/update.log" 2>&1 &
+    exit 0
+}
+
 # 消费拉取结果（主循环上下文）：重载 env → 本地重绘 → 后台上报。
 # 在主循环而不是子进程里重绘：CUR_PAGE 属于主循环（拉取期间用户可能已翻页）。
 fetch_consume() {
@@ -525,6 +556,7 @@ fetch_consume() {
     # shellcheck disable=SC1090
     . "$CACHE_DIR/dashboard.env"
     apply_clock
+    self_update
     ensure_cur_page
     page_draw_ok=1
     if [ -f "$STATE_DIR/want.full" ]; then

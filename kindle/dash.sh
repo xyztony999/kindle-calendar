@@ -1,7 +1,11 @@
 #!/bin/sh
-# Kindle 端客户端 v2.1 — 五页面集 + 双导航（触摸优先/轮播降级）+ 三月预裁翻月 + 启动清屏
+# Kindle 端客户端 v2.2 — 五页面集 + 双导航（触摸优先/轮播降级）+ 三月预裁翻月 + 启动清屏
 # 需要服务端 v2.1（/api/v1/dashboard.env）与 fbink；缺一时自动回退 v1 整图模式。
 # 触摸需要 bin/tapread（可选）：存在则进入沉浸模式并启用手势；不存在则仅轮播。
+#
+# v2.2（响应性修复）：网络拉取全部后台子进程化，主循环只做本地绘制与手势，
+#   触摸响应不再被拉取阻塞（实测一轮拉取 15~55s）；TERM/INT/HUP/EXIT trap 清理，
+#   强杀不再泄漏孤儿 tapread；env 失败重试退避 60→120→300s；心跳整体后台化。
 #
 # 部署:
 #   1. scp -r kindle/ root@<Kindle的IP>:/mnt/us/kindle-calendar/
@@ -126,6 +130,8 @@ report_device() {
 }
 
 # 轻量在线心跳：只刷新「最近通信」，不动拉取/确认时间戳与已确认版本。
+# v2.2: 整体放后台子进程执行，主循环零等待；无论成败都记 heartbeat_last——
+# 半通状态（ping 通但 HTTP 失败）不再退化成每秒重试（每秒一个 -T 8 的 wget）。
 # 仅在网络已通时发送（不主动开网，按需 WiFi 模式不增加耗电），
 # 把在线状态判定粒度从拉取周期（默认 15 分钟）提高到 HEARTBEAT_S。
 HEARTBEAT_S=300
@@ -133,20 +139,21 @@ heartbeat_last=0
 heartbeat_ping() {
     now=$(date +%s)
     [ $((now - heartbeat_last)) -ge "$HEARTBEAT_S" ] || return 0
-    ping -c 1 -W 3 223.5.5.5 >/dev/null 2>&1 || return 0
+    heartbeat_last=$now
     hb_base="${API_URL:-$SERVER_URL}"
     hb_base=$(printf '%s' "$hb_base" | sed 's#^\(https\{0,1\}://[^/]*\).*#\1#')
     hb_url="$hb_base/api/v1/device/heartbeat"
-    if command -v wget >/dev/null 2>&1; then
-        wget -q -T 8 --header="X-Kindle-Device: dash" \
-            --post-data="interval_s=$INTERVAL&mode=v2" -O /dev/null "$hb_url" 2>/dev/null \
-            && heartbeat_last=$now
-    elif command -v curl >/dev/null 2>&1; then
-        curl -fsS --connect-timeout 8 --max-time 12 -H "X-Kindle-Device: dash" \
-            -H "Content-Type: application/x-www-form-urlencoded" \
-            -d "interval_s=$INTERVAL&mode=v2" -o /dev/null "$hb_url" 2>/dev/null \
-            && heartbeat_last=$now
-    fi
+    (
+        ping -c 1 -W 3 223.5.5.5 >/dev/null 2>&1 || exit 0
+        if command -v wget >/dev/null 2>&1; then
+            wget -q -T 8 --header="X-Kindle-Device: dash" \
+                --post-data="interval_s=$INTERVAL&mode=v2" -O /dev/null "$hb_url"
+        elif command -v curl >/dev/null 2>&1; then
+            curl -fsS --connect-timeout 8 --max-time 12 -H "X-Kindle-Device: dash" \
+                -H "Content-Type: application/x-www-form-urlencoded" \
+                -d "interval_s=$INTERVAL&mode=v2" -o /dev/null "$hb_url"
+        fi
+    ) >/dev/null 2>&1 &
     return 0
 }
 
@@ -297,7 +304,7 @@ goto_page() {
 }
 
 # ensure_month_asset <TITLE|GRID> <offset>：动态月份资产本地缓存
-# （文件存在即用；跨天清除，由 do_fetch 后的重绘触发重拉）
+# （文件存在即用；跨天清除，由拉取后的重绘触发重拉）
 ensure_month_asset() {
     page="$1"
     r="$2"
@@ -396,48 +403,137 @@ draw_clock() {
     echo "$str" > "$STATE_DIR/clock.last"
 }
 
-# 拉取周期：同步全部页面资产；无论成败都重绘当前页（失败时画本地缓存，不清屏不白屏）
-do_fetch() {
+# ───────── v2.2: 拉取后台化 ─────────
+# 一轮拉取 = 开网 + env + 全部资产 + 字形，实测 15~55s（每个请求独立 TLS 握手，
+# 链路抖动时更长）。v2.1 在主循环里同步执行，期间触摸完全无人处理；连点还会
+# 链式排队（手动刷新不记账 + 防抖 30s 小于一轮耗时）。
+# v2.2 拆成两半：网络在子进程做（net_fetch_assets，只写状态文件不碰屏幕），
+# 结果回主循环消费（fetch_consume，本地重绘 + 后台上报），主循环永不等待网络。
+
+# 网络同步（无绘制）。结果写 $STATE_DIR/fetch.status：ok / partial / envfail
+net_fetch_assets() {
     wifi_on
     wait_for_network
-    ENV_OK=0
-    FETCH_ACTIVE=1
-    fetch_assets_ok=1
-    if env_sync; then
-        ENV_OK=1
-        for p in ${PAGES:-today}; do
-            upper=$(printf '%s' "$p" | tr '[:lower:]' '[:upper:]')
-            eval regions=\"\$R_${upper}_REGIONS\"
-            for r in $regions; do
-            if [ "$r" = "TITLE" ] || [ "$r" = "GRID" ]; then
-                    sync_region_asset "${upper}_${r}_PREV" || { fetch_assets_ok=0; log "asset download failed: ${upper}_${r}_PREV"; }
-                    sync_region_asset "${upper}_${r}_CUR" || { fetch_assets_ok=0; log "asset download failed: ${upper}_${r}_CUR"; }
-                    sync_region_asset "${upper}_${r}_NEXT" || { fetch_assets_ok=0; log "asset download failed: ${upper}_${r}_NEXT"; }
-                else
-                    sync_region_asset "${upper}_${r}" || { fetch_assets_ok=0; log "asset download failed: ${upper}_${r}"; }
-                fi
-            done
-        done
-        apply_clock
-        if [ "$CLOCK_ENABLED" != "0" ] && ! sync_glyphs; then
-            fetch_assets_ok=0
-            log "clock glyph download failed"
-        fi
-        [ "$fetch_assets_ok" = "1" ] || log "asset synchronization incomplete; keeping previous application confirmation"
-        ensure_cur_page
-    else
-        log "env 拉取失败"
+    if ! env_sync; then
+        echo envfail > "$STATE_DIR/fetch.status"
+        wifi_off
+        return 1
     fi
-    if goto_page "$CUR_PAGE"; then
+    fetch_assets_ok=1
+    for p in ${PAGES:-today}; do
+        upper=$(printf '%s' "$p" | tr '[:lower:]' '[:upper:]')
+        eval regions=\"\$R_${upper}_REGIONS\"
+        for r in $regions; do
+            if [ "$r" = "TITLE" ] || [ "$r" = "GRID" ]; then
+                sync_region_asset "${upper}_${r}_PREV" || { fetch_assets_ok=0; log "asset download failed: ${upper}_${r}_PREV"; }
+                sync_region_asset "${upper}_${r}_CUR" || { fetch_assets_ok=0; log "asset download failed: ${upper}_${r}_CUR"; }
+                sync_region_asset "${upper}_${r}_NEXT" || { fetch_assets_ok=0; log "asset download failed: ${upper}_${r}_NEXT"; }
+            else
+                sync_region_asset "${upper}_${r}" || { fetch_assets_ok=0; log "asset download failed: ${upper}_${r}"; }
+            fi
+        done
+    done
+    apply_clock
+    if [ "$CLOCK_ENABLED" != "0" ] && ! sync_glyphs; then
+        fetch_assets_ok=0
+        log "clock glyph download failed"
+    fi
+    [ "$fetch_assets_ok" = "1" ] || log "asset synchronization incomplete; keeping previous application confirmation"
+    if [ "$fetch_assets_ok" = "1" ]; then
+        echo ok > "$STATE_DIR/fetch.status"
+    else
+        echo partial > "$STATE_DIR/fetch.status"
+    fi
+    wifi_off
+    return 0
+}
+
+# env 失败重试退避：60→120→300 封顶。固定 60s 时服务端故障期一半以上时间
+# 在阻塞重试（60s 等待 + ~50s 超时），设备近乎半冻结。
+fetch_backoff() {
+    fetch_fails=$((fetch_fails + 1))
+    if [ "$fetch_fails" -ge 3 ]; then
+        FETCH_RETRY=300
+    elif [ "$fetch_fails" -eq 2 ]; then
+        FETCH_RETRY=120
+    else
+        FETCH_RETRY=60
+    fi
+}
+
+# 消费拉取结果（主循环上下文）：重载 env → 本地重绘 → 后台上报。
+# 在主循环而不是子进程里重绘：CUR_PAGE 属于主循环（拉取期间用户可能已翻页）。
+fetch_consume() {
+    status=""
+    [ -f "$STATE_DIR/fetch.status" ] && status=$(cat "$STATE_DIR/fetch.status")
+    rm -f "$STATE_DIR/fetch.status"
+    last_fetch=$(date +%s)
+    if [ "$status" != "ok" ] && [ "$status" != "partial" ]; then
+        ENV_OK=0
+        fetch_backoff
+        log "env 拉取失败，${FETCH_RETRY}s 后重试"
+        # 跨天全刷请求即使拉取失败也要兑现：清屏 + 画本地缓存，时钟照走
+        if [ -f "$STATE_DIR/want.full" ]; then
+            rm -f "$STATE_DIR/want.full"
+            clear_screen
+            goto_page "$CUR_PAGE" 1
+            rm -f "$STATE_DIR/clock.last"
+            draw_clock
+        fi
+        return 1
+    fi
+    ENV_OK=1
+    fetch_fails=0
+    FETCH_RETRY="$INTERVAL"
+    # 子进程已把最新 env 原子落盘到 $CACHE_DIR/dashboard.env，主循环重载
+    # shellcheck disable=SC1090
+    . "$CACHE_DIR/dashboard.env"
+    apply_clock
+    ensure_cur_page
+    page_draw_ok=1
+    if [ -f "$STATE_DIR/want.full" ]; then
+        rm -f "$STATE_DIR/want.full"
+        clear_screen
+        goto_page "$CUR_PAGE" 1 || page_draw_ok=0
+        if [ "$CUR_PAGE" = "today" ]; then
+            rm -f "$STATE_DIR/clock.last"
+            draw_clock || page_draw_ok=0
+        fi
+    else
+        goto_page "$CUR_PAGE" || page_draw_ok=0
+    fi
+    if [ "$page_draw_ok" = "1" ]; then
         READY_DRAWN=1
-        if [ "$ENV_OK" = "1" ] && [ "$fetch_assets_ok" = "1" ]; then
-            report_device v2 "$SETTINGS_VERSION"
+        if [ "$status" = "ok" ]; then
+            # 上报非关键路径，后台执行不占主循环
+            ( report_device v2 "$SETTINGS_VERSION" ) >/dev/null 2>&1 &
         fi
     else
         log "display failed: page=$CUR_PAGE; application not confirmed"
     fi
-    FETCH_ACTIVE=0
-    wifi_off
+    return 0
+}
+
+# 发起后台拉取：fetching 标志（含子进程 pid）防重入。子进程最后一步删除
+# 标志（结果已先落盘）；若被信号杀死没删成，主循环靠 pid 存活检测兜底清理
+spawn_fetch() {
+    [ -e "$STATE_DIR/fetching" ] && return 1
+    rm -f "$STATE_DIR/fetch.status"
+    (
+        net_fetch_assets
+        rm -f "$STATE_DIR/fetching"
+    ) >/dev/null 2>&1 &
+    echo $! > "$STATE_DIR/fetching"
+    FETCH_PENDING=1
+    return 0
+}
+
+# 同步拉取：仅启动首拉使用（阻塞启动无妨，且保持 v1 回退判断的时序）；
+# 运行期一律 spawn_fetch 后台化。
+do_fetch() {
+    rm -f "$STATE_DIR/fetch.status"
+    net_fetch_assets
+    fetch_consume
 }
 
 redraw_all_flash() {
@@ -453,6 +549,16 @@ redraw_all_flash() {
 start_tapread() {
     TAPREAD="$DASH_DIR/bin/tapread"
     [ -f "$TAPREAD" ] && [ -x "$TAPREAD" ] || return 1
+    # 清孤儿 tapread：v2.2 之前的 dash.sh 无 trap，被启动器 pkill 强杀时
+    # 不会带走 tapread；残留进程与新的 tapread 重复输出触摸事件（手势
+    # 重复触发、越跑越卡）。每个残留实例泄漏一次，重启一次漏一个。
+    for d in /proc/[0-9]*; do
+        [ "$d" = "/proc/$$" ] && continue
+        c=$(tr '\0' ' ' < "$d/cmdline" 2>/dev/null)
+        case "$c" in
+            */tapread*) kill "${d#/proc/}" 2>/dev/null ;;
+        esac
+    done
     : > "$EVENTS_FILE"
     "$TAPREAD" >> "$EVENTS_FILE" 2>/dev/null &
     echo $! > "$TAPREAD_PID_FILE"
@@ -627,10 +733,14 @@ toggle_invert() {
 
 manual_refresh() {
     now=$(date +%s)
-    [ $((now - LAST_REFRESH)) -lt 30 ] && return 0  # 防抖 30s
+    # 防抖 120s：必须大于一轮拉取的最长时间，否则连点会在拉取完成后链式排队
+    # （v2.1 防抖 30s < 实测拉取 22~55s，连点每次都放行）
+    [ $((now - LAST_REFRESH)) -lt 120 ] && return 0
     LAST_REFRESH=$now
-    log "手动刷新"
-    do_fetch
+    # last_fetch 归零 → 主循环下一秒发起后台拉取。不直接拉也不与定时周期叠加
+    # （v2.1 手动刷新不更新 last_fetch，曾出现手动 55s + 定时 54s 连续冻结 109s）
+    last_fetch=0
+    log "手动刷新（后台拉取）"
 }
 
 # 当前页被禁用（不在新 PAGES 中）时回 today 并重绘
@@ -658,12 +768,33 @@ rotate_arm() {
     ROTATE_DEADLINE=$(( $(date +%s) + s ))
 }
 
-# ───────── v2.1 主循环 ─────────
+# ───────── 退出清理 ─────────
+# 幂等；正常退出与 TERM/INT/HUP 强杀共用。v2.1 无 trap，被启动器 pkill /
+# KUAL stop 直接 TERM 时全部跳过——tapread 成孤儿继续读触摸设备、（沉浸时）
+# framework 停着不恢复。
+dash_cleanup() {
+    [ "${DASH_CLEANED:-0}" = "1" ] && return 0
+    DASH_CLEANED=1
+    trap - TERM INT HUP EXIT
+    stop_tapread
+    if [ -f "$STATE_DIR/fetching" ]; then
+        fpid=$(cat "$STATE_DIR/fetching" 2>/dev/null)
+        [ -n "$fpid" ] && kill "$fpid" 2>/dev/null
+        rm -f "$STATE_DIR/fetching"
+    fi
+    restore_kindle_ui
+    log "dash v2.2 退出"
+}
+
+# ───────── v2.2 主循环 ─────────
 
 v21_loop() {
-    log "=== dash v2.1 启动（五页/双导航）==="
+    log "=== dash v2.2 启动（五页/双导航/后台拉取）==="
     log "API: $API_URL  间隔: ${INTERVAL}s  轮播: ${ROTATE_ENABLED}  触摸: ${TOUCH_ENABLED:-无}"
+    trap dash_cleanup TERM INT HUP EXIT
     mkdir -p "$STATE_DIR" "$CACHE_DIR" "$GLYPH_DIR"
+    # 清上次异常退出可能残留的拉取标志/跨天全刷请求（正常退出由 dash_cleanup 清）
+    rm -f "$STATE_DIR/fetching" "$STATE_DIR/fetch.status" "$STATE_DIR/want.full"
 
     CUR_PAGE=today
     MONTH_OFFSET=0
@@ -676,6 +807,9 @@ v21_loop() {
     IMMERSIVE=0    # 是否已停 framework 进入沉浸
     TOUCH_START=0  # auto 验证窗口起点
     LAST_TOUCH_OK=0
+    fetch_fails=0
+    FETCH_PENDING=0
+    FETCH_RETRY="$INTERVAL"
 
     # 触摸策略（TOUCH_MODE）：
     #   auto（默认）— tapread 先跑 TOUCH_VERIFY_S 秒，真的收到触摸事件才进沉浸；无事件则禁触摸、保持轮播+Home 可用
@@ -693,7 +827,7 @@ v21_loop() {
         fi
     fi
 
-    # 启动序列：清屏 → 拉取（失败也画缓存）→ 时钟（BR-3 清屏优先）
+    # 启动序列：清屏 → 同步首拉（失败也画缓存）→ 时钟（BR-3 清屏优先）
     prevent_sleep
     clear_screen
     do_fetch
@@ -713,8 +847,6 @@ v21_loop() {
     rotate_arm
 
     last_fetch=$(date +%s)
-    # env 失败时快速重试（60s），成功后恢复正常 INTERVAL
-    [ "$ENV_OK" = "1" ] && FETCH_RETRY="$INTERVAL" || FETCH_RETRY=60
     last_day="$(date +%Y%m%d)"
     last_full="$(cat "$STATE_DIR/lastfull" 2>/dev/null)"
 
@@ -778,21 +910,35 @@ v21_loop() {
                 switch_page next
             fi
         fi
+
+        # 到期发起后台拉取（在途时 fetching 标志挡住，不重入）
         if [ $((now - last_fetch)) -ge "$FETCH_RETRY" ]; then
-            do_fetch
-            last_fetch=$(date +%s)
-            [ "$ENV_OK" = "1" ] && FETCH_RETRY="$INTERVAL" || FETCH_RETRY=60
+            spawn_fetch && last_fetch="$now"
+        fi
+        # 拉取完成即消费（子进程最后一步删除 fetching）。标志在但 pid 已死
+        # = 子进程异常死亡：同样按失败消费（fetch.status 缺失 → envfail → 退避）
+        if [ "$FETCH_PENDING" = "1" ]; then
+            if [ ! -f "$STATE_DIR/fetching" ]; then
+                FETCH_PENDING=0
+                fetch_consume
+            else
+                fpid=$(cat "$STATE_DIR/fetching" 2>/dev/null)
+                if [ -z "$fpid" ] || ! kill -0 "$fpid" 2>/dev/null; then
+                    rm -f "$STATE_DIR/fetching"
+                    FETCH_PENDING=0
+                    fetch_consume
+                fi
+            fi
         fi
 
         day="$(date +%Y%m%d)"
         if [ "$day" != "$last_day" ]; then
-            log "跨天，全量刷新并回当月"
+            log "跨天，后台全量刷新并回当月"
             MONTH_OFFSET=0
             rm -f "$CACHE_DIR"/month_title_m*.png "$CACHE_DIR"/month_grid_m*.png 2>/dev/null
-            do_fetch
-            redraw_all_flash
+            : > "$STATE_DIR/want.full"
+            spawn_fetch
             last_day="$day"
-            last_fetch=$(date +%s)
         elif [ "$(date +%H)" = "03" ] && [ "$last_full" != "$day" ]; then
             log "凌晨清残影全刷"
             clear_screen
@@ -804,10 +950,8 @@ v21_loop() {
         sleep 1
     done
 
-    # 退出沉浸
-    stop_tapread
-    restore_kindle_ui
-    log "dash v2.1 退出"
+    # 正常退出（EXIT 手势）路径；被信号强杀由 trap dash_cleanup 兜底
+    dash_cleanup
 }
 
 # ───────── v1: 整图模式（回退） ─────────

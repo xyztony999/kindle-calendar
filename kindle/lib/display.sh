@@ -104,7 +104,15 @@ wifi_on() {
     fi
     lipc-set-prop com.lab126.cmd wirelessEnable 1 2>/dev/null
     lipc-send-event com.lab126.wan autoConnectWan 2>/dev/null
-    sleep "${WIFI_WAIT:-15}"
+    # 探测式等待：1s 粒度 ping，最多 WIFI_WAIT 秒（原固定 sleep 15——
+    # 网络早通也白等满，网络不通也只等一次）
+    w=0
+    while [ "$w" -lt "${WIFI_WAIT:-15}" ]; do
+        ping -c 1 -W 2 223.5.5.5 >/dev/null 2>&1 && return 0
+        sleep 1
+        w=$((w + 1))
+    done
+    return 0
 }
 
 wifi_off() {

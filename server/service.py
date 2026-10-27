@@ -21,6 +21,7 @@ from zoneinfo import ZoneInfo
 
 from server import data as data_mod
 from server import ics
+from server import quotes
 from server.aqi import AirQuality, fetch_aqi
 from server.settings import (
     HeartbeatLog,
@@ -245,6 +246,11 @@ class DashboardService:
             ics.refresh(urls, tz, datetime.now(tz))
         except Exception as exc:
             log.warning("ICS 刷新失败: %s", exc)
+        # 语料库自动刷新：内部 TTL（默认 7 天）判定，过期才拉取；失败保旧
+        try:
+            quotes.refresh_if_stale()
+        except Exception as exc:
+            log.warning("语料库自动刷新失败: %s", exc)
 
     def _ensure_weather(self) -> None:
         with self._weather_cond:

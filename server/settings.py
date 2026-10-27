@@ -30,7 +30,8 @@ from server.layout import (
 
 PAGE_IDS = PRESET_IDS
 SYSTEM_OPTION_WIDGETS = frozenset(SYSTEM_OPTIONS)
-QUOTE_MODES = ("online", "offline", "custom")
+QUOTE_MODES = ("online", "library", "offline", "custom")  # offline 仅兼容旧数据，normalize 迁移为 library
+QUOTE_CATEGORIES = tuple("abcdefghijkl")
 SCHEMA_VERSION = 3
 ACCEPTED_SCHEMAS = (1, 2, 3)
 
@@ -114,7 +115,7 @@ def defaults_from_config(config: dict) -> dict:
         "widget_defs": [],
         "assets": [],
         "rotation": {"enabled": True, "suppress_s": 120},
-        "quote": {"mode": "online", "custom": []},
+        "quote": {"mode": "library", "custom": [], "library_types": ["i", "d"]},
         "presets": [],
         "ics": {"urls": []},
         "anniversaries": [],
@@ -247,6 +248,9 @@ def validate(data: Any) -> list[dict]:
     mode = quote.get("mode") if isinstance(quote, dict) else None
     if mode not in QUOTE_MODES:
         details.append(_detail("quote.mode", "QUOTE_MODE_INVALID", "一言来源无效"))
+    library_types = quote.get("library_types") if isinstance(quote, dict) else None
+    if library_types is not None and (not isinstance(library_types, list) or not library_types or any(t not in QUOTE_CATEGORIES for t in library_types)):
+        details.append(_detail("quote.library_types", "QUOTE_LIBRARY_INVALID", "语料分类无效（至少一个，限 a–l）"))
     custom = quote.get("custom") if isinstance(quote, dict) else None
     if not isinstance(custom, list):
         details.append(_detail("quote.custom", "QUOTE_CUSTOM_INVALID", "自定义文案须为列表"))
@@ -397,6 +401,14 @@ def normalize(data: dict) -> dict:
     custom = []
     for item in data["quote"]["custom"]:
         custom.append({"text": _clean_text(item.get("text")), "from": _clean_text(item.get("from"))})
+    quote_mode = data["quote"].get("mode", "online")
+    if quote_mode == "offline":
+        quote_mode = "library"
+    if quote_mode not in QUOTE_MODES:
+        quote_mode = "library"
+    library_types = [t for t in (data["quote"].get("library_types") or ["i", "d"]) if t in QUOTE_CATEGORIES]
+    if not library_types:
+        library_types = ["i", "d"]
     location = data["location"]
     defs = []
     for item in data.get("widget_defs") or []:
@@ -440,7 +452,7 @@ def normalize(data: dict) -> dict:
             "enabled": data["rotation"]["enabled"] is True,
             "suppress_s": _as_int(data["rotation"]["suppress_s"]),
         },
-        "quote": {"mode": data["quote"]["mode"], "custom": custom},
+        "quote": {"mode": quote_mode, "custom": custom, "library_types": library_types},
         "presets": presets_out,
         "ics": {"urls": ics_urls},
         "anniversaries": anniversaries_out,

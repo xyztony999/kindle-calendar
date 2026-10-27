@@ -277,10 +277,14 @@ kindle-calendar/
 
 ## 现状与后续
 
-- 已完成：分区刷新、分钟级时钟、五页、触摸与轮播、月历跨月、启动清屏、空气质量、Web 管理端
-- 未做：日历订阅（ICS）、多城市切换、在管理端里改设备拉取间隔
+- 已完成：分区刷新、分钟级时钟、五页、触摸与轮播、月历跨月、启动清屏、空气质量、Web 管理端、ICS 日程订阅、版面快照、时钟 12/24 小时制、数据源健康卡、设备脚本自更新
+- 未做：多城市切换、在管理端里改设备拉取间隔
 
 设计过程记录在 `profiles/kindle-calendar/workspace/`。
+
+## 一言语料
+
+默认一言模式为**本地语料库**（`server/quotes_library.json`，按日确定性轮换，运行时不联网）。语料筛选自 [hitokoto.cn 开放句子库](https://hitokoto.cn)（[hitokoto-osc/sentences-bundle](https://github.com/hitokoto-osc/sentences-bundle)，AGPL-3.0），再分发时保留文件内 `license`/`source` 字段与协议声明。更新语料：`./.venv/Scripts/python.exe scripts/update_quotes.py`（需可访问 jsDelivr/GitHub）。
 
 ## 许可
 

@@ -30,6 +30,8 @@ def _offline():
         patch("server.service.fetch_weather", return_value=FAKE_WEATHER),
         patch("server.service.fetch_aqi", return_value=None),
         patch("server.quotes.get_quote", return_value={"text": "测试一言", "from": "单测"}),
+        # 英文阅读页会单独取英文一言；一并替换，避免真实外网请求
+        patch("server.quotes.english_quote", return_value={"text": "Test quote", "from": "Unit"}),
     )
 
 

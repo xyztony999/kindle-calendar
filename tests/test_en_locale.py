@@ -114,7 +114,7 @@ class LocaleContractTests(unittest.TestCase):
         from datetime import datetime
         from unittest.mock import patch
 
-        from server.quotes import english_quote
+        from server.quotes import ONLINE_TIMEOUT, english_quote
 
         now = datetime(2026, 10, 11, 8, 0)
         with patch("server.quotes.requests.get", side_effect=TimeoutError("slow")):
@@ -130,7 +130,7 @@ class LocaleContractTests(unittest.TestCase):
             self.assertEqual(quote, {"text": "A short line.", "from": "Ada"})
             self.assertEqual(get.call_args.args[0], "https://zenquotes.io/api/today")
             self.assertFalse(get.call_args.kwargs["allow_redirects"])
-            self.assertEqual(get.call_args.kwargs["timeout"], 8)
+            self.assertEqual(get.call_args.kwargs["timeout"], ONLINE_TIMEOUT)
             again = english_quote(fresh, "online")
             self.assertEqual(again["text"], "A short line.")
             self.assertEqual(get.call_count, 1)

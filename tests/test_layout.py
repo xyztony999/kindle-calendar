@@ -30,7 +30,7 @@ FAKE_WEATHER = WeatherData(
 )
 
 
-def _quote_stub(now, mode="online", custom=None):
+def _quote_stub(now, mode="online", custom=None, types=None):
     return {"text": "测试一言", "from": "单测"}
 
 

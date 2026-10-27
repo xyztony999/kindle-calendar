@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 from datetime import datetime
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from server.data import build_payload
@@ -21,7 +22,9 @@ def _payload() -> dict:
         [DailyForecast("2026-10-20", 24, 14, 0, "晴")],
         [HourlyPoint("2026-10-20T16:00", 20, 0, 0)],
     )
-    return build_payload({"latitude": 39.9, "longitude": 116.4, "location_name": "北京"}, weather, now)
+    # build_payload 无 settings 时 get_quote 走默认 online；替换避免真实外网请求
+    with patch("server.quotes.get_quote", return_value={"text": "测试一言", "from": "单测"}):
+        return build_payload({"latitude": 39.9, "longitude": 116.4, "location_name": "北京"}, weather, now)
 
 
 def _payload_holiday() -> dict:
@@ -32,7 +35,8 @@ def _payload_holiday() -> dict:
         [DailyForecast("2026-10-01", 24, 14, 0, "晴")],
         [HourlyPoint("2026-10-01T16:00", 20, 0, 0)],
     )
-    return build_payload({"latitude": 39.9, "longitude": 116.4, "location_name": "北京"}, weather, now)
+    with patch("server.quotes.get_quote", return_value={"text": "测试一言", "from": "单测"}):
+        return build_payload({"latitude": 39.9, "longitude": 116.4, "location_name": "北京"}, weather, now)
 
 
 def _ink(img, box) -> int:

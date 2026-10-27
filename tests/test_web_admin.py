@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
-from server.quotes import get_quote
+from server.quotes import OFFLINE_QUOTES, get_quote
 from server.settings import defaults_from_config, settings_version, validate
 from server.weather import CurrentWeather, DailyForecast, HourlyPoint, WeatherData
 
@@ -38,7 +38,7 @@ DEPLOY = {
 }
 
 
-def _quote_stub(now, mode="online", custom=None):
+def _quote_stub(now, mode="online", custom=None, types=None):
     if mode in ("offline", "custom"):
         return get_quote(now, mode, custom)
     return {"text": "测试一言", "from": "单测"}
@@ -72,14 +72,18 @@ class SettingsUnitTests(unittest.TestCase):
 
     def test_quote_rotation_without_network(self):
         now = datetime(2026, 10, 10, 12, 0, tzinfo=ZoneInfo("Asia/Shanghai"))
-        offline = get_quote(now, "offline")
-        self.assertIn("text", offline)
+        # 旧 offline 值由产品层迁移为本地语料库；同日同句且不联网
+        library = get_quote(now, "offline")
+        self.assertIn("text", library)
+        self.assertEqual(library, get_quote(now, "library"))
         custom = [{"text": "甲", "from": "一"}, {"text": "乙", "from": "二"}]
         picked = get_quote(now, "custom", custom)
         again = get_quote(now, "custom", custom)
         self.assertEqual(picked, again)
         self.assertIn(picked["text"], {"甲", "乙"})
-        self.assertEqual(get_quote(now, "custom", []), offline)
+        # 空自定义列表回退内置古诗词兜底（区别于 library 的本地语料库）
+        fallback = get_quote(now, "custom", [])
+        self.assertIn(fallback["text"], [item["text"] for item in OFFLINE_QUOTES])
 
 
 class AdminApiTests(unittest.TestCase):

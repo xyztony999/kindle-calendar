@@ -674,6 +674,7 @@
         <section class="card" id="card-quote">
           <h2>{{ ui.quote_h2 }}</h2>
           <div class="radios" id="quote-modes"></div>
+          <div class="field-checks" id="quote-types" hidden></div>
           <p class="muted quote-plan">{{ ui.quote_plan }} <a href="{{ url_for('static', filename='docs/quote-library.md') }}" target="_blank" rel="noopener">{{ ui.quote_format }}</a></p>
           <div id="custom-box" hidden>
             <div id="quote-list"></div>
@@ -1078,11 +1079,37 @@
       input.addEventListener("change", () => {
         state.quote.mode = mode;
         renderCustom();
+        renderQuoteTypes();
         markDirty();
       });
       label.append(input, " " + QUOTE_LABEL[mode]);
       box.appendChild(label);
     });
+    renderQuoteTypes();
+  }
+
+  function renderQuoteTypes() {
+    const wrap = $("quote-types");
+    if (!wrap.dataset.ready) {
+      Object.keys(T.quote_types).forEach((key) => {
+        const label = document.createElement("label");
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.value = key;
+        input.addEventListener("change", () => {
+          state.quote.library_types = Array.from(wrap.querySelectorAll("input:checked")).map((el) => el.value);
+          markDirty();
+        });
+        label.append(input, " " + T.quote_types[key]);
+        wrap.appendChild(label);
+      });
+      wrap.dataset.ready = "1";
+    }
+    const picked = state.quote.library_types || ["i", "d"];
+    wrap.querySelectorAll("input").forEach((input) => {
+      input.checked = picked.includes(input.value);
+    });
+    wrap.hidden = state.quote.mode !== "library";
   }
 
   function renderCustom() {
@@ -1282,6 +1309,10 @@
     }
     state.widget_defs = state.widget_defs || [];
     state.assets = state.assets || [];
+    state.quote = state.quote || {mode: "library", custom: []};
+    state.quote.custom = state.quote.custom || [];
+    if (state.quote.mode === "offline") state.quote.mode = "library";
+    state.quote.library_types = state.quote.library_types && state.quote.library_types.length ? state.quote.library_types : ["i", "d"];
     state.ics = state.ics || {urls: []};
     state.ics.urls = state.ics.urls || [];
     state.anniversaries = state.anniversaries || [];
@@ -1310,9 +1341,13 @@
       const badgeEl = document.createElement("span");
       let badgeClass = "";
       let badgeText = T.source_fail;
-      if (item.enabled === false) {
-        badgeClass = "";
-        badgeText = T.source_off;
+      if (item.refreshing) {
+        badgeClass = "warn";
+        badgeText = T.library_refreshing;
+      } else if (item.enabled === false) {
+        // library 模式：本地语料库在位即"正常"（enabled 仅对在线源有意义）
+        badgeClass = item.library_count ? "ok" : "";
+        badgeText = item.library_count ? T.source_ok : T.source_off;
       } else if (item.ok) {
         badgeClass = "ok";
         badgeText = T.source_ok;
@@ -1323,8 +1358,32 @@
       badgeEl.textContent = badgeText;
       const when = document.createElement("span");
       when.className = "muted";
-      when.textContent = item.at ? relTime(item.at) : T.source_never;
+      const parts = [];
+      if (item.library_count) parts.push(Number(item.library_count).toLocaleString() + " " + T.library_count_unit);
+      if (item.library_updated) parts.push(relTime(item.library_updated));
+      when.textContent = parts.length ? parts.join(" · ") : (item.at ? relTime(item.at) : T.source_never);
       row.append(name, badgeEl, when);
+      if (item.id === "quote") {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "btn";
+        btn.textContent = T.refresh_library;
+        btn.disabled = item.refreshing === true;
+        btn.addEventListener("click", async () => {
+          btn.disabled = true;
+          btn.textContent = T.refresh_library_busy;
+          try {
+            const data = await api("POST", "/admin/api/quotes-refresh");
+            if (!(data.data || {}).started) toast(T.library_refreshing);
+          } catch (err) {
+            if (!err.handled) toast(T.library_refresh_fail, true);
+            btn.disabled = false;
+            btn.textContent = T.refresh_library;
+          }
+        });
+        row.appendChild(btn);
+        window._quoteRefreshBtn = btn;
+      }
       if (item.enabled !== false && !item.ok && item.error) {
         const errEl = document.createElement("div");
         errEl.className = "muted source-error";
@@ -1361,7 +1420,23 @@
     pollTimer = setInterval(() => {
       if (!document.hidden) {
         refreshDevice();
-        refreshSources();
+        refreshSources().then(() => {
+          const btn = window._quoteRefreshBtn;
+          if (btn && !btn.isConnected) return;
+          const refreshing = btn && btn.textContent === T.refresh_library_busy;
+          if (!refreshing) return;
+          fetch("/admin/api/sources", {headers: {"X-Requested-With": "kindle-admin"}, credentials: "same-origin"})
+            .then((r) => r.json())
+            .then((wire) => {
+              const quote = ((wire.data || {}).sources || []).find((s) => s.id === "quote") || {};
+              if (!quote.refreshing && btn) {
+                btn.disabled = false;
+                btn.textContent = T.refresh_library;
+                toast(T.library_refresh_ok.replace("{n}", Number(quote.library_count || 0).toLocaleString()));
+              }
+            })
+            .catch(() => {});
+        });
       }
     }, 30000);
   }
@@ -1393,6 +1468,9 @@
     }
     if (!state.location.timezone) {
       details.push({field: "location.timezone", message: T.need_tz});
+    }
+    if (state.quote.mode === "library" && !(state.quote.library_types || []).length) {
+      details.push({field: "quote.library_types", message: T.quote_types_need});
     }
     if (state.quote.mode === "custom") {
       const usable = state.quote.custom.filter((item) => (item.text || "").trim());

@@ -1,5 +1,58 @@
 ---
 pipeline:
+  - module: quote-library-refresh
+    title: "语料库刷新机制（管理端手动按钮+7 天自动 TTL，data/ 持久化+热替换）"
+    stages:
+      design:
+        status: complete
+        note: "2026-10-27 增量 Gate 1 PASS，用户按推荐执行（7 天自动/行内按钮/失败健康行+toast/脚本薄封装）。"
+      code:
+        status: complete
+        note: "2026-10-27 已实现并验证：refresh_library（加固拉取+过滤+原子写 data/+热替换+<100 拒写+内置忙守卫）；加载 data/ 优先内置兜底；自动 7 天 TTL 挂 ICS 线程；手动 POST quotes-refresh 后台线程+数据源卡按钮+toast；徽标 library 有库即正常；脚本薄封装。124 单测+E2E+并发冒烟+真实网络自动刷新跑通全过。验证抓出并修复 P0（Event 当锁致刷新必崩+双重加锁死锁）。Gate 2 PASS 待用户验收，未提交。报告 05-reports/gate2-quote-library-refresh.md"
+    artifacts:
+      prd:
+        - 02-detailed/prd/prd-quote-library-refresh.md
+      api:
+        - 02-detailed/api/api-quote-library-refresh.md
+      interaction:
+        - 02-detailed/interaction/interaction-quote-library-refresh.md
+      reports:
+        - 05-reports/gate1-quote-library-refresh.md
+        - 05-reports/gate2-quote-library-refresh.md
+  - module: quote-library
+    title: "一言语料库本地化（7,684 条内置+12 分类管理端筛选，新默认模式，AGPL 署名）"
+    stages:
+      design:
+        status: complete
+        note: "2026-10-27 增量。Gate 1 对比本地化 vs 自部署后端（后者运维成本与产品形态不匹配否决）；用户拍板 A+A2。官方 sentences-bundle 已按分类拆分，jsDelivr fastly 可达；协议 AGPL-3.0。"
+      code:
+        status: complete
+        note: "2026-10-27 已实现并验证：quotes_library.json 内置（7,684 条/756KB）；模式 library(新默认)/online/custom，offline 迁移；library_types a-l 校验；library_quote 确定性选句+兜底；管理端三模式+12 分类复选（中英）；英文 library 不联网；update_quotes.py 加固重建；README 署名。120 单测+E2E PASS（顺带密闭化 test_system_options 真实联网）。Gate 2 PASS 待用户验收，未提交。报告 05-reports/gate2-quote-library.md"
+    artifacts:
+      prd:
+        - 02-detailed/prd/prd-quote-library.md
+      api:
+        - 02-detailed/api/api-quote-library.md
+      interaction:
+        - 02-detailed/interaction/interaction-quote-library.md
+      reports:
+        - 05-reports/gate1-quote-library.md
+        - 05-reports/gate2-quote-library.md
+  - module: quote-resilience
+    title: "一言在线获取韧性（CF 跨洋链路超时：拆分超时+重试+上次成功粘性缓存）"
+    stages:
+      design:
+        status: complete
+        note: "2026-10-26 增量。D0 服务器实测定位根因（请求合规官方文档；阿里云北京→Cloudflare 洛杉矶 POP 晚高峰 ~80% 丢包撞穿 8s 读超时，international 同 IP 换域无效）；Gate 1 PASS 用户按推荐执行（韧性包+英文同步）。"
+      code:
+        status: complete
+        note: "2026-10-26 已实现并验证：超时 (5,12)+失败重试一次+粘性缓存 ≤7 天（中英两路）；修复 _days_old 带时区崩溃 bug；117 单测 + E2E PASS。Gate 2 PASS 待用户验收，未提交。报告 05-reports/gate2-quote-resilience.md"
+    artifacts:
+      prd:
+        - 02-detailed/prd/prd-quote-resilience.md
+      reports:
+        - 05-reports/gate1-quote-resilience.md
+        - 05-reports/gate2-quote-resilience.md
   - module: weather-sources-selfupdate
     title: "体感温度、天气突变提醒（页眉）、数据源健康卡与 dash.sh 自更新"
     stages:
@@ -8,7 +61,7 @@ pipeline:
         note: "2026-10-26 增量 Gate 1 PASS，用户按推荐执行（自更新校验+自动重启/提醒走页眉/体感字段+开关/顺序体感→提醒→健康→自更新）。"
       code:
         status: complete
-        note: "2026-10-26 四项实现并验证：体感（字段+show_feels）、突变提醒（past_days 昨日切分+页眉 notes）、健康页（quotes/aqi/ics 状态+/admin/api/sources+侧栏卡）、dash.sh 自更新（镜像内置+/api/v1/script+md5 校验原子替换重启，harness 四分支）。112 单测 + 2 E2E PASS。Gate 2 PASS 待用户验收，未提交；设备需最后一次手动 scp 引导自更新。报告 05-reports/gate2-weather-sources-selfupdate.md"
+        note: "2026-10-26 四项实现并验证：体感（字段+show_feels）、突变提醒（past_days 昨日切分+页眉 notes）、健康页（quotes/aqi/ics 状态+/admin/api/sources+侧栏卡）、dash.sh 自更新（镜像内置+/api/v1/script+md5 校验原子替换重启，harness 四分支）。112 单测 + 2 E2E PASS。Gate 2 PASS，随 b0ba151 提交推送；设备需最后一次手动 scp 引导自更新。报告 05-reports/gate2-weather-sources-selfupdate.md"
     artifacts:
       prd:
         - 02-detailed/prd/prd-weather-sources-selfupdate.md

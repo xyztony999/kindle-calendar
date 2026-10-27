@@ -52,7 +52,12 @@ def build_payload(
     if settings:
         pages = enabled_pages(settings) or ["today"]
         version = settings_version(settings)
-        quote = quotes.get_quote(now, settings["quote"]["mode"], settings["quote"].get("custom"))
+        quote = quotes.get_quote(
+            now,
+            settings["quote"]["mode"],
+            settings["quote"].get("custom"),
+            settings["quote"].get("library_types"),
+        )
         page_names = {
             item["page_id"]: item["name"]
             for item in settings.get("pages") or []

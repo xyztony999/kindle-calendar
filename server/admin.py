@@ -384,6 +384,30 @@ def create_admin_blueprint(service) -> Blueprint:
             return blocked
         return _api_ok(service.sources_health())
 
+    @bp.post("/admin/api/quotes-refresh")
+    def quotes_refresh():
+        blocked = require_write()
+        if blocked:
+            return blocked
+        from server import quotes as quotes_mod
+        from threading import Thread
+
+        if quotes_mod._library_refreshing.is_set():
+            return _api_ok({"started": False, "running": True})
+
+        def run() -> None:
+            try:
+                result = quotes_mod.refresh_library(force=True)
+                if result.get("ok"):
+                    log.info("语料库手动刷新完成: %d 条", result["count"])
+                else:
+                    log.warning("语料库手动刷新失败: %s", result.get("error"))
+            except Exception as exc:
+                log.warning("语料库手动刷新异常: %s", exc)
+
+        Thread(target=run, daemon=True, name="quotes-library-refresh").start()
+        return _api_ok({"started": True, "running": True})
+
     @bp.get("/admin/api/widget-catalog")
     def widget_catalog():
         blocked = require_session()

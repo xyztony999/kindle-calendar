@@ -17,7 +17,7 @@ from flask import Flask, Response, jsonify, render_template, request
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from server.admin import create_admin_blueprint
-from server.landing import endpoint_rows, landing_copy, resolve_landing_lang
+from server.landing import credits_copy, endpoint_rows, landing_copy, resolve_landing_lang
 from server.locale import LANG_COOKIE, LANG_MAX_AGE, THEME_COOKIE, device_lang, explicit_lang, web_lang, web_theme
 from server.reading import (
     prefer_html,
@@ -178,6 +178,7 @@ def create_app() -> Flask:
                 "/r/<page>/<region>.png": "页面分区图（today/week/month/detail/almanac）",
                 "/r/today/clock/<glyph>.png": "时钟字形（0-9 与冒号）",
                 "/dashboard.png?page=": "整页合成图（v1 兼容，默认 today）",
+                "/credits": "开源组件说明",
                 "/admin": "管理端（口令登录）",
                 "/weather": "当前天气 JSON",
                 "/health": "健康检查",
@@ -203,6 +204,15 @@ def create_app() -> Flask:
                 theme=web_theme(request.cookies.get(THEME_COOKIE)),
             )
         )
+        return _apply_lang_cookie(resp)
+
+    @app.get("/credits")
+    def credits():
+        lang = resolve_landing_lang(request.args.get("lang"),
+            request.headers.get("Accept-Language"), request.cookies.get(LANG_COOKIE))
+        copy = credits_copy(lang)
+        resp = _html_page(render_template("credits.html", copy=copy,
+            theme=web_theme(request.cookies.get(THEME_COOKIE))))
         return _apply_lang_cookie(resp)
 
     @app.get("/health")

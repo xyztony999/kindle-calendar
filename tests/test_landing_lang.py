@@ -107,3 +107,44 @@ class LandingRouteTests(unittest.TestCase):
             self.assertEqual(data["name"], "kindle-calendar")
             self.assertEqual(data["endpoints"]["/health"], "健康检查")
             self.assertNotIn("<html", res.get_data(as_text=True))
+
+
+class CreditsRouteTests(unittest.TestCase):
+    def setUp(self):
+        self.client = create_app().test_client()
+
+    def test_chinese_default_and_landing_link(self):
+        home = self.client.get("/", headers=HTML).get_data(as_text=True)
+        self.assertIn('href="/credits"', home)
+        self.assertIn(">开源组件<", home)
+        res = self.client.get("/credits", headers=HTML)
+        self.assertEqual(res.status_code, 200)
+        body = res.get_data(as_text=True)
+        self.assertIn('lang="zh-CN"', body)
+        self.assertIn("开源组件", body)
+        self.assertIn("Flask", body)
+        self.assertIn("AGPL-3.0", body)  # hitokoto 语料署名义务
+        self.assertIn("GPL-3.0-or-later", body)  # FBInk 如实标注
+        self.assertIn("hitokoto.cn", body)
+        self.assertIn('href="/credits?lang=en"', body)
+        self.assertNotIn('href="/credits?lang=zh"', body)
+
+    def test_english_and_switch_link(self):
+        res = self.client.get("/credits?lang=en", headers=HTML)
+        body = res.get_data(as_text=True)
+        self.assertIn('lang="en"', body)
+        self.assertIn("Open-source credits", body)
+        self.assertIn("recurring-ical-events", body)
+        self.assertIn('href="/credits?lang=zh"', body)
+        self.assertNotIn("开源组件", body)
+
+    def test_cookie_remembers_english(self):
+        first = self.client.get("/credits?lang=en", headers=HTML)
+        self.assertIn("kc_lang=en", first.headers.get("Set-Cookie", ""))
+        self.client.set_cookie("kc_lang", "en")
+        again = self.client.get("/credits", headers={**HTML, "Accept-Language": "zh-CN"})
+        self.assertIn("Open-source credits", again.get_data(as_text=True))
+
+    def test_listed_in_json_catalog(self):
+        data = self.client.get("/?format=json", headers=HTML).get_json()
+        self.assertIn("/credits", data["endpoints"])

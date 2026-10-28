@@ -2,8 +2,9 @@
 
 ## fbink（v2 分区模式必需）
 
-[FBInk](https://github.com/NiLuJe/FBInk)（MIT）是越狱社区标准的 framebuffer 工具
-（KOReader 同款底层），提供分区刷新与波形控制（A2/GC16）。
+[FBInk](https://github.com/NiLuJe/FBInk)（GPL-3.0-or-later）是越狱社区标准的 framebuffer 工具
+（KOReader 同款底层），提供分区刷新与波形控制（A2/GC16）。本项目以**独立二进制经命令行调用**
+（非库链接），符合 GPL 对聚合作品的界定；上游与许可证详见管理端/落地页的开源组件说明（/credits）。
 
 **本仓库已内置 Kindle 版二进制**（v1.25.0 K5 构建，适配 Touch 及之后所有机型
 包括 PW2/PW3/PW5），来源为 [MobileRead 发布帖](https://www.mobileread.com/forums/showthread.php?t=299620)。

@@ -1,0 +1,210 @@
+{% from "_brand.html" import brand_icon, brand_head %}
+<!DOCTYPE html>
+<html lang="{{ copy.html_lang }}" {% if theme %}data-theme="{{ theme }}"{% endif %}>
+<head>
+{{ brand_head() }}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ copy.title }}</title>
+<meta name="description" content="{{ copy.description }}">
+<style>
+  :root {
+    --ink: #1a1814;
+    --mid: #5e584f;
+    --faint: #8a8378;
+    --line: #ddd6cb;
+    --paper: #f3efe7;
+    --card: #fffdf9;
+    --accent: #8c3b2a;
+  }
+  * { box-sizing: border-box; }
+  html { color-scheme: light; }
+  html[data-theme="dark"] { color-scheme: dark; }
+  @media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]) { color-scheme: dark; }
+  }
+  body {
+    margin: 0;
+    color: var(--ink);
+    background: var(--paper);
+    font: 16px/1.55 "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif;
+  }
+  a { color: inherit; }
+  .nav, .wrap, .foot {
+    width: min(880px, calc(100% - 32px));
+    margin: 0 auto;
+  }
+  .nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 22px 0 8px;
+  }
+  .brand-icon { flex: none; }
+  .mark { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+  .mark strong { font-family: "Palatino Linotype", "Songti SC", "Noto Serif SC", serif; font-size: 18px; letter-spacing: 0.02em; }
+  .nav-links { display: flex; gap: 8px; align-items: center; }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--card);
+    text-decoration: none;
+    font-size: 14px;
+  }
+  button.btn { cursor: pointer; font: inherit; color: inherit; width: 40px; padding: 0; }
+  h1 {
+    margin: 24px 0 10px;
+    font-family: "Palatino Linotype", "Songti SC", "Noto Serif SC", serif;
+    font-size: clamp(32px, 5vw, 48px);
+    font-weight: 500;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+  }
+  .lede { margin: 0 0 8px; color: var(--mid); max-width: 44em; }
+  .group { margin: 26px 0 8px; }
+  .group h2 {
+    margin: 0 0 10px;
+    font-size: 13px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--faint);
+    font-weight: 600;
+  }
+  .items { display: grid; gap: 8px; }
+  .item {
+    display: grid;
+    grid-template-columns: minmax(150px, 240px) auto 1fr;
+    gap: 12px;
+    align-items: baseline;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px 14px;
+  }
+  .item .name { font-weight: 600; }
+  .item .name a { text-decoration: none; }
+  .item .name a:hover { color: var(--accent); }
+  .item .license {
+    justify-self: start;
+    font-size: 12px;
+    color: var(--mid);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 1px 9px;
+    white-space: nowrap;
+  }
+  .item .note { color: var(--mid); font-size: 14px; }
+  .project {
+    margin: 30px 0 10px;
+    padding: 14px 16px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    color: var(--mid);
+    font-size: 14px;
+  }
+  .foot {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 8px 0 28px;
+    color: var(--faint);
+    font-size: 13px;
+  }
+  .foot a { color: var(--mid); }
+  @media (max-width: 640px) {
+    .item { grid-template-columns: 1fr; gap: 4px; }
+  }
+  html[data-theme="dark"] {
+    --ink: #f3efe7;
+    --mid: #c8bfb2;
+    --faint: #9a9186;
+    --line: #3c362e;
+    --paper: #1c1915;
+    --card: #2a261f;
+    --accent: #e08a72;
+  }
+  @media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]) {
+      --ink: #f3efe7;
+      --mid: #c8bfb2;
+      --faint: #9a9186;
+      --line: #3c362e;
+      --paper: #1c1915;
+      --card: #2a261f;
+      --accent: #e08a72;
+    }
+  }
+</style>
+</head>
+<body>
+  <header class="nav">
+    <a class="mark" href="/">
+      {{ brand_icon() }}
+      <strong>{{ copy.mark }}</strong>
+    </a>
+    <nav class="nav-links">
+      <button class="btn" id="theme-btn" type="button" title="{{ copy.theme_to_dark }}">☾</button>
+      <a class="btn" href="{{ copy.switch_href }}">{{ copy.switch_label }}</a>
+      <a class="btn" href="/">←</a>
+    </nav>
+  </header>
+
+  <main class="wrap">
+    <h1>{{ copy.h1 }}</h1>
+    <p class="lede">{{ copy.lede }}</p>
+    {% for group in copy.groups %}
+    <section class="group">
+      <h2>{{ group.title }}</h2>
+      <div class="items">
+        {% for item in group['items'] %}
+        <div class="item">
+          <span class="name">{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener">{{ item.name }}</a>{% else %}{{ item.name }}{% endif %}</span>
+          <span class="license">{{ item.license }}</span>
+          <span class="note">{{ item.note }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endfor %}
+    <div class="project">{{ copy.project_note }}</div>
+  </main>
+
+  <footer class="foot">
+    <span>GPL-3.0 · Xinyi Zhang</span>
+    <a href="/">{{ copy.mark }}</a>
+  </footer>
+
+<script>
+(function () {
+  var btn = document.getElementById("theme-btn");
+  var toDark = {{ copy.theme_to_dark|tojson }};
+  var toLight = {{ copy.theme_to_light|tojson }};
+  function effective() {
+    var v = document.documentElement.getAttribute("data-theme");
+    if (v === "light" || v === "dark") return v;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  function paint() {
+    var now = effective();
+    btn.textContent = now === "dark" ? "☀" : "☾";
+    btn.title = now === "dark" ? toLight : toDark;
+  }
+  btn.addEventListener("click", function () {
+    var next = effective() === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    document.cookie = "kc_theme=" + next + ";path=/;max-age=31536000;samesite=lax";
+    paint();
+  });
+  paint();
+})();
+</script>
+</body>
+</html>

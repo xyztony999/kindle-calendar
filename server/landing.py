@@ -35,6 +35,91 @@ _ZH = {
     ),
     "endpoints_heading": "接口",
     "raw_json": "原始 JSON",
+    "credits": "开源组件",
+}
+
+_CREDITS_ZH = {
+    "title": "开源组件 · Kindle 台历",
+    "description": "本项目使用的开源库、数据来源与许可证说明。",
+    "mark": "Kindle 台历",
+    "h1": "开源组件",
+    "lede": "Kindle 台历建立在众多开源项目与公开数据之上，在此一并致谢。许可以各上游项目最新声明为准。",
+    "project_note": "本项目以 GPL-3.0 发布；内置一言语料筛选自 hitokoto.cn 开放句子库（AGPL-3.0，保留文件内署名字段）。",
+    "groups": (
+        {
+            "title": "Python 依赖",
+            "items": (
+                {"name": "Flask", "license": "BSD-3-Clause", "note": "Web 框架与路由"},
+                {"name": "Pillow", "license": "MIT-CMU", "note": "E-Ink 画面渲染"},
+                {"name": "PyYAML", "license": "MIT", "note": "配置解析"},
+                {"name": "Requests", "license": "Apache-2.0", "note": "天气、一言等 HTTP 拉取"},
+                {"name": "tzdata", "license": "Apache-2.0", "note": "时区数据库"},
+                {"name": "oss2", "license": "MIT", "note": "阿里云 OSS 图片素材存储"},
+                {"name": "lunar-python", "license": "MIT", "note": "农历、干支与节气"},
+                {"name": "icalendar", "license": "BSD-2-Clause", "note": "ICS 日历解析"},
+                {"name": "recurring-ical-events", "license": "LGPL-3.0-or-later", "note": "重复日程（RRULE）展开"},
+                {"name": "gunicorn", "license": "MIT", "note": "WSI 服务器"},
+            ),
+        },
+        {
+            "title": "数据与内容",
+            "items": (
+                {"name": "Open-Meteo", "license": "CC-BY-4.0（数据）", "note": "天气与空气质量数据", "url": "https://open-meteo.com"},
+                {"name": "hitokoto.cn 开放句子库", "license": "AGPL-3.0", "note": "一言语料（筛选后内置）", "url": "https://github.com/hitokoto-osc/sentences-bundle"},
+                {"name": "holiday-cn", "license": "MIT", "note": "中国法定节假日数据", "url": "https://github.com/NateScarlet/holiday-cn"},
+            ),
+        },
+        {
+            "title": "设备端与字体",
+            "items": (
+                {"name": "FBInk", "license": "GPL-3.0-or-later", "note": "E-Ink 绘制（独立二进制经命令行调用）", "url": "https://github.com/NiLuJe/FBInk"},
+                {"name": "Noto Serif CJK", "license": "OFL-1.1", "note": "思源宋体（服务端渲染字体）", "url": "https://github.com/notofonts/noto-cjk"},
+                {"name": "tapread", "license": "GPL-3.0", "note": "本项目自研的触摸事件读取工具"},
+            ),
+        },
+    ),
+}
+
+_CREDITS_EN = {
+    "title": "Open-source credits · Kindle Calendar",
+    "description": "Libraries, data sources, and licenses used by this project.",
+    "mark": "Kindle Calendar",
+    "h1": "Open-source credits",
+    "lede": "This project is built on many open-source projects and public datasets. Thank you all. Licenses follow each upstream project's latest statement.",
+    "project_note": "This project is released under GPL-3.0. The built-in quote corpus is filtered from the hitokoto.cn open sentence library (AGPL-3.0; attribution fields preserved in the file).",
+    "groups": (
+        {
+            "title": "Python packages",
+            "items": (
+                {"name": "Flask", "license": "BSD-3-Clause", "note": "Web framework and routing"},
+                {"name": "Pillow", "license": "MIT-CMU", "note": "E-Ink page rendering"},
+                {"name": "PyYAML", "license": "MIT", "note": "Configuration parsing"},
+                {"name": "Requests", "license": "Apache-2.0", "note": "HTTP client for weather and quotes"},
+                {"name": "tzdata", "license": "Apache-2.0", "note": "Time zone database"},
+                {"name": "oss2", "license": "MIT", "note": "Aliyun OSS image storage"},
+                {"name": "lunar-python", "license": "MIT", "note": "Lunar calendar, ganzhi, solar terms"},
+                {"name": "icalendar", "license": "BSD-2-Clause", "note": "ICS calendar parsing"},
+                {"name": "recurring-ical-events", "license": "LGPL-3.0-or-later", "note": "Recurring event (RRULE) expansion"},
+                {"name": "gunicorn", "license": "MIT", "note": "WSGI server"},
+            ),
+        },
+        {
+            "title": "Data and content",
+            "items": (
+                {"name": "Open-Meteo", "license": "CC-BY-4.0 (data)", "note": "Weather and air quality", "url": "https://open-meteo.com"},
+                {"name": "hitokoto.cn sentence library", "license": "AGPL-3.0", "note": "Quote corpus (filtered and bundled)", "url": "https://github.com/hitokoto-osc/sentences-bundle"},
+                {"name": "holiday-cn", "license": "MIT", "note": "Chinese public holiday data", "url": "https://github.com/NateScarlet/holiday-cn"},
+            ),
+        },
+        {
+            "title": "Device side and fonts",
+            "items": (
+                {"name": "FBInk", "license": "GPL-3.0-or-later", "note": "E-Ink drawing (standalone binary, invoked via CLI)", "url": "https://github.com/NiLuJe/FBInk"},
+                {"name": "Noto Serif CJK", "license": "OFL-1.1", "note": "Server-side rendering font", "url": "https://github.com/notofonts/noto-cjk"},
+                {"name": "tapread", "license": "GPL-3.0", "note": "Touch event reader, developed in this project"},
+            ),
+        },
+    ),
 }
 
 _EN = {
@@ -62,6 +147,7 @@ _EN = {
     ),
     "endpoints_heading": "Endpoints",
     "raw_json": "Raw JSON",
+    "credits": "Open-source credits",
 }
 
 _EN_ENDPOINTS = {
@@ -71,6 +157,7 @@ _EN_ENDPOINTS = {
     "/r/today/clock/<glyph>.png": "Clock glyph (0-9 and colon)",
     "/dashboard.png?page=": "Full-page image (v1 compatible, default today)",
     "/admin": "Admin (password login)",
+    "/credits": "Open-source credits",
     "/weather": "Current weather JSON",
     "/health": "Health check",
 }
@@ -117,6 +204,20 @@ def landing_copy(lang: str) -> dict:
             "weather_ok": text["weather_ok"],
             "weather_bad": text["weather_bad"],
         },
+    }
+
+
+def credits_copy(lang: str) -> dict:
+    english = lang == "en"
+    text = _CREDITS_EN if english else _CREDITS_ZH
+    return {
+        **text,
+        "lang": "en" if english else "zh",
+        "html_lang": "en" if english else "zh-CN",
+        "switch_href": "/credits?lang=zh" if english else "/credits?lang=en",
+        "switch_label": "中文" if english else "English",
+        "theme_to_dark": "Switch to dark" if english else "切换到深色",
+        "theme_to_light": "Switch to light" if english else "切换到浅色",
     }
 
 

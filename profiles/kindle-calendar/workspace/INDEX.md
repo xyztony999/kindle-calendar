@@ -1,5 +1,22 @@
 ---
 pipeline:
+  - module: credits
+    title: "开源组件说明页 /credits（双语+主题，AGPL/GPL 署名，FBInk 许可更正）"
+    stages:
+      design:
+        status: complete
+        note: "2026-10-29 增量 Gate 1 PASS，用户按推荐执行（落地页入口+手写字典）。许可证一手核实：FBInk 实为 GPL-3.0+ 非 MIT（bin/README 误标已更正），recurring-ical-events LGPL-3.0+。"
+      code:
+        status: complete
+        note: "2026-10-29 已实现并验证：/credits Jinja 页（双语/主题/品牌头）+ 落地页页脚入口 + 接口目录登记 + bin/README 更正。128 单测+E2E PASS（修复 Jinja group.items 方法陷阱 500）。Gate 2 PASS 待用户验收，未提交。报告 05-reports/gate2-credits.md"
+    artifacts:
+      prd:
+        - 02-detailed/prd/prd-credits.md
+      api:
+        - 02-detailed/api/api-credits.md
+      reports:
+        - 05-reports/gate1-credits.md
+        - 05-reports/gate2-credits.md
   - module: quote-library-refresh
     title: "语料库刷新机制（管理端手动按钮+7 天自动 TTL，data/ 持久化+热替换）"
     stages:
@@ -8,7 +25,7 @@ pipeline:
         note: "2026-10-27 增量 Gate 1 PASS，用户按推荐执行（7 天自动/行内按钮/失败健康行+toast/脚本薄封装）。"
       code:
         status: complete
-        note: "2026-10-27 已实现并验证：refresh_library（加固拉取+过滤+原子写 data/+热替换+<100 拒写+内置忙守卫）；加载 data/ 优先内置兜底；自动 7 天 TTL 挂 ICS 线程；手动 POST quotes-refresh 后台线程+数据源卡按钮+toast；徽标 library 有库即正常；脚本薄封装。124 单测+E2E+并发冒烟+真实网络自动刷新跑通全过。验证抓出并修复 P0（Event 当锁致刷新必崩+双重加锁死锁）。Gate 2 PASS 待用户验收，未提交。报告 05-reports/gate2-quote-library-refresh.md"
+        note: "2026-10-27 已实现并验证：refresh_library（加固拉取+过滤+原子写 data/+热替换+<100 拒写+内置忙守卫）；加载 data/ 优先内置兜底；自动 7 天 TTL 挂 ICS 线程；手动 POST quotes-refresh 后台线程+数据源卡按钮+toast；徽标 library 有库即正常；脚本薄封装。124 单测+E2E+并发冒烟+真实网络自动刷新跑通全过。验证抓出并修复 P0（Event 当锁致刷新必崩+双重加锁死锁）。Gate 2 PASS，随 2a62f3d 提交推送（与 quote-resilience、quote-library 同批）。报告 05-reports/gate2-quote-library-refresh.md"
     artifacts:
       prd:
         - 02-detailed/prd/prd-quote-library-refresh.md
@@ -27,7 +44,7 @@ pipeline:
         note: "2026-10-27 增量。Gate 1 对比本地化 vs 自部署后端（后者运维成本与产品形态不匹配否决）；用户拍板 A+A2。官方 sentences-bundle 已按分类拆分，jsDelivr fastly 可达；协议 AGPL-3.0。"
       code:
         status: complete
-        note: "2026-10-27 已实现并验证：quotes_library.json 内置（7,684 条/756KB）；模式 library(新默认)/online/custom，offline 迁移；library_types a-l 校验；library_quote 确定性选句+兜底；管理端三模式+12 分类复选（中英）；英文 library 不联网；update_quotes.py 加固重建；README 署名。120 单测+E2E PASS（顺带密闭化 test_system_options 真实联网）。Gate 2 PASS 待用户验收，未提交。报告 05-reports/gate2-quote-library.md"
+        note: "2026-10-27 已实现并验证：quotes_library.json 内置（7,684 条/756KB）；模式 library(新默认)/online/custom，offline 迁移；library_types a-l 校验；library_quote 确定性选句+兜底；管理端三模式+12 分类复选（中英）；英文 library 不联网；update_quotes.py 加固重建；README 署名。120 单测+E2E PASS（顺带密闭化 test_system_options 真实联网）。Gate 2 PASS，随 2a62f3d 提交推送。报告 05-reports/gate2-quote-library.md"
     artifacts:
       prd:
         - 02-detailed/prd/prd-quote-library.md
@@ -46,7 +63,7 @@ pipeline:
         note: "2026-10-26 增量。D0 服务器实测定位根因（请求合规官方文档；阿里云北京→Cloudflare 洛杉矶 POP 晚高峰 ~80% 丢包撞穿 8s 读超时，international 同 IP 换域无效）；Gate 1 PASS 用户按推荐执行（韧性包+英文同步）。"
       code:
         status: complete
-        note: "2026-10-26 已实现并验证：超时 (5,12)+失败重试一次+粘性缓存 ≤7 天（中英两路）；修复 _days_old 带时区崩溃 bug；117 单测 + E2E PASS。Gate 2 PASS 待用户验收，未提交。报告 05-reports/gate2-quote-resilience.md"
+        note: "2026-10-26 已实现并验证：超时 (5,12)+失败重试一次+粘性缓存 ≤7 天（中英两路）；修复 _days_old 带时区崩溃 bug；117 单测 + E2E PASS。Gate 2 PASS，随 2a62f3d 提交推送（后续 quote-library 上线后在线模式为可选项）。报告 05-reports/gate2-quote-resilience.md"
     artifacts:
       prd:
         - 02-detailed/prd/prd-quote-resilience.md

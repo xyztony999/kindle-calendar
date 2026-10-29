@@ -70,14 +70,14 @@ def build_payload(
         page_names = {}
 
     almanac_data = almanac.almanac_for(now)
+    today_iso = now.date().isoformat()
+    anniv_today = [
+        str(e.get("title") or "")
+        for e in (events or [])
+        if isinstance(e, dict) and e.get("source") == "anniv" and e.get("iso_date") == today_iso and e.get("title")
+    ]
     if events:
         # 今天命中的纪念日并入节日备注行（页眉 notes / 月历角标优先级共用）
-        today_iso = now.date().isoformat()
-        anniv_today = [
-            str(e.get("title") or "")
-            for e in events
-            if isinstance(e, dict) and e.get("source") == "anniv" and e.get("iso_date") == today_iso and e.get("title")
-        ]
         if anniv_today:
             almanac_data = {**almanac_data, "festivals": list(almanac_data.get("festivals") or []) + anniv_today[:2]}
 
@@ -121,6 +121,7 @@ def build_payload(
         "weather_alerts": _weather_alerts(weather, precip_prob),
         "events": events or [],
         "countdowns": countdowns or [],
+        "anniv_today": anniv_today,
         "quote": quote,
     }
 

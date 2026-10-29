@@ -243,6 +243,13 @@ def validate(data: Any) -> list[dict]:
         details.append(
             _detail("rotation.suppress_s", "SUPPRESS_OUT_OF_RANGE", f"让位秒数须为 0–{SUPPRESS_MAX} 的整数")
         )
+    fetch_interval = rotation.get("fetch_interval_s") if isinstance(rotation, dict) else None
+    if fetch_interval is not None:
+        value = _as_int(fetch_interval)
+        if value is None or not 300 <= value <= 86400:
+            details.append(
+                _detail("rotation.fetch_interval_s", "FETCH_INTERVAL_INVALID", "拉取间隔须为 300–86400 秒的整数，留空使用设备配置")
+            )
 
     quote = data.get("quote")
     mode = quote.get("mode") if isinstance(quote, dict) else None
@@ -323,9 +330,12 @@ def validate(data: Any) -> list[dict]:
     if not isinstance(urls, list) or len(urls) > 3:
         details.append(_detail("ics.urls", "ICS_INVALID", "订阅链接最多 3 个且须为列表"))
     else:
-        for index, url in enumerate(urls):
+        for index, entry in enumerate(urls):
+            url = entry.get("url") if isinstance(entry, dict) else entry
             if not isinstance(url, str) or not url.startswith("https://") or len(url) > 500:
-                details.append(_detail(f"ics.urls[{index}]", "ICS_INVALID", "订阅链接须为 https 且不超过 500 字符"))
+                details.append(_detail(f"ics.urls[{index}].url", "ICS_INVALID", "订阅链接须为 https 且不超过 500 字符"))
+            elif isinstance(entry, dict) and not isinstance(entry.get("enabled", True), bool):
+                details.append(_detail(f"ics.urls[{index}].enabled", "ICS_INVALID", "启停开关须为布尔值"))
 
     anniversaries = data.get("anniversaries") or []
     if not isinstance(anniversaries, list) or len(anniversaries) > 20:
@@ -359,7 +369,7 @@ def _normalize_block(block: dict) -> dict:
     widget = block["widget"]
     item = {
         "widget": widget,
-        "id": widget if widget in ("header", "clock", "weather", "sun", "scene", "quote", "list", "chart", "title", "grid", "hourly", "indices", "main", "schedule", "countdown") else block["id"],
+        "id": widget if widget in ("header", "clock", "weather", "sun", "scene", "quote", "list", "chart", "title", "grid", "hourly", "indices", "main", "schedule", "countdown", "wallpaper") else block["id"],
         "x": _as_int(block["x"]),
         "y": _as_int(block["y"]),
         "w": _as_int(block["w"]),
@@ -369,6 +379,8 @@ def _normalize_block(block: dict) -> dict:
     if widget in SYSTEM_OPTION_WIDGETS and isinstance(block.get("options"), dict) and block["options"]:
         item["options"] = block["options"]
     if widget == "image":
+        item["asset"] = block["asset"]
+    elif widget == "wallpaper" and isinstance(block.get("asset"), str) and block["asset"]:
         item["asset"] = block["asset"]
     elif widget == "text":
         item["text"] = _clean_text(block.get("text"))
@@ -433,7 +445,13 @@ def normalize(data: dict) -> dict:
                 "snapshot": copy_settings(item["snapshot"]),
             })
     ics_data = data.get("ics") if isinstance(data.get("ics"), dict) else {}
-    ics_urls = [u for u in (ics_data.get("urls") or []) if isinstance(u, str) and u.startswith("https://")][:3]
+    ics_urls = []
+    for entry in (ics_data.get("urls") or []):
+        if isinstance(entry, str):
+            ics_urls.append({"url": entry, "enabled": True})
+        elif isinstance(entry, dict) and isinstance(entry.get("url"), str) and entry["url"].startswith("https://"):
+            ics_urls.append({"url": entry["url"], "enabled": entry.get("enabled", True) is not False})
+    ics_urls = ics_urls[:3]
     anniversaries_out = []
     for item in data.get("anniversaries") or []:
         if isinstance(item, dict):
@@ -451,6 +469,7 @@ def normalize(data: dict) -> dict:
         "rotation": {
             "enabled": data["rotation"]["enabled"] is True,
             "suppress_s": _as_int(data["rotation"]["suppress_s"]),
+            "fetch_interval_s": _as_int(data["rotation"].get("fetch_interval_s")),
         },
         "quote": {"mode": quote_mode, "custom": custom, "library_types": library_types},
         "presets": presets_out,

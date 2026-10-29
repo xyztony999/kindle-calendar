@@ -34,6 +34,13 @@ def _quote_stub(now, mode="online", custom=None, types=None):
     return {"text": "测试一言", "from": "单测"}
 
 
+def _now_stub():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    return datetime(2026, 10, 26, 16, 0, tzinfo=ZoneInfo("Asia/Shanghai"))
+
+
 class LayoutUnitTests(unittest.TestCase):
     def test_schema1_keeps_city_and_gains_layout(self):
         raw = {
@@ -90,6 +97,42 @@ class LayoutUnitTests(unittest.TestCase):
         self.assertIsNone(accept_center_item({"id": "center.ok", "kind": "data", "review": "pending", "name": "等", "style": "rows", "fields": ["weather.temperature"]}))
         item = accept_center_item({"id": "center.ok", "kind": "data", "review": "approved", "name": "温度", "style": "hero", "fields": ["weather.temperature"]})
         self.assertEqual(item["placeable"], True)
+
+    def test_wallpaper_block_validation(self):
+        raw = defaults_from_config(DEPLOY)
+        raw["assets"] = [{"id": "a1234abcd", "key": "calendar/a1234abcd.png", "content_type": "image/png"}]
+        block = {"widget": "wallpaper", "id": "wallpaper", "x": 0, "y": 44, "w": 758, "h": 980, "z": 0, "options": {"mode": "daily"}}
+        raw["pages"][0]["layout"] = [block]
+        self.assertEqual(validate(raw), [])
+        block["options"] = {"mode": "fixed"}
+        self.assertTrue(any(".asset" in error["field"] for error in validate(raw)))  # fixed 未选素材
+        block["asset"] = "a1234abcd"
+        self.assertEqual(validate(raw), [])
+        out = normalize(raw)
+        self.assertEqual(out["pages"][0]["layout"][0]["asset"], "a1234abcd")
+        self.assertEqual(out["pages"][0]["layout"][0]["options"]["mode"], "fixed")
+
+    def test_fetch_interval_roundtrip(self):
+        raw = defaults_from_config(DEPLOY)
+        self.assertIsNone(raw["rotation"].get("fetch_interval_s"))
+        self.assertEqual(validate(raw), [])
+        raw["rotation"]["fetch_interval_s"] = 600
+        self.assertEqual(validate(raw), [])
+        out = normalize(raw)
+        self.assertEqual(out["rotation"]["fetch_interval_s"], 600)
+        raw["rotation"]["fetch_interval_s"] = 10
+        self.assertTrue(any(error["field"] == "rotation.fetch_interval_s" for error in validate(raw)))
+
+    def test_anniv_today_in_payload(self):
+        from server.data import build_payload
+
+        events = [{"iso_date": "2026-10-26", "time": None, "all_day": True, "title": "妈妈生日", "source": "anniv"}]
+        # build_payload 无 settings 时 get_quote 走默认 online；替换避免真实外网请求
+        with patch("server.quotes.get_quote", return_value={"text": "测试一言", "from": "单测"}):
+            out = build_payload({"latitude": 39.9, "longitude": 116.4, "location_name": "北京"}, FAKE_WEATHER, _now_stub(), None, None, events, [])
+            self.assertEqual(out["anniv_today"], ["妈妈生日"])
+            none_out = build_payload({"latitude": 39.9, "longitude": 116.4, "location_name": "北京"}, FAKE_WEATHER, _now_stub(), None, None, [], [])
+            self.assertEqual(none_out["anniv_today"], [])
 
     def test_text_size_field_roundtrip(self):
         raw = defaults_from_config(DEPLOY)

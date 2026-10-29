@@ -20,6 +20,7 @@ from PIL import Image
 from zoneinfo import ZoneInfo
 
 from server import data as data_mod
+from server import health_history
 from server import ics
 from server import quotes
 from server.aqi import AirQuality, fetch_aqi
@@ -98,6 +99,7 @@ class DashboardService:
         self._asset_images: dict[str, Image.Image] = {}
 
         self.heartbeat = HeartbeatLog(settings_path().with_name("device-status.json"))
+        health_history.init(settings_path().with_name("health_history.json"))
         deploy = {
             "location_name": config["location_name"],
             "latitude": config["latitude"],
@@ -203,6 +205,9 @@ class DashboardService:
             ]
         }
 
+    def sources_history(self) -> dict:
+        return health_history.series()
+
     def device_status(self) -> dict:
         with self._lock:
             settings = self._settings
@@ -234,6 +239,10 @@ class DashboardService:
             self._weather_at = now
             self._last_error = None
         log.info("天气已更新 (aqi=%s)", aqi.us_aqi if aqi else "无")
+        try:
+            health_history.record(self.sources_health())
+        except Exception:
+            pass
         # ICS 独立线程刷新（TTL 6h 内部判定；失败保旧数据，不阻塞任何请求）
         threading.Thread(target=self._refresh_ics, daemon=True, name="ics-refresh").start()
 
@@ -242,7 +251,8 @@ class DashboardService:
             tz = ZoneInfo(self.config["timezone"])
             with self._lock:
                 settings = copy_settings(self._settings)
-            urls = (settings.get("ics") or {}).get("urls") or []
+            entries = (settings.get("ics") or {}).get("urls") or []
+            urls = [e["url"] for e in entries if isinstance(e, dict) and e.get("enabled", True) and e.get("url")]
             ics.refresh(urls, tz, datetime.now(tz))
         except Exception as exc:
             log.warning("ICS 刷新失败: %s", exc)
@@ -598,6 +608,9 @@ class DashboardService:
                 ]
 
         lines += clock_legacy
+        fetch_interval = (settings.get("rotation") or {}).get("fetch_interval_s")
+        if fetch_interval:
+            lines.append(f"FETCH_INTERVAL={int(fetch_interval)}")
         lines += [
             f"SETTINGS_VERSION={content_version(settings)}",
             f"ROTATE_ENABLED={1 if settings['rotation']['enabled'] else 0}",

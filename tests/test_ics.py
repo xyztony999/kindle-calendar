@@ -104,7 +104,7 @@ class IcsTests(unittest.TestCase):
         self.assertEqual(validate(raw), [])
         raw["ics"] = {"urls": ["http://insecure/x.ics"]}
         self.assertTrue(any(d["code"] == "ICS_INVALID" for d in validate(raw)))
-        raw["ics"] = {"urls": ["https://ok.example/x.ics"]}
+        raw["ics"] = {"urls": ["https://ok.example/x.ics", {"url": "https://ok.example/y.ics", "enabled": False}]}
         raw["anniversaries"] = [{"id": "e1", "name": "生日", "date": "8-16", "repeat": "yearly"}]
         self.assertTrue(any(".date" in d["field"] for d in validate(raw)))
         raw["anniversaries"] = [{"id": "e1", "name": "生日", "date": "08-16", "repeat": "yearly"}]
@@ -114,7 +114,7 @@ class IcsTests(unittest.TestCase):
         out = normalize(raw)
         self.assertEqual(out["anniversaries"][0]["repeat"], "yearly")
         self.assertEqual(out["presets"][0]["name"], "简洁")
-        self.assertEqual(out["ics"]["urls"], ["https://ok.example/x.ics"])
+        self.assertEqual(out["ics"]["urls"], [{"url": "https://ok.example/x.ics", "enabled": True}, {"url": "https://ok.example/y.ics", "enabled": False}])
         # 旧配置缺失新键：不报错，normalize 补默认
         del raw["ics"]
         del raw["anniversaries"]

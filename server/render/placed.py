@@ -261,7 +261,13 @@ def render_placed(page, payload, width, height, font_path, definitions, images) 
     page_id = str(page.get("page_id") or "today")
     out: dict[str, Image.Image] = {}
     bx, by, bw, bh = content_blank(width, height)
-    out["pageblank"] = Image.new("L", (bw, bh), style.PAPER)
+    blank_img = Image.new("L", (bw, bh), style.PAPER)
+    if payload.get("anniv_today"):
+        # 生日/纪念日当天：整页细双线框装饰（不反色，避免与设备端 INVERT 手势冲突）
+        draw = ImageDraw.Draw(blank_img)
+        draw.rectangle((0, 0, bw - 1, bh - 1), outline=style.MID)
+        draw.rectangle((6, 6, bw - 7, bh - 7), outline=style.MID)
+    out["pageblank"] = blank_img
     for region in http_region_names(page):
         if region == "pageblank":
             continue
@@ -270,12 +276,25 @@ def render_placed(page, payload, width, height, font_path, definitions, images) 
             continue
         target = _target(block, width, height)
         widget = block.get("widget")
-        if widget in DESIGN:
+        if widget in DESIGN and widget != "wallpaper":
             out[region] = paint_system(widget, payload, target, font_path, page_id, _offset_for(region), block_options(widget, block.get("options")))
         elif widget == "text":
             out[region] = paint_text(str(block.get("text") or ""), str(block.get("align") or "left"), target, font_path, str(block.get("size") or "md"))
         elif widget == "image":
             out[region] = paint_image(images.get(str(block.get("asset") or "")), target)
+        elif widget == "wallpaper":
+            options = block_options("wallpaper", block.get("options"))
+            asset_id = str(block.get("asset") or "")
+            if str(options.get("mode") or "daily") == "fixed":
+                out[region] = paint_image(images.get(asset_id), target)
+            else:
+                ids = sorted(images)
+                if ids:
+                    iso = str((payload.get("date") or {}).get("iso") or "0")
+                    pick = ids[int("".join(iso.split("-")) or 0) % len(ids)]
+                    out[region] = paint_image(images.get(pick), target)
+                else:
+                    out[region] = paint_image(None, target)
         elif widget == "custom":
             definition = definitions.get(str(block.get("def") or ""))
             if definition is not None and block.get("style") in ("hero", "rows", "horizontal", "grid"):

@@ -13,7 +13,7 @@ from pathlib import Path
 from urllib.parse import parse_qsl, unquote
 
 import yaml
-from flask import Flask, Response, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request, send_from_directory
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from server.admin import create_admin_blueprint
@@ -205,6 +205,12 @@ def create_app() -> Flask:
             )
         )
         return _apply_lang_cookie(resp)
+
+    @app.get("/docs/<path:fname>")
+    def docs_file(fname: str):
+        if not fname.endswith((".md", ".json")) or "/" in fname or "\\" in fname or ".." in fname:
+            return _machine_text("not found"), 404
+        return send_from_directory(ROOT / "docs", fname, max_age=300)
 
     @app.get("/credits")
     def credits():

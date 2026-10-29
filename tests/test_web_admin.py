@@ -356,5 +356,71 @@ class AdminApiTests(unittest.TestCase):
             os.environ["ADMIN_PASSWORD"] = PASSWORD
 
 
+class BackupRestoreTests(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+
+        os.environ["SETTINGS_PATH"] = str(Path(tempfile.mkdtemp()) / "settings.json")
+        os.environ["ADMIN_PASSWORD"] = PASSWORD
+        os.environ["SECRET_KEY"] = "unit-test-secret"
+        from server.app import create_app
+
+        self.client = create_app().test_client()
+        self.client.post(
+            "/admin/api/login",
+            json={"password": PASSWORD},
+            headers={"X-Requested-With": "kindle-admin"},
+        )
+
+    def _headers(self):
+        return {"X-Requested-With": "kindle-admin"}
+
+    def test_backup_restore_roundtrip(self):
+        import io
+        import zipfile
+
+        # 改一个可辨识字段后打包
+        settings = self.client.get("/admin/api/settings", headers=self._headers()).get_json()["data"]["settings"]
+        settings["location"]["name"] = "备份城市"
+        self.client.post("/admin/api/settings/save", json=settings, headers=self._headers())
+        backup = self.client.get("/admin/api/backup", headers=self._headers())
+        self.assertEqual(backup.status_code, 200)
+        self.assertIn("application/zip", backup.content_type)
+        zf = zipfile.ZipFile(io.BytesIO(backup.get_data()))
+        self.assertIn("settings.json", zf.namelist())
+
+        # 改回去再恢复备份
+        settings["location"]["name"] = "北京"
+        self.client.post("/admin/api/settings/save", json=settings, headers=self._headers())
+        restored = self.client.post(
+            "/admin/api/backup/restore",
+            data={"file": (io.BytesIO(backup.get_data()), "backup.zip")},
+            headers=self._headers(),
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(restored.status_code, 200, restored.get_data(as_text=True))
+        after = self.client.get("/admin/api/settings", headers=self._headers()).get_json()["data"]["settings"]
+        self.assertEqual(after["location"]["name"], "备份城市")
+
+    def test_restore_rejects_bad_zip(self):
+        import io
+
+        restored = self.client.post(
+            "/admin/api/backup/restore",
+            data={"file": (io.BytesIO(b"not a zip"), "backup.zip")},
+            headers=self._headers(),
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(restored.status_code, 400)
+        self.assertEqual(restored.get_json()["error"]["code"], "BACKUP_INVALID")
+
+    def test_sources_history_endpoint(self):
+        res = self.client.get("/admin/api/sources/history", headers=self._headers())
+        self.assertEqual(res.status_code, 200)
+        body = res.get_json()["data"]["sources"]
+        self.assertEqual(set(body), {"weather", "aqi", "quote", "ics"})
+
+
 if __name__ == "__main__":
     unittest.main()

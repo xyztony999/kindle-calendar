@@ -551,10 +551,15 @@ fetch_consume() {
     fi
     ENV_OK=1
     fetch_fails=0
-    FETCH_RETRY="$INTERVAL"
     # 子进程已把最新 env 原子落盘到 $CACHE_DIR/dashboard.env，主循环重载
     # shellcheck disable=SC1090
     . "$CACHE_DIR/dashboard.env"
+    # 云端下发的拉取间隔优先于 config.sh（旧版 env 无此变量时保持本地值）
+    case "${FETCH_INTERVAL:-}" in
+        ''|*[!0-9]*) : ;;
+        *) if [ "$FETCH_INTERVAL" -ge 300 ] && [ "$FETCH_INTERVAL" -le 86400 ]; then INTERVAL="$FETCH_INTERVAL"; fi ;;
+    esac
+    FETCH_RETRY="$INTERVAL"
     apply_clock
     self_update
     ensure_cur_page

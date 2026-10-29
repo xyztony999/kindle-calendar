@@ -59,9 +59,9 @@ class WebChromeTests(unittest.TestCase):
         self.assertNotIn(">EN<", nav)
         self.assertEqual(body.count("返回首页"), 1)
         self.assertIn("Kindle 台历 · 管理端", body)
-        self.assertIn("#2a2622", body)
-        self.assertIn("#f4f1ea", body)
-        self.assertIn("#8a8175", body)
+        self.assertIn("#241f17", body)
+        self.assertIn("#f4f0e7", body)
+        self.assertIn("#6b6357", body)
         self.assertNotIn("THEME_ORDER", body)
         self.assertNotIn('"auto"', body)
 
@@ -106,7 +106,7 @@ class WebChromeTests(unittest.TestCase):
     def test_quote_library_reference_links_serve_current_document_and_example(self):
         docs = Path(__file__).resolve().parents[1] / 'docs'
         for name in ('quote-library.md', 'quote-library.example.json'):
-            with self.client.get('/static/docs/' + name) as response:
+            with self.client.get('/docs/' + name) as response:
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response.data, (docs / name).read_bytes())
 

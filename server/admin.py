@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import io
 import json
 import logging
 import os
 import threading
 import time
+import zipfile
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
@@ -19,7 +21,7 @@ from flask import Blueprint, Response, jsonify, render_template, request, sessio
 from server.catalog import fetch_center_items
 from server.layout import DESIGN, FIELD_DEFS, SYSTEM_WIDGETS, data_style_catalog, field_kind, field_label, system_label, system_options_catalog
 from server.locale import LANG_COOKIE, LANG_MAX_AGE, THEME_COOKIE, admin_ui, explicit_lang, translate_message, web_lang, web_theme
-from server.settings import ACCEPTED_SCHEMAS, SETTINGS_MAX_BYTES, SettingsError, env_int, limits
+from server.settings import ACCEPTED_SCHEMAS, SETTINGS_MAX_BYTES, SettingsError, env_int, limits, settings_path
 from server.storage import AssetError
 from server import storage
 
@@ -383,6 +385,84 @@ def create_admin_blueprint(service) -> Blueprint:
         if blocked:
             return blocked
         return _api_ok(service.sources_health())
+
+    @bp.get("/admin/api/sources/history")
+    def sources_history():
+        blocked = require_session()
+        if blocked:
+            return blocked
+        return _api_ok(service.sources_history())
+
+    @bp.get("/admin/api/backup")
+    def backup_download():
+        blocked = require_session()
+        if blocked:
+            return blocked
+        current, _degraded, _version = service.store.current()
+        day = datetime.now(timezone.utc).strftime("%Y%m%d")
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("settings.json", json.dumps(current, ensure_ascii=False, indent=2) + "\n")
+            for name in ("quotes_library.json", "quotes_meta.json"):
+                try:
+                    zf.writestr(name, (settings_path().parent / name).read_bytes())
+                except OSError:
+                    pass  # 可选成员缺失时跳过（语料可用刷新重建）
+        resp = Response(buf.getvalue(), mimetype="application/zip")
+        resp.headers["Content-Disposition"] = f'attachment; filename="kindle-calendar-backup-{day}.zip"'
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+
+    @bp.post("/admin/api/backup/restore")
+    def backup_restore():
+        blocked = require_write()
+        if blocked:
+            return blocked
+        upload = request.files.get("file")
+        if upload is None:
+            return _api_error("BACKUP_INVALID", "未收到备份文件", 400)
+        try:
+            zf = zipfile.ZipFile(io.BytesIO(upload.read()))
+            bad = zf.testzip()
+            if bad is not None:
+                raise ValueError(bad)
+            names = set(zf.namelist())
+        except Exception:
+            return _api_error("BACKUP_INVALID", "备份文件不是有效的 zip", 400)
+        allowed = {"settings.json", "quotes_library.json", "quotes_meta.json"}
+        if not names <= allowed or "settings.json" not in names:
+            return _api_error("BACKUP_INVALID", "备份成员不符（需含 settings.json，仅支持白名单成员）", 400)
+        try:
+            payload = json.loads(zf.read("settings.json").decode("utf-8"))
+        except Exception:
+            return _api_error("BACKUP_INVALID", "settings.json 不是有效的 JSON", 400)
+        if not isinstance(payload, dict) or payload.get("schema_version") not in ACCEPTED_SCHEMAS:
+            return _api_error("BACKUP_INVALID", "备份的 schema_version 不受支持", 400)
+        if "quotes_library.json" in names:
+            try:
+                library = json.loads(zf.read("quotes_library.json").decode("utf-8"))
+                sentences = [s for s in (library.get("sentences") or []) if isinstance(s, dict) and (s.get("hitokoto") or "").strip()]
+            except Exception:
+                return _api_error("BACKUP_INVALID", "quotes_library.json 不是有效的 JSON", 400)
+            if len(sentences) < 100:
+                return _api_error("BACKUP_INVALID", "备份中的语料库条目过少，疑似损坏", 400)
+            data_dir = settings_path().parent
+            data_dir.mkdir(parents=True, exist_ok=True)
+            tmp = data_dir / "quotes_library.json.tmp"
+            tmp.write_bytes(zf.read("quotes_library.json"))
+            os.replace(tmp, data_dir / "quotes_library.json")
+            from server import quotes as quotes_mod
+
+            quotes_mod._library_sentences = None  # 下次选句重读 data/ 库
+        # 素材本体在 OSS（settings 仅存 id/key/content_type，key 原样恢复）；
+        # gc_assets=False 防止恢复瞬间 presets 引用外的素材被 GC 连带删除 OSS 对象
+        response = save_body(payload, gc_assets=False)
+        if response.status_code != 200:
+            return response
+        body = response.get_json()
+        if body and isinstance(body.get("data"), dict):
+            body["data"]["restored_quotes"] = "quotes_library.json" in names
+        return jsonify(body)
 
     @bp.post("/admin/api/quotes-refresh")
     def quotes_refresh():

@@ -35,6 +35,7 @@ SYSTEM_WIDGETS = (
     "main",
     "schedule",
     "countdown",
+    "wallpaper",
 )
 CUSTOM_PAGE_RE = re.compile(r"^c[0-9a-f]{8}$")
 DEF_RE = re.compile(r"^w[0-9a-f]{8}$")
@@ -64,6 +65,7 @@ DESIGN: dict[str, tuple[int, int]] = {
     "main": (CONTENT_W, 800),
     "schedule": (CONTENT_W, 244),
     "countdown": (CONTENT_W, 132),
+    "wallpaper": (BASE_W, BASE_H - 44),
 }
 
 _DEFAULT_BANDS: dict[str, list[tuple[str, int, int]]] = {
@@ -186,6 +188,7 @@ SYSTEM_LABELS = {
     "main": ("黄历", "Almanac"),
     "schedule": ("日程", "Schedule"),
     "countdown": ("倒计时", "Countdown"),
+    "wallpaper": ("每日一图", "Wallpaper"),
 }
 
 # 系统积木外观选项（有限可配）：key → (中文标签, 英文标签, 类型, 默认值, 选项枚举)
@@ -229,6 +232,9 @@ SYSTEM_OPTIONS: dict[str, dict[str, tuple[str, str, str, object, tuple | None]]]
         "show_tomorrow": ("显示明日", "Show tomorrow", "bool", False, None),
     },
     "countdown": {},
+    "wallpaper": {
+        "mode": ("模式", "Mode", "choice", "daily", ("daily", "fixed")),
+    },
 }
 # 通用边框选项：paint_system 统一绘制；时钟走设备端字形拼装，边框无效，不提供
 _BORDER_OPTION = ("显示边框", "Show border", "bool", False, None)
@@ -445,6 +451,11 @@ def _validate_block(
         asset = block.get("asset")
         if not isinstance(asset, str) or asset not in asset_ids:
             details.append(_detail(f"{prefix}.asset", "ASSET_INVALID", "图片积木引用的素材不存在"))
+    if widget == "wallpaper":
+        mode = block_options("wallpaper", block.get("options")).get("mode") or "daily"
+        asset = block.get("asset")
+        if mode == "fixed" and (not isinstance(asset, str) or asset not in asset_ids):
+            details.append(_detail(f"{prefix}.asset", "ASSET_INVALID", "固定模式须选择存在的图片素材"))
     if widget == "text":
         text = str(block.get("text") or "")
         if not text.strip() or len(text) > BLOCK_TEXT_MAX or "\n" in text or "\r" in text:

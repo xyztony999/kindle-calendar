@@ -34,6 +34,7 @@ RUN if [ -n "$PIP_INDEX_URL" ]; then pip config set global.index-url "$PIP_INDEX
     && pip install --no-cache-dir -r requirements.txt gunicorn
 
 COPY server/ server/
+COPY docs/ docs/
 COPY kindle/dash.sh kindle/dash.sh
 COPY config.example.yaml config.example.yaml
 COPY start.sh start.sh

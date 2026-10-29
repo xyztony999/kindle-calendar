@@ -1,5 +1,51 @@
 ---
 pipeline:
+  - module: admin-redesign
+    title: "管理端「台历工房」视觉重设计（分区块化+衬线分区头+分区导航，纯 CSS/导航层）"
+    stages:
+      design:
+        status: complete
+        note: "2026-10-29 $frontend-design 流程；用户拍板 A/A/A（台历工房/保持顺序/只动 CSS+导航）。计划自审：暖纸+衬线为既有品牌延续（deliberate），差异化锚点取渲染器 hairline 与台历页眉语言。"
+      code:
+        status: complete
+        note: "2026-10-29 已实现并验证：<style> 全量重写（分区块化/发丝线/衬线分区头/胶囊按钮/新 token，DOM id/JS/文案不动）+ 工具条内分区导航（scroll-spy 区间判定兼容双列+showView 重算）+ 空态提示/暗色对比/链接默认蓝修复。134 单测+E2E+几何断言（42px/吸顶/390px）全过。Gate 2 PASS 待用户验收，未提交。报告 05-reports/gate2-admin-redesign.md"
+    artifacts:
+      reports:
+        - 05-reports/gate2-admin-redesign.md
+  - module: experience-pack-1
+    title: "体验包一轮：每日一图积木、生日特别版式、拉取间隔可调、ICS 源启停"
+    stages:
+      design:
+        status: complete
+        note: "2026-10-29 增量 Gate 1 PASS，用户按推荐执行（七项打包分两轮：轮 1 内容与设备体验 / 轮 2 数据与治理；wallpaper 双模式；备份不嵌素材）。"
+      code:
+        status: complete
+        note: "2026-10-29 轮 1 已实现并验证：wallpaper 积木（DESIGN 排除泛化分支修复渲染纯白 P0）、anniv_today 装饰框、FETCH_INTERVAL env+dash.sh 消费、ICS 对象数组启停。131 单测+E2E+像素冒烟全过。Gate 2 PASS 待用户验收，未提交。报告 05-reports/gate2-experience-pack-1.md"
+    artifacts:
+      prd:
+        - 02-detailed/prd/prd-experience-pack-1.md
+      api:
+        - 02-detailed/api/api-experience-pack-1.md
+      reports:
+        - 05-reports/gate1-experience-pack-1.md
+        - 05-reports/gate2-experience-pack-1.md
+  - module: experience-pack-1-round2
+    title: "体验包二轮：一键全量备份/恢复、数据源健康历史点阵、docs 单一来源"
+    stages:
+      design:
+        status: complete
+        note: "2026-10-29 轮 2（同 Gate 1 打板）：备份 zip 白名单三成员不嵌素材（OSS key 复用，gc_assets=False 防 GC 误删）；健康历史单 JSON 快照 7 天+SVG 点阵；docs 走 /docs 路由+Dockerfile COPY。"
+      code:
+        status: complete
+        note: "2026-10-29 轮 2 已实现并验证：备份/恢复端点（round-trip+坏 zip 400）+管理端按钮；health_history.py+/admin/api/sources/history+SVG 点阵（绿红灰）；/docs 路由（穿越 404 实测）+删 static/docs 双份。134 单测+E2E+探测全过。Gate 2 PASS 待用户验收，未提交。报告 05-reports/gate2-experience-pack-1-round2.md"
+    artifacts:
+      prd:
+        - 02-detailed/prd/prd-experience-pack-1.md
+      api:
+        - 02-detailed/api/api-experience-pack-1.md
+      reports:
+        - 05-reports/gate1-experience-pack-1.md
+        - 05-reports/gate2-experience-pack-1-round2.md
   - module: credits
     title: "开源组件说明页 /credits（双语+主题，AGPL/GPL 署名，FBInk 许可更正）"
     stages:
@@ -8,7 +54,7 @@ pipeline:
         note: "2026-10-29 增量 Gate 1 PASS，用户按推荐执行（落地页入口+手写字典）。许可证一手核实：FBInk 实为 GPL-3.0+ 非 MIT（bin/README 误标已更正），recurring-ical-events LGPL-3.0+。"
       code:
         status: complete
-        note: "2026-10-29 已实现并验证：/credits Jinja 页（双语/主题/品牌头）+ 落地页页脚入口 + 接口目录登记 + bin/README 更正。128 单测+E2E PASS（修复 Jinja group.items 方法陷阱 500）。Gate 2 PASS 待用户验收，未提交。报告 05-reports/gate2-credits.md"
+        note: "2026-10-29 已实现并验证：/credits Jinja 页（双语/主题/品牌头）+ 落地页页脚入口 + 接口目录登记 + bin/README 更正。128 单测+E2E PASS（修复 Jinja group.items 方法陷阱 500）。Gate 2 PASS，随 c0c4995 提交推送。报告 05-reports/gate2-credits.md"
     artifacts:
       prd:
         - 02-detailed/prd/prd-credits.md

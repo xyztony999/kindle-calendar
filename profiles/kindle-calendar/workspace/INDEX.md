@@ -20,10 +20,24 @@ pipeline:
         note: "2026-10-29 用户对线上暗色截图反馈'还是太乱'+每日一图/生日版式找不到。诊断：空态裸奔/按钮碎圈/两栏标题竞争/暗色发闷/间距过松；可发现性为设计失误（积木藏在编辑器无提示、自动行为无说明）。"
       code:
         status: complete
-        note: "2026-10-29 已实现并验证：空态引导×3、按钮分级（区域淡底/工具条描边）、间距收紧、右栏标题降级、暗色提亮、一言横排、每日一图与生日版式提示、quote_plan 旧文案更正。134 单测+E2E+暗色视觉断言全过（零测试改动）。Gate 2 PASS 待用户验收，未提交。报告 05-reports/gate2-admin-redesign-iter2.md"
+        note: "2026-10-29 已实现并验证：空态引导×3、按钮分级（区域淡底/工具条描边）、间距收紧、右栏标题降级、暗色提亮、一言横排、每日一图与生日版式提示、quote_plan 旧文案更正。134 单测+E2E+暗色视觉断言全过（零测试改动）。Gate 2 PASS，随 b8f1df9 提交推送；同日附录修复用户实测四点（工具条贴顶/导航可点击性/纪念日焦点/窄屏换行）+导航点击高亮锁定，待 commit。报告 05-reports/gate2-admin-redesign-iter2.md"
     artifacts:
       reports:
         - 05-reports/gate2-admin-redesign-iter2.md
+  - module: admin-tabs
+    title: "管理端页签制重构（五功能域页签，单页长滚动→每次一域）"
+    stages:
+      design:
+        status: complete
+        note: "2026-10-30 用户第三轮反馈'还是太乱'，诊断前两轮调样式已达上限、该动信息架构；Gate 1 PASS 用户拍板页签制/预览归设备/E2E 自适配。"
+      code:
+        status: complete
+        note: "2026-10-30 已实现并验证：五页签 data-tab 显隐（DOM id/渲染函数不动）、scroll-spy 删除、设备页签独占布局收窄居中、切页签回顶。134 单测+两条 E2E（13+1 处 tab 适配）+五页签视觉探测全过。Gate 2 PASS 待用户验收，未提交。报告 05-reports/gate2-admin-tabs.md"
+    artifacts:
+      prd:
+        - 02-detailed/prd/prd-admin-tabs.md
+      reports:
+        - 05-reports/gate2-admin-tabs.md
   - module: experience-pack-1
     title: "体验包一轮：每日一图积木、生日特别版式、拉取间隔可调、ICS 源启停"
     stages:

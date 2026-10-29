@@ -43,6 +43,9 @@ fs.mkdirSync(output, {recursive:true});
   async function placeFirst() {
     await page.locator('#palette-mine .widget-row .w-add').first().click();
   }
+  async function tab(name) {
+    await page.locator(`#tab-nav a[data-tab=${name}]`).click();
+  }
   await page.goto(base + '/admin?lang=zh');
   await page.locator('#password').fill(process.env.UI_TEST_PASSWORD || 'local-ui-verification');
   await page.locator('#login-btn').click();
@@ -73,7 +76,9 @@ fs.mkdirSync(output, {recursive:true});
   assert.equal(await page.locator('#palette-mine .widget-row').count(), 0);
   assert.equal(await page.locator('#def-editor').count(), 0);
   await page.locator('#close-editor').click();
+  await tab('blocks');
   await create('Shared test');
+  await tab('pages');
   await edit();
   await placeFirst();
   await page.locator('#close-editor').click();
@@ -94,12 +99,14 @@ fs.mkdirSync(output, {recursive:true});
   assert.equal(moved.x, 57);
 
   // 卡片删除数据积木（确认框由 dialog 处理器接受），保存后从所有页面移除。
+  await tab('blocks');
   await page.locator('#widget-list .widget-row .w-act.danger').first().click();
   payload = await save();
   assert.equal(payload.widget_defs.length, 0);
   assert.equal(payload.pages.some(p => p.layout.some(b => b.def === defId)), false);
 
   // 编辑器内抽屉：不关闭弹窗完成新建、放置与层级调整。
+  await tab('pages');
   await edit();
   await page.locator('#palette-mine button.btn', {hasText:/管理我的积木|Manage my blocks/}).click();
   await page.locator('#widget-drawer:not([hidden])').waitFor();
@@ -124,6 +131,7 @@ fs.mkdirSync(output, {recursive:true});
   let uploadHit = false;
   let finishUpload;
   const uploadGate = new Promise(resolve => { finishUpload = resolve; });
+  await tab('pages');
   await page.route('**/admin/api/assets', async route => {
     uploadHit = true;
     await uploadGate;
@@ -164,6 +172,7 @@ fs.mkdirSync(output, {recursive:true});
     if (q === 'old') await new Promise(resolve => setTimeout(resolve, 700));
     await route.fulfill({json:{ok:true,data:{candidates:[{name:q,admin1:'Test',country:'CN',latitude:30,longitude:120,timezone:'Asia/Shanghai'}]}}}).catch(() => {});
   });
+  await tab('env');
   const geo = page.locator('#geo-q');
   await geo.fill('old');
   await page.waitForRequest('**/admin/api/geocode?q=old');
@@ -188,6 +197,7 @@ fs.mkdirSync(output, {recursive:true});
   assert.equal((await geo.boundingBox()).height, 42);
 
   // sysopt-layout-fix：系统/文字选项行式布局——单选钮不重叠、点档位文字激活该档、控件在标签盒内
+  await tab('pages');
   await edit();
   await page.locator('#stage .block').filter({hasText: /时钟|Clock/}).first().click();
   await page.locator('#appearance-controls:not([hidden])').waitFor();
@@ -250,7 +260,9 @@ fs.mkdirSync(output, {recursive:true});
       await edit();
       await page.locator('#draft-img:not([hidden])').waitFor();
       await page.locator('#close-editor').click();
+      await tab('blocks');
       await create('Style preview');
+      await tab('pages');
       await edit();
       await placeFirst();
       await page.locator('#block-style-hero').focus();
@@ -261,13 +273,18 @@ fs.mkdirSync(output, {recursive:true});
     }
   }
   await page.setViewportSize({width:390,height:844});
-  await page.locator('#card-quote').scrollIntoViewIfNeeded();
+  await tab('env');
+  // 页签化后 env 内容变短，需滚动到底部才能触发工具条吸顶。
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   const toolbar = await page.locator('.settings-toolbar').boundingBox();
   assert.ok(toolbar.y >= 0 && toolbar.y < 16);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await tab('pages');
   await edit();
   await page.locator('#close-editor').click();
+  await tab('blocks');
   await create('Mobile preview');
+  await tab('pages');
   await edit();
   await placeFirst();
   await page.locator('#block-appearance').scrollIntoViewIfNeeded();

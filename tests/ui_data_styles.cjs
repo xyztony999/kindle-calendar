@@ -109,6 +109,7 @@ fs.mkdirSync(output,{recursive:true});
   assert.equal(payload.pages[0].layout.find(b=>b.id==='b11111111').style,'horizontal');
 
   // Four compact fields get only list/grid choices and default to grid.
+  await page.locator('#tab-nav a[data-tab=blocks]').click();
   await page.locator('#widget-add').click();
   await page.locator('#widget-name').fill('Four metrics');
   for(const id of ['weather.temperature','weather.description','weather.humidity','weather.wind_speed'])
@@ -116,6 +117,7 @@ fs.mkdirSync(output,{recursive:true});
   await page.locator('#widget-save').click();
   await page.locator('#widget-form').waitFor({state:'hidden'});
   await page.locator('#widget-list .widget-row .w-name').filter({hasText:'Four metrics'}).waitFor();
+  await page.locator('#tab-nav a[data-tab=pages]').click();
   await edit();
   await page.locator('#palette-mine .widget-row .w-add').filter({hasText:'Four metrics'}).click();
   assert.deepEqual(await page.locator('#block-styles input').evaluateAll(inputs=>inputs.map(el=>el.value)),['rows','grid']);

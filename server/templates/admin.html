@@ -135,6 +135,10 @@
     .col-side .card:first-child { border-top: 0; padding-top: 4px; }
   }
   .col-main .card:first-child { border-top: 0; padding-top: 4px; }
+  .layout.only-device { flex-direction: column; }
+  .layout.only-device .col-side { max-width: 720px; margin: 0 auto; width: 100%; }
+  .layout.only-device .col-main { display: none; }
+  .layout:not(:has(.col-side:not([hidden]))) .col-main { max-width: 760px; margin: 0 auto; width: 100%; }
   label.row, .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
   input[type="text"], input[type="password"], input[type="number"], input[type="search"] {
     border: 1px solid var(--line);
@@ -155,7 +159,7 @@
   /* ── 粘性工具条 + 分区导航（台历页缘索引） ── */
   .settings-toolbar {
     position: sticky;
-    top: 8px;
+    top: 0;
     z-index: 4;
     display: flex;
     flex-wrap: wrap;
@@ -187,7 +191,9 @@
     text-decoration: none;
     white-space: nowrap;
     border-radius: 999px;
+    cursor: pointer;
   }
+  .section-nav a:hover { color: var(--ink); }
   .section-nav a.on {
     color: var(--accent);
     font-weight: 600;
@@ -526,6 +532,10 @@
     .section-head h2 { font-size: 18px; }
     .card { scroll-margin-top: 150px; }
   }
+  @media (max-width: 640px) {
+    .widget-row { flex-wrap: wrap; padding: 8px 10px; }
+    .widget-row .w-name, .widget-row .w-meta { flex-basis: 100%; }
+  }
   html[data-theme="dark"] .handle { color: #d8d0c0; }
   @media (prefers-color-scheme: dark) {
     html:not([data-theme="light"]) .handle { color: #d8d0c0; }
@@ -683,17 +693,17 @@
         <button class="btn danger" id="reset-btn" type="button">{{ ui.reset }}</button>
         <input id="import-file" type="file" accept=".json,application/json" hidden>
       </div>
-      <nav class="section-nav" id="section-nav" aria-label="{{ ui.section_nav_label }}">
-        <a href="#card-pages">{{ ui.section_pages }}</a>
-        <a href="#card-widgets">{{ ui.section_widgets }}</a>
-        <a href="#card-schedule">{{ ui.section_schedule }}</a>
-        <a href="#card-location">{{ ui.section_env }}</a>
-        <a href="#card-device">{{ ui.section_status }}</a>
+      <nav class="section-nav" id="tab-nav" role="tablist" aria-label="{{ ui.section_nav_label }}">
+        <a href="#card-pages" data-tab="pages" role="tab" aria-selected="true">{{ ui.section_pages }}</a>
+        <a href="#card-widgets" data-tab="blocks" role="tab" aria-selected="false">{{ ui.section_widgets }}</a>
+        <a href="#card-schedule" data-tab="schedule" role="tab" aria-selected="false">{{ ui.section_schedule }}</a>
+        <a href="#card-location" data-tab="env" role="tab" aria-selected="false">{{ ui.section_env }}</a>
+        <a href="#card-device" data-tab="device" role="tab" aria-selected="false">{{ ui.section_status }}</a>
       </nav>
     </section>
     <div class="layout">
-      <div class="col-main">
-        <section class="card" id="card-pages">
+      <div class="col-main" data-tab-group="main">
+        <section class="card" id="card-pages" data-tab="pages">
           <div class="section-head"><h2>{{ ui.pages_h2 }}</h2><button class="btn" id="add-page" type="button">+ {{ ui.add_page }}</button></div>
           <label class="switch"><input id="rotate-enabled" type="checkbox"> {{ ui.rotate }}</label>
           <div id="page-list"></div>
@@ -707,7 +717,7 @@
           <div class="section-head"><h3>{{ ui.presets_h2 }}</h3><button class="btn" id="save-preset" type="button">{{ ui.save_preset }}</button></div>
           <div id="preset-list"></div>
         </section>
-        <section class="card" id="card-widgets">
+        <section class="card" id="card-widgets" data-tab="blocks">
           <div class="section-head"><h2>{{ ui.widgets_h2 }}</h2><button class="btn wm-add" id="widget-add" type="button">+ {{ ui.add_data_widget }}</button></div>
           <form class="wm-form" id="widget-form" hidden>
             <label class="field">{{ ui.widget_name }}
@@ -725,7 +735,7 @@
           <div class="widget-list wm-assets" id="asset-list"></div>
           <p class="muted card-hint">{{ ui.wallpaper_hint }}</p>
         </section>
-        <section class="card" id="card-schedule">
+        <section class="card" id="card-schedule" data-tab="schedule">
           <h2>{{ ui.schedule_h2 }}</h2>
           <h3>{{ ui.ics_h2 }}</h3>
           <div id="ics-list"></div>
@@ -736,7 +746,7 @@
           <button class="btn" id="add-anniv" type="button">+ {{ ui.add_anniv }}</button>
           <p class="muted card-hint">{{ ui.anniv_hint }}</p>
         </section>
-        <section class="card" id="card-location">
+        <section class="card" id="card-location" data-tab="env">
           <span id="loc-flag" class="corner" hidden>{{ ui.loc_flag }}</span>
           <h2>{{ ui.city_h2 }}</h2>
           <div class="search-line">
@@ -768,7 +778,7 @@
             <option value="Australia/Sydney"><option value="Pacific/Auckland"><option value="UTC">
           </datalist>
         </section>
-        <section class="card" id="card-quote">
+        <section class="card" id="card-quote" data-tab="env">
           <h2>{{ ui.quote_h2 }}</h2>
           <div class="radios" id="quote-modes"></div>
           <div class="field-checks" id="quote-types" hidden></div>
@@ -780,17 +790,17 @@
           </div>
         </section>
       </div>
-      <div class="col-side">
-        <section class="card" id="card-device">
+      <div class="col-side" data-tab-group="device">
+        <section class="card" id="card-device" data-tab="device">
           <h2>{{ ui.device_h2 }}</h2>
           <div id="device-body" class="muted">—</div>
         </section>
-        <section class="card" id="card-sources">
+        <section class="card" id="card-sources" data-tab="device">
           <h2>{{ ui.sources_h2 }}</h2>
           <div id="sources-body" class="muted">—</div>
           <div id="sources-history" class="sources-history"></div>
         </section>
-        <section class="card">
+        <section class="card" data-tab="device">
           <h2>{{ ui.preview_h2 }}</h2>
           <p id="preview-hint" class="muted" hidden>{{ ui.preview_hint }}</p>
           <div id="previews" class="previews"></div>
@@ -3118,8 +3128,8 @@
     state.anniversaries.push({id: hexId("e"), name: "", date: "", repeat: "none"});
     markDirty();
     renderScheduleCard();
-    const inputs = $("anniv-list").querySelectorAll("input");
-    if (inputs.length) inputs[inputs.length - 1].focus();
+    const names = $("anniv-list").querySelectorAll("input.w-name");
+    if (names.length) names[names.length - 1].focus();
   });
 
   $("add-page").addEventListener("click", () => {
@@ -3503,40 +3513,32 @@
   });
   renderThemeBtn();
 
-  // 分区导航：滚动时高亮当前分区（rAF 节流）。
-  // 双列布局下右栏分区 top 很小，按「视口顶线落在哪块区间内」判定，nav 顺序取先命中者。
-  (function () {
-    var nav = document.getElementById("section-nav");
-    if (!nav) return;
-    var links = Array.prototype.slice.call(nav.querySelectorAll("a"));
-    var map = links
-      .map(function (a) { return { a: a, sec: document.querySelector(a.getAttribute("href")) }; })
-      .filter(function (m) { return m.sec; });
-    if (!map.length) return;
-    function paint() {
-      var line = window.scrollY + 170;
-      var current = null;
-      map.forEach(function (m) {
-        var top = m.sec.getBoundingClientRect().top + window.scrollY;
-        var bottom = top + m.sec.getBoundingClientRect().height;
-        if (top <= line && line < bottom && !current) current = m;
+  // 页签制：切换功能域（容器/卡片显隐），渲染函数与 DOM id 不动
+  var tabLinks = Array.prototype.slice.call(document.querySelectorAll("#tab-nav a[data-tab]"));
+  function showTab(name) {
+    tabLinks.forEach(function (a) {
+      var on = a.getAttribute("data-tab") === name;
+      a.classList.toggle("on", on);
+      a.setAttribute("aria-selected", String(on));
+    });
+    var groups = document.querySelectorAll("[data-tab-group]");
+    groups.forEach(function (el) {
+      el.hidden = el.getAttribute("data-tab-group") === "device" ? name !== "device" : name === "device";
+    });
+    document.querySelectorAll(".card[data-tab]").forEach(function (card) {
+      card.hidden = card.getAttribute("data-tab") !== name;
+    });
+    window.scrollTo(0, 0);
+  }
+  if (tabLinks.length) {
+    tabLinks.forEach(function (a) {
+      a.addEventListener("click", function (event) {
+        event.preventDefault();
+        showTab(a.getAttribute("data-tab"));
       });
-      if (!current) {
-        map.forEach(function (m) {
-          if (m.sec.getBoundingClientRect().top + window.scrollY <= line) current = m;
-        });
-      }
-      current = current || map[0];
-      links.forEach(function (a) { a.classList.toggle("on", a === current.a); });
-    }
-    var ticking = false;
-    window.addEventListener("scroll", function () {
-      if (ticking) return;
-      ticking = true;
-      requestAnimationFrame(function () { paint(); ticking = false; });
-    }, { passive: true });
-    paint();
-  })();
+    });
+    showTab("pages");
+  }
 
   showView(boot.view === "settings" ? "settings" : boot.view === "disabled" ? "disabled" : "login");
   if (boot.view === "settings") {

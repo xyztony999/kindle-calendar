@@ -52,7 +52,7 @@
     border: 0;
     border-top: 1px solid var(--hair);
     border-radius: 0;
-    padding: 20px 0 24px;
+    padding: 16px 0 18px;
     margin-bottom: 0;
     position: relative;
     scroll-margin-top: 128px;
@@ -78,13 +78,18 @@
   }
   .brand-icon { width: 28px; height: 28px; flex: none; }
   .nav-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .topbar .btn, .btn {
-    border: 1px solid var(--line);
-    background: var(--card);
+  .btn {
+    border: 1px solid transparent;
+    background: color-mix(in srgb, var(--ink) 6%, transparent);
     border-radius: 999px;
     min-height: 34px;
     padding: 0 13px;
     font-size: 14px;
+  }
+  .btn:hover { border-color: var(--line); }
+  .settings-toolbar .btn, .topbar .btn, .palette .btn, .canvas-panel .btn, .wm-drawer .btn, .login-card .btn, .editor-actions .btn {
+    border-color: var(--line);
+    background: var(--card);
   }
   .topbar .btn.icon-btn {
     width: 34px; height: 34px;
@@ -189,7 +194,7 @@
     background: var(--accent-soft);
   }
   /* ── 分区头：衬线 + 左竖线（台历页眉语言） ── */
-  .section-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .section-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
   .section-head h2 {
     margin: 0;
     font-family: var(--serif);
@@ -199,6 +204,12 @@
     padding-left: 11px;
     border-left: 3px solid var(--ink);
   }
+  .col-side .section-head h2 {
+    font-size: 15px;
+    font-weight: 600;
+    padding-left: 8px;
+    border-left-width: 2px;
+  }
   .section-head .btn { min-height: 34px; }
   .editor-actions { display: flex; gap: 8px; flex-wrap: wrap; }
   .editor-note { margin: -6px 0 16px; }
@@ -206,6 +217,8 @@
   .style-sample .sample-row b { white-space: nowrap; }
   .sample-label { color: var(--mid); font-size: 10px; white-space: nowrap; }
   .widget-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+  .widget-empty { margin: 2px 0 6px; font-size: 13px; }
+  .card-hint { margin: 10px 0 0; font-size: 13px; }
   .widget-row {
     display: flex; align-items: center; gap: 8px;
     border: 1px solid var(--hair); border-radius: var(--radius);
@@ -258,7 +271,8 @@
   .handle { color: var(--mid); text-align: center; user-select: none; }
   .switch { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
   .switch input { width: 16px; height: 16px; }
-  .radios label { display: block; margin-bottom: 6px; }
+  .radios { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+  .radios label { display: inline-flex; align-items: center; gap: 5px; }
   .badge {
     display: inline-block;
     border-radius: 999px;
@@ -520,10 +534,10 @@
     --ink: #efe9dd;
     --mid: #b5ac9d;
     --faint: #8f8676;
-    --line: #3f382e;
-    --hair: #2e2920;
-    --paper: #17140f;
-    --card: #211d16;
+    --line: #4a4234;
+    --hair: #373023;
+    --paper: #1b1712;
+    --card: #292318;
     --accent: #d98a70;
     --accent-soft: #3a241b;
     --ok: #8fd4ae;
@@ -536,10 +550,10 @@
       --ink: #efe9dd;
       --mid: #b5ac9d;
       --faint: #8f8676;
-      --line: #3f382e;
-      --hair: #2e2920;
-      --paper: #17140f;
-      --card: #211d16;
+      --line: #4a4234;
+      --hair: #373023;
+      --paper: #1b1712;
+      --card: #292318;
       --accent: #d98a70;
       --accent-soft: #3a241b;
       --ok: #8fd4ae;
@@ -709,6 +723,7 @@
           <div class="widget-list wm-list" id="widget-list"></div>
           <h3 class="wm-assets-title" id="assets-title" hidden>{{ ui.image_assets_h2 }}</h3>
           <div class="widget-list wm-assets" id="asset-list"></div>
+          <p class="muted card-hint">{{ ui.wallpaper_hint }}</p>
         </section>
         <section class="card" id="card-schedule">
           <h2>{{ ui.schedule_h2 }}</h2>
@@ -719,6 +734,7 @@
           <h3>{{ ui.anniv_h2 }}</h3>
           <div id="anniv-list"></div>
           <button class="btn" id="add-anniv" type="button">+ {{ ui.add_anniv }}</button>
+          <p class="muted card-hint">{{ ui.anniv_hint }}</p>
         </section>
         <section class="card" id="card-location">
           <span id="loc-flag" class="corner" hidden>{{ ui.loc_flag }}</span>
@@ -3007,6 +3023,12 @@
       row.append(on, input, meta, del);
       icsList.appendChild(row);
     });
+    if (!(state.ics || {}).urls || !state.ics.urls.length) {
+      const empty = document.createElement("p");
+      empty.className = "muted widget-empty";
+      empty.textContent = T.ics_empty;
+      icsList.appendChild(empty);
+    }
     const annivList = $("anniv-list");
     annivList.replaceChildren();
     (state.anniversaries || []).forEach((item, index) => {
@@ -3065,6 +3087,12 @@
       row.append(name, dateInput, repeat, used, del);
       annivList.appendChild(row);
     });
+    if (!(state.anniversaries || []).length) {
+      const empty = document.createElement("p");
+      empty.className = "muted widget-empty";
+      empty.textContent = T.anniv_empty;
+      annivList.appendChild(empty);
+    }
   }
 
   $("add-ics").addEventListener("click", () => {

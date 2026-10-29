@@ -12,6 +12,18 @@ pipeline:
     artifacts:
       reports:
         - 05-reports/gate2-admin-redesign.md
+  - module: admin-redesign-iter2
+    title: "管理端设计收敛迭代（空态引导/按钮分级/暗色提亮）与可发现性补丁"
+    stages:
+      design:
+        status: complete
+        note: "2026-10-29 用户对线上暗色截图反馈'还是太乱'+每日一图/生日版式找不到。诊断：空态裸奔/按钮碎圈/两栏标题竞争/暗色发闷/间距过松；可发现性为设计失误（积木藏在编辑器无提示、自动行为无说明）。"
+      code:
+        status: complete
+        note: "2026-10-29 已实现并验证：空态引导×3、按钮分级（区域淡底/工具条描边）、间距收紧、右栏标题降级、暗色提亮、一言横排、每日一图与生日版式提示、quote_plan 旧文案更正。134 单测+E2E+暗色视觉断言全过（零测试改动）。Gate 2 PASS 待用户验收，未提交。报告 05-reports/gate2-admin-redesign-iter2.md"
+    artifacts:
+      reports:
+        - 05-reports/gate2-admin-redesign-iter2.md
   - module: experience-pack-1
     title: "体验包一轮：每日一图积木、生日特别版式、拉取间隔可调、ICS 源启停"
     stages:

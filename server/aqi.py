@@ -41,7 +41,7 @@ class AirQuality:
 
 
 # 数据源健康状态（内存态，供管理端展示）
-_status: dict = {"ok": False, "at": None, "error": "", "enabled": True}
+_status: dict = {"ok": False, "at": None, "error": "", "enabled": True, "value": None}
 
 
 def health() -> dict:
@@ -66,7 +66,7 @@ def fetch_aqi(latitude: float, longitude: float, timeout: float = 10) -> AirQual
             _status.update(ok=False, at=datetime.now(timezone.utc).isoformat(timespec="seconds"), error="AQI 数值缺失或越界")
             return None
         us_aqi = int(round(value))
-        _status.update(ok=True, at=datetime.now(timezone.utc).isoformat(timespec="seconds"), error="")
+        _status.update(ok=True, at=datetime.now(timezone.utc).isoformat(timespec="seconds"), error="", value=us_aqi)
         return AirQuality(us_aqi=us_aqi, level=level_zh(us_aqi))
     except Exception as exc:
         log.warning("AQI 拉取失败: %s", exc)

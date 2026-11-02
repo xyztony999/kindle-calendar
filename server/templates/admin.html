@@ -55,7 +55,7 @@
     padding: 16px 0 18px;
     margin-bottom: 0;
     position: relative;
-    scroll-margin-top: 128px;
+    scroll-margin-top: 80px;
   }
   .topbar {
     display: flex;
@@ -87,7 +87,7 @@
     font-size: 14px;
   }
   .btn:hover { border-color: var(--line); }
-  .settings-toolbar .btn, .topbar .btn, .palette .btn, .canvas-panel .btn, .wm-drawer .btn, .login-card .btn, .editor-actions .btn {
+  .main-bar .btn, .topbar .btn, .palette .btn, .canvas-panel .btn, .wm-drawer .btn, .login-card .btn, .editor-actions .btn {
     border-color: var(--line);
     background: var(--card);
   }
@@ -126,19 +126,13 @@
     margin-bottom: 14px;
   }
   .dirty { color: var(--warn); font-weight: 650; }
-  .layout { display: flex; flex-direction: column; gap: 0; }
-  .col-side { min-width: 0; }
+  #toolbar-status.dirty { color: var(--warn); font-weight: 650; }
+  .admin-shell { display: flex; flex-direction: column; gap: 14px; }
   @media (min-width: 768px) {
-    .layout { flex-direction: row; align-items: flex-start; gap: 40px; }
-    .col-main { flex: 1.3; min-width: 0; }
-    .col-side { flex: 0.8; min-width: 280px; }
-    .col-side .card:first-child { border-top: 0; padding-top: 4px; }
+    .admin-shell { flex-direction: row; align-items: flex-start; gap: 26px; }
+    .admin-main { flex: 1; min-width: 0; max-width: 760px; }
+    .side-nav { width: 196px; flex: none; position: sticky; top: 12px; }
   }
-  .col-main .card:first-child { border-top: 0; padding-top: 4px; }
-  .layout.only-device { flex-direction: column; }
-  .layout.only-device .col-side { max-width: 720px; margin: 0 auto; width: 100%; }
-  .layout.only-device .col-main { display: none; }
-  .layout:not(:has(.col-side:not([hidden]))) .col-main { max-width: 760px; margin: 0 auto; width: 100%; }
   label.row, .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
   input[type="text"], input[type="password"], input[type="number"], input[type="search"] {
     border: 1px solid var(--line);
@@ -147,7 +141,7 @@
     background: var(--card);
     width: 100%;
   }
-  input:focus-visible, .btn:focus-visible, .seg a:focus-visible, .section-nav a:focus-visible {
+  input:focus-visible, .btn:focus-visible, .seg a:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 1px;
   }
@@ -156,8 +150,58 @@
   .btn.primary { background: var(--ink); color: var(--card); border-color: var(--ink); }
   .btn.danger { color: var(--bad); border-color: #dcb3ac; background: var(--card); }
   .btn:disabled { opacity: 0.55; cursor: default; }
-  /* ── 粘性工具条 + 分区导航（台历页缘索引） ── */
-  .settings-toolbar {
+  /* ── 侧栏制（v2.4）：常驻分区导航 + 数据操作收纳 ── */
+  .side-nav { display: flex; flex-direction: column; gap: 1px; }
+  .side-group { font-size: 11px; color: var(--faint); letter-spacing: 0.08em; margin: 12px 10px 4px; }
+  .side-nav .side-group:first-child { margin-top: 0; }
+  .side-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-align: left;
+    border: 0;
+    background: none;
+    color: var(--mid);
+    font-size: 13.5px;
+    padding: 7px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .side-item:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 6%, transparent); }
+  .side-item.on { color: var(--accent); font-weight: 600; background: var(--accent-soft); }
+  .side-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .side-dot, .side-live { width: 7px; height: 7px; border-radius: 50%; flex: none; margin-left: auto; }
+  .side-dot { background: var(--warn); }
+  .side-live { background: var(--ok); }
+  .side-foot { margin-top: 12px; border-top: 1px solid var(--hair); padding-top: 6px; }
+  @media (min-width: 768px) {
+    /* 桌面端：数据操作常驻为文字链，「更多」折叠开关仅移动端出现 */
+    .side-more summary { display: none; }
+  }
+  .side-more summary {
+    list-style: none;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--mid);
+    padding: 5px 10px;
+    border-radius: 8px;
+  }
+  .side-more summary::-webkit-details-marker { display: none; }
+  .side-more summary:hover { color: var(--ink); }
+  .side-ops { display: flex; flex-wrap: wrap; gap: 2px 6px; padding: 2px 4px; }
+  .side-ops .btn {
+    border: 0;
+    background: none;
+    min-height: 0;
+    padding: 4px 6px;
+    font-size: 12.5px;
+    color: var(--mid);
+    border-radius: 6px;
+  }
+  .side-ops .btn:hover { color: var(--ink); text-decoration: underline; }
+  .side-ops .btn.danger { color: var(--bad); }
+  /* ── 主区标题栏：区标题 + 副题 + 保存随区 ── */
+  .main-bar {
     position: sticky;
     top: 0;
     z-index: 4;
@@ -170,51 +214,39 @@
     border: 1px solid var(--line);
     border-radius: 12px;
     box-shadow: 0 6px 20px rgba(36, 31, 23, 0.07);
-    padding: 10px 12px 8px;
+    padding: 10px 14px;
   }
-  .settings-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  .section-nav {
-    flex-basis: 100%;
-    display: flex;
-    gap: 2px;
-    overflow-x: auto;
-    border-top: 1px solid var(--hair);
-    margin-top: 8px;
-    padding-top: 6px;
-    scrollbar-width: none;
-  }
-  .section-nav::-webkit-scrollbar { display: none; }
-  .section-nav a {
-    padding: 5px 12px;
-    font-size: 13px;
-    color: var(--mid);
-    text-decoration: none;
-    white-space: nowrap;
-    border-radius: 999px;
-    cursor: pointer;
-  }
-  .section-nav a:hover { color: var(--ink); }
-  .section-nav a.on {
-    color: var(--accent);
-    font-weight: 600;
-    background: var(--accent-soft);
-  }
-  /* ── 分区头：衬线 + 左竖线（台历页眉语言） ── */
-  .section-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
-  .section-head h2 {
+  .main-title {
     margin: 0;
     font-family: var(--serif);
-    font-size: 20px;
+    font-size: 19px;
     font-weight: 600;
-    line-height: 1.2;
+    line-height: 1.25;
     padding-left: 11px;
     border-left: 3px solid var(--ink);
   }
-  .col-side .section-head h2 {
+  .main-sub { margin: 2px 0 0 11px; font-size: 12.5px; color: var(--mid); }
+  .main-heading { min-width: 0; }
+  .settings-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  /* ── 分区头：衬线 + 左竖线（台历页眉语言） ── */
+  .section-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .card h3 {
+    margin: 18px 0 8px;
+    font-family: var(--serif);
     font-size: 15px;
     font-weight: 600;
     padding-left: 8px;
-    border-left-width: 2px;
+    border-left: 2px solid var(--ink);
+  }
+  .card h3:first-child { margin-top: 0; }
+  .card[data-section="device"] > h2 {
+    margin: 0 0 10px;
+    font-family: var(--serif);
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.2;
+    padding-left: 8px;
+    border-left: 2px solid var(--ink);
   }
   .section-head .btn { min-height: 34px; }
   .editor-actions { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -529,8 +561,51 @@
     .canvas-stage-panel { order: -1; }
   }
   @media (max-width: 767px) {
-    .section-head h2 { font-size: 18px; }
     .card { scroll-margin-top: 150px; }
+    /* 侧栏折叠为横滑分区条；数据操作收进「更多」菜单 */
+    .side-nav {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      flex-direction: row;
+      align-items: center;
+      gap: 2px;
+      width: 100%;
+      overflow-x: auto;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      box-shadow: 0 6px 20px rgba(36, 31, 23, 0.07);
+      padding: 7px 10px;
+      scrollbar-width: none;
+    }
+    .side-nav::-webkit-scrollbar { display: none; }
+    /* 「更多」菜单展开时放行裁剪，让下拉浮层逸出横滑条 */
+    .side-nav:has(.side-more[open]) { overflow: visible; }
+    .side-group { display: none; }
+    .side-item { white-space: nowrap; padding: 6px 12px; font-size: 13px; }
+    .side-dot, .side-live { margin-left: 2px; }
+    .side-foot { margin: 0 0 0 auto; border: 0; padding: 0; flex: none; }
+    .side-more { position: relative; }
+    .side-more summary::after { content: " ⌄"; }
+    .side-ops {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 8px);
+      z-index: 6;
+      flex-direction: column;
+      align-items: stretch;
+      flex-wrap: nowrap;
+      min-width: 160px;
+      padding: 6px;
+      gap: 0;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      box-shadow: 0 10px 30px rgba(36, 31, 23, 0.16);
+    }
+    .side-ops .btn { padding: 9px 10px; font-size: 13px; }
+    .main-bar { position: sticky; top: 47px; }
   }
   @media (max-width: 640px) {
     .widget-row { flex-wrap: wrap; padding: 8px 10px; }
@@ -679,32 +754,46 @@
     </div>
     <div id="degraded-banner" class="banner" hidden>{{ ui.degraded }}</div>
     <div id="error-summary" class="summary"></div>
-    <section class="card settings-toolbar" aria-label="{{ ui.settings_actions }}">
-      <div class="settings-actions">
-        <button class="btn primary" id="save-btn" type="button">{{ ui.save }}</button>
-        <span id="toolbar-status" class="muted" role="status">{{ ui.saved_state }}</span>
-      </div>
-      <div class="settings-actions">
-        <button class="btn" id="import-btn" type="button">{{ ui.import_ }}</button>
-        <a class="btn" id="export-link" href="/admin/api/settings/export">{{ ui.export }}</a>
-        <button class="btn" id="backup-btn" type="button">{{ ui.backup_btn }}</button>
-        <button class="btn" id="restore-btn" type="button">{{ ui.restore_btn }}</button>
-        <input id="restore-file" type="file" accept=".zip" hidden>
-        <button class="btn danger" id="reset-btn" type="button">{{ ui.reset }}</button>
-        <input id="import-file" type="file" accept=".json,application/json" hidden>
-      </div>
-      <nav class="section-nav" id="tab-nav" role="tablist" aria-label="{{ ui.section_nav_label }}">
-        <a href="#card-pages" data-tab="pages" role="tab" aria-selected="true">{{ ui.section_pages }}</a>
-        <a href="#card-widgets" data-tab="blocks" role="tab" aria-selected="false">{{ ui.section_widgets }}</a>
-        <a href="#card-schedule" data-tab="schedule" role="tab" aria-selected="false">{{ ui.section_schedule }}</a>
-        <a href="#card-location" data-tab="env" role="tab" aria-selected="false">{{ ui.section_env }}</a>
-        <a href="#card-device" data-tab="device" role="tab" aria-selected="false">{{ ui.section_status }}</a>
-      </nav>
-    </section>
-    <div class="layout">
-      <div class="col-main" data-tab-group="main">
-        <section class="card" id="card-pages" data-tab="pages">
-          <div class="section-head"><h2>{{ ui.pages_h2 }}</h2><button class="btn" id="add-page" type="button">+ {{ ui.add_page }}</button></div>
+    <div class="admin-shell">
+      <aside class="side-nav" id="side-nav" aria-label="{{ ui.section_nav_label }}">
+        <div class="side-group">{{ ui.nav_group_edit }}</div>
+        <button class="side-item on" type="button" data-section="pages">{{ ui.section_pages }}<span class="side-dot" data-dirty-dot="pages" hidden></span></button>
+        <button class="side-item" type="button" data-section="blocks">{{ ui.section_widgets }}<span class="side-dot" data-dirty-dot="blocks" hidden></span></button>
+        <button class="side-item" type="button" data-section="schedule">{{ ui.section_schedule }}<span class="side-dot" data-dirty-dot="schedule" hidden></span></button>
+        <div class="side-group">{{ ui.nav_group_sources }}</div>
+        <button class="side-item" type="button" data-section="env">{{ ui.section_env }}<span class="side-dot" data-dirty-dot="env" hidden></span></button>
+        <button class="side-item" type="button" data-section="quote">{{ ui.section_quote }}<span class="side-dot" data-dirty-dot="quote" hidden></span></button>
+        <div class="side-group">{{ ui.nav_group_monitor }}</div>
+        <button class="side-item" type="button" data-section="device">{{ ui.section_status }}<span class="side-live" id="side-live" hidden></span></button>
+        <div class="side-foot">
+          <div class="side-group side-ops-group">{{ ui.nav_group_data }}</div>
+          <details class="side-more" id="side-more" open>
+            <summary>{{ ui.ops_more }}</summary>
+            <div class="side-ops">
+              <button class="btn" id="import-btn" type="button">{{ ui.import_ }}</button>
+              <a class="btn" id="export-link" href="/admin/api/settings/export">{{ ui.export }}</a>
+              <button class="btn" id="backup-btn" type="button">{{ ui.backup_btn }}</button>
+              <button class="btn" id="restore-btn" type="button">{{ ui.restore_btn }}</button>
+              <input id="restore-file" type="file" accept=".zip" hidden>
+              <button class="btn danger" id="reset-btn" type="button">{{ ui.reset }}</button>
+              <input id="import-file" type="file" accept=".json,application/json" hidden>
+            </div>
+          </details>
+        </div>
+      </aside>
+      <main class="admin-main">
+        <div class="main-bar card" aria-label="{{ ui.settings_actions }}">
+          <div class="main-heading">
+            <h2 class="main-title" id="main-title">{{ ui.pages_h2 }}</h2>
+            <p class="main-sub" id="main-sub">{{ ui.section_sub_pages }}</p>
+          </div>
+          <div class="settings-actions">
+            <span id="toolbar-status" class="muted" role="status">{{ ui.saved_state }}</span>
+            <button class="btn primary" id="save-btn" type="button">{{ ui.save }}</button>
+          </div>
+        </div>
+        <section class="card" id="card-pages" data-section="pages">
+          <div class="section-head"><button class="btn" id="add-page" type="button">+ {{ ui.add_page }}</button></div>
           <label class="switch"><input id="rotate-enabled" type="checkbox"> {{ ui.rotate }}</label>
           <div id="page-list"></div>
           <p id="only-today" class="muted" hidden>{{ ui.only_today }}</p>
@@ -717,8 +806,8 @@
           <div class="section-head"><h3>{{ ui.presets_h2 }}</h3><button class="btn" id="save-preset" type="button">{{ ui.save_preset }}</button></div>
           <div id="preset-list"></div>
         </section>
-        <section class="card" id="card-widgets" data-tab="blocks">
-          <div class="section-head"><h2>{{ ui.widgets_h2 }}</h2><button class="btn wm-add" id="widget-add" type="button">+ {{ ui.add_data_widget }}</button></div>
+        <section class="card" id="card-widgets" data-section="blocks">
+          <div class="section-head"><button class="btn wm-add" id="widget-add" type="button">+ {{ ui.add_data_widget }}</button></div>
           <form class="wm-form" id="widget-form" hidden>
             <label class="field">{{ ui.widget_name }}
               <input class="wm-name-input" id="widget-name" type="text" maxlength="20">
@@ -735,8 +824,7 @@
           <div class="widget-list wm-assets" id="asset-list"></div>
           <p class="muted card-hint">{{ ui.wallpaper_hint }}</p>
         </section>
-        <section class="card" id="card-schedule" data-tab="schedule">
-          <h2>{{ ui.schedule_h2 }}</h2>
+        <section class="card" id="card-schedule" data-section="schedule">
           <h3>{{ ui.ics_h2 }}</h3>
           <div id="ics-list"></div>
           <button class="btn" id="add-ics" type="button">+ {{ ui.add_ics }}</button>
@@ -746,9 +834,8 @@
           <button class="btn" id="add-anniv" type="button">+ {{ ui.add_anniv }}</button>
           <p class="muted card-hint">{{ ui.anniv_hint }}</p>
         </section>
-        <section class="card" id="card-location" data-tab="env">
+        <section class="card" id="card-location" data-section="env">
           <span id="loc-flag" class="corner" hidden>{{ ui.loc_flag }}</span>
-          <h2>{{ ui.city_h2 }}</h2>
           <div class="search-line">
             <input id="geo-q" type="search" placeholder="{{ ui.geo_ph }}" maxlength="50" autocomplete="off" role="combobox" aria-label="{{ ui.geo_ph }}" aria-autocomplete="list" aria-controls="geo-list" aria-expanded="false" aria-describedby="geo-status">
             <div id="geo-list" role="listbox"></div>
@@ -778,8 +865,7 @@
             <option value="Australia/Sydney"><option value="Pacific/Auckland"><option value="UTC">
           </datalist>
         </section>
-        <section class="card" id="card-quote" data-tab="env">
-          <h2>{{ ui.quote_h2 }}</h2>
+        <section class="card" id="card-quote" data-section="quote">
           <div class="radios" id="quote-modes"></div>
           <div class="field-checks" id="quote-types" hidden></div>
           <p class="muted quote-plan">{{ ui.quote_plan }} <a href="/docs/quote-library.md" target="_blank" rel="noopener">{{ ui.quote_format }}</a></p>
@@ -789,23 +875,21 @@
             <p id="quote-preview" class="muted"></p>
           </div>
         </section>
-      </div>
-      <div class="col-side" data-tab-group="device">
-        <section class="card" id="card-device" data-tab="device">
+        <section class="card" id="card-device" data-section="device">
           <h2>{{ ui.device_h2 }}</h2>
           <div id="device-body" class="muted">—</div>
         </section>
-        <section class="card" id="card-sources" data-tab="device">
+        <section class="card" id="card-sources" data-section="device">
           <h2>{{ ui.sources_h2 }}</h2>
           <div id="sources-body" class="muted">—</div>
           <div id="sources-history" class="sources-history"></div>
         </section>
-        <section class="card" data-tab="device">
+        <section class="card" id="card-preview" data-section="device">
           <h2>{{ ui.preview_h2 }}</h2>
           <p id="preview-hint" class="muted" hidden>{{ ui.preview_hint }}</p>
           <div id="previews" class="previews"></div>
         </section>
-      </div>
+      </main>
     </div>
   </section>
 </div>
@@ -953,7 +1037,13 @@
   function markDirty() {
     dirty = snapshot(state) !== snapshot(saved);
     $("dirty-flag").hidden = !dirty;
-    $("toolbar-status").textContent = dirty ? T.unsaved : T.saved_state;
+    var dirtyNames = Object.keys(SECTION_KEYS).filter(sectionDirty);
+    document.querySelectorAll("[data-dirty-dot]").forEach(function (dot) {
+      dot.hidden = !sectionDirty(dot.getAttribute("data-dirty-dot"));
+    });
+    const status = $("toolbar-status");
+    status.textContent = dirty ? dirtyNames.length + " " + T.unsaved_sections : T.saved_state;
+    status.classList.toggle("dirty", dirty);
     $("preview-hint").hidden = !dirty;
     $("loc-flag").hidden = !locationDirty();
     window.onbeforeunload = dirty ? (() => "") : null;
@@ -1024,6 +1114,9 @@
       jump.addEventListener("click", () => {
         const el = document.querySelector('[data-field="' + CSS.escape(item.field) + '"]');
         if (el) {
+          // 校验错误可能落在当前隐藏的分区：先切过去再定位
+          const card = el.closest(".card[data-section]");
+          if (card && card.hidden) showSection(card.getAttribute("data-section"), false);
           el.scrollIntoView({behavior: "smooth", block: "center"});
           if (el.focus) el.focus();
         }
@@ -1363,6 +1456,9 @@
     const body = $("device-body");
     body.replaceChildren();
     data = data || {};
+    const live = $("side-live");
+    live.hidden = data.online_state !== "online";
+    live.title = (ONLINE && ONLINE[data.online_state || "unknown"]) || "";
     const line1 = document.createElement("div");
     line1.append(T.connection_word + " ", badge(data.online_state || "unknown", ONLINE));
     const seen = document.createElement("div");
@@ -3513,32 +3609,77 @@
   });
   renderThemeBtn();
 
-  // 页签制：切换功能域（容器/卡片显隐），渲染函数与 DOM id 不动
-  var tabLinks = Array.prototype.slice.call(document.querySelectorAll("#tab-nav a[data-tab]"));
-  function showTab(name) {
-    tabLinks.forEach(function (a) {
-      var on = a.getAttribute("data-tab") === name;
-      a.classList.toggle("on", on);
-      a.setAttribute("aria-selected", String(on));
+  // 侧栏制（v2.4）：分区导航 + hash 路由 + 分区级脏点，渲染函数与 DOM id 不动
+  var SECTION_KEYS = {
+    pages: ["rotation", "pages", "presets"],
+    blocks: ["widget_defs", "assets"],
+    schedule: ["ics", "anniversaries"],
+    env: ["location"],
+    quote: ["quote"],
+    device: []
+  };
+  var SECTION_META = {
+    pages: [T.pages_h2, T.section_sub_pages],
+    blocks: [T.widgets_h2, T.section_sub_widgets],
+    schedule: [T.schedule_h2, T.section_sub_schedule],
+    env: [T.city_h2, T.section_sub_env],
+    quote: [T.quote_h2, T.section_sub_quote],
+    device: [T.device_h2, T.section_sub_device]
+  };
+  var sideItems = Array.prototype.slice.call(document.querySelectorAll("#side-nav .side-item[data-section]"));
+  function sectionDirty(name) {
+    if (!state || !saved) return false;
+    return SECTION_KEYS[name].some(function (key) {
+      return JSON.stringify(state[key]) !== JSON.stringify(saved[key]);
     });
-    var groups = document.querySelectorAll("[data-tab-group]");
-    groups.forEach(function (el) {
-      el.hidden = el.getAttribute("data-tab-group") === "device" ? name !== "device" : name === "device";
-    });
-    document.querySelectorAll(".card[data-tab]").forEach(function (card) {
-      card.hidden = card.getAttribute("data-tab") !== name;
-    });
-    window.scrollTo(0, 0);
   }
-  if (tabLinks.length) {
-    tabLinks.forEach(function (a) {
-      a.addEventListener("click", function (event) {
-        event.preventDefault();
-        showTab(a.getAttribute("data-tab"));
+  function currentSection() {
+    var match = /^#section=(\w+)$/.exec(location.hash || "");
+    return match && SECTION_META[match[1]] ? match[1] : "pages";
+  }
+  var shownSection = "";
+  function showSection(name, syncHash) {
+    shownSection = name;
+    sideItems.forEach(function (item) {
+      var on = item.getAttribute("data-section") === name;
+      item.classList.toggle("on", on);
+      if (on) item.setAttribute("aria-current", "true");
+      else item.removeAttribute("aria-current");
+    });
+    document.querySelectorAll(".card[data-section]").forEach(function (card) {
+      card.hidden = card.getAttribute("data-section") !== name;
+    });
+    $("main-title").textContent = SECTION_META[name][0];
+    $("main-sub").textContent = SECTION_META[name][1];
+    if (syncHash !== false) history.replaceState(null, "", "#section=" + name);
+    window.scrollTo(0, 0);
+    // 分区几何变化（hidden 时 rect 全零），补一次导航重算
+    window.dispatchEvent(new Event("scroll"));
+  }
+  if (sideItems.length) {
+    sideItems.forEach(function (item) {
+      item.addEventListener("click", function () {
+        showSection(item.getAttribute("data-section"));
       });
     });
-    showTab("pages");
+    window.addEventListener("hashchange", function () {
+      var name = currentSection();
+      if (name !== shownSection) showSection(name, false);
+    });
+    showSection(currentSection(), false);
   }
+
+  // 移动端：数据操作收进「更多」菜单；桌面端常驻展开
+  var sideMql = window.matchMedia("(max-width: 767px)");
+  function syncSideMore() {
+    $("side-more").open = !sideMql.matches;
+  }
+  if (sideMql.addEventListener) sideMql.addEventListener("change", syncSideMore);
+  else if (sideMql.addListener) sideMql.addListener(syncSideMore);
+  syncSideMore();
+  document.addEventListener("click", function (event) {
+    if (sideMql.matches && !event.target.closest(".side-more")) $("side-more").open = false;
+  });
 
   showView(boot.view === "settings" ? "settings" : boot.view === "disabled" ? "disabled" : "login");
   if (boot.view === "settings") {

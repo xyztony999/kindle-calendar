@@ -44,7 +44,7 @@ fs.mkdirSync(output, {recursive:true});
     await page.locator('#palette-mine .widget-row .w-add').first().click();
   }
   async function tab(name) {
-    await page.locator(`#tab-nav a[data-tab=${name}]`).click();
+    await page.locator(`#side-nav .side-item[data-section=${name}]`).click();
   }
   await page.goto(base + '/admin?lang=zh');
   await page.locator('#password').fill(process.env.UI_TEST_PASSWORD || 'local-ui-verification');
@@ -52,7 +52,24 @@ fs.mkdirSync(output, {recursive:true});
   await page.locator('#view-settings').waitFor({state:'visible'});
   const pageCount = await page.locator('#page-list .page-row').count();
   assert.equal(await page.locator('#card-pages .section-head #add-page').count(), 1);
-  assert.equal(await page.locator('.settings-toolbar #save-btn').count(), 1);
+  assert.equal(await page.locator('.main-bar #save-btn').count(), 1);
+  // 侧栏制：分区总览常驻 + 分区级脏点 + hash 路由 + 城市/一言拆平
+  assert.equal(await page.locator('#side-nav .side-item[data-section]').count(), 6);
+  assert.equal(await page.locator('[data-dirty-dot="pages"]').isVisible(), false);
+  const dwellProbe = page.locator('#page-list .page-row input[type=number]').first();
+  const dwellBase = await dwellProbe.inputValue();
+  await dwellProbe.fill(String(Number(dwellBase) + 1));
+  assert.equal(await page.locator('[data-dirty-dot="pages"]').isVisible(), true);
+  assert.match(await page.locator('#toolbar-status').innerText(), /1\s*处未保存|1\s*sections unsaved/);
+  await dwellProbe.fill(dwellBase);
+  assert.equal(await page.locator('[data-dirty-dot="pages"]').isVisible(), false);
+  await tab('schedule');
+  assert.equal(page.url().includes('#section=schedule'), true);
+  assert.match(await page.locator('#main-title').innerText(), /日程与倒计时|Schedule/);
+  await tab('quote');
+  assert.equal(await page.locator('#card-quote').isVisible(), true);
+  assert.equal(await page.locator('#card-location').isVisible(), false);
+  await tab('pages');
   assert.equal(await page.locator('#geo-btn').count(), 0);
   await page.locator('#add-page').click();
   await page.locator('#editor-page-name').fill('Discarded page');
@@ -272,13 +289,20 @@ fs.mkdirSync(output, {recursive:true});
       await page.locator('#cancel-editor').click();
     }
   }
-  await page.setViewportSize({width:390,height:844});
-  await tab('env');
-  // 页签化后 env 内容变短，需滚动到底部才能触发工具条吸顶。
+  await page.setViewportSize({width:390,height:568});
+  // 侧栏折叠为横滑条：吸顶 + 主区标题栏叠在其下；数据操作收进「更多」。
+  await tab('pages');
+  assert.equal(await page.evaluate(() => document.documentElement.scrollHeight > innerHeight), true, 'pages section should overflow on small screens');
+  await page.locator('#side-more summary').click();
+  assert.equal(await page.locator('.side-ops #export-link').isVisible(), true, 'data ops open behind More on mobile');
+  await page.locator('#side-more summary').click();
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-  const toolbar = await page.locator('.settings-toolbar').boundingBox();
-  assert.ok(toolbar.y >= 0 && toolbar.y < 16);
+  const strip = await page.locator('#side-nav').boundingBox();
+  assert.ok(strip.y >= 0 && strip.y < 16, 'side strip must stick to top');
+  const mainBar = await page.locator('.main-bar').boundingBox();
+  assert.ok(mainBar.y >= 40 && mainBar.y < 90, 'main bar must stack under the strip');
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await page.setViewportSize({width:390,height:844});
   await tab('pages');
   await edit();
   await page.locator('#close-editor').click();

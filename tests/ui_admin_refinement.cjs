@@ -69,6 +69,13 @@ fs.mkdirSync(output, {recursive:true});
   await tab('quote');
   assert.equal(await page.locator('#card-quote').isVisible(), true);
   assert.equal(await page.locator('#card-location').isVisible(), false);
+  // 数据积木字段按类分组展示（组名 + 组内多列）
+  await tab('blocks');
+  await page.locator('#widget-add').click();
+  assert.ok(await page.locator('#widget-fields .field-group').count() >= 7, 'fields should be grouped');
+  assert.match(await page.locator('#widget-fields .field-group-name').first().innerText(), /天气|Weather/);
+  assert.equal(await page.locator('#widget-fields input').first().getAttribute('value'), 'weather.temperature');
+  await page.locator('#widget-cancel').click();
   await tab('pages');
   assert.equal(await page.locator('#geo-btn').count(), 0);
   await page.locator('#add-page').click();
@@ -213,6 +220,14 @@ fs.mkdirSync(output, {recursive:true});
   assert.equal(await geo.getAttribute('aria-expanded'), 'false');
   assert.equal((await geo.boundingBox()).height, 42);
 
+  // 显示单位：城市分区内切 ℉ / 风力等级 / 国标，保存载荷带 units
+  await page.locator('#units-box input[data-unit=temp][value=f]').check();
+  await page.locator('#units-box input[data-unit=wind][value=bft]').check();
+  await page.locator('#units-box input[data-unit=aqi][value=cn]').check();
+  assert.equal(await page.locator('[data-dirty-dot="env"]').isVisible(), true);
+  payload = await save();
+  assert.deepEqual(payload.units, {temp:'f', wind:'bft', aqi:'cn'});
+
   // sysopt-layout-fix：系统/文字选项行式布局——单选钮不重叠、点档位文字激活该档、控件在标签盒内
   await tab('pages');
   await edit();
@@ -250,6 +265,26 @@ fs.mkdirSync(output, {recursive:true});
   assert.ok(boolInputs.length >= 5, 'weather should expose several toggles');
   assert.ok(boolInputs.every((i) => i.inside), 'weather checkbox outside its row');
   await page.screenshot({path: path.join(output, 'sysopt-weather.png')});
+
+  // block-options-2：外观开关必须逐行排列（a1937d4 丢失 opt-* 样式后挤成一段，旧断言没拦住）
+  await page.locator('#stage .block').filter({hasText: /页眉|Header/}).first().click();
+  await page.locator('#sys-opt-show_tabs').waitFor();
+  const toggleTops = await page.evaluate(() => [...document.querySelectorAll('#block-styles label.opt-row')].map((row) => row.getBoundingClientRect().top));
+  assert.ok(toggleTops.length >= 4, 'header should expose at least 4 toggles');
+  assert.ok(toggleTops.every((top, i) => i === 0 || top > toggleTops[i - 1] + 8), 'each toggle must sit on its own line');
+  // 日期格式：选「自定义」才出现模板框；非法占位符就地报错，合法后提交
+  assert.equal(await page.locator('#sys-opt-date_template').count(), 0, 'template input hidden until custom');
+  await page.locator('#sys-opt-date_format-custom').check();
+  const template = page.locator('#sys-opt-date_template');
+  await template.waitFor();
+  await template.fill('{M}月{X}');
+  assert.equal(await page.locator('#block-styles .opt-error').isVisible(), true, 'bad placeholder must be flagged');
+  await template.fill('{M}月{D}日 周{W}');
+  assert.equal(await page.locator('#block-styles .opt-error').isVisible(), false);
+  await template.press('Enter');
+  await page.locator('#sys-opt-date_template').waitFor();
+  assert.equal(await page.locator('#sys-opt-date_template').inputValue(), '{M}月{D}日 周{W}');
+  await page.screenshot({path: path.join(output, 'sysopt-header.png')});
 
   await page.locator('#palette-mine .btn').filter({hasText: /文字|Text/}).click();
   const textBlock = page.locator('#stage .block').filter({hasText: /这一页上的文字|Text on this page/}).last();

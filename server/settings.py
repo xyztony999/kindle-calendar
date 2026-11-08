@@ -27,6 +27,7 @@ from server.layout import (
     drop_unreferenced_assets,
     validate_layout_fields,
 )
+from server.units import UNIT_CHOICES, normalize_units
 
 PAGE_IDS = PRESET_IDS
 SYSTEM_OPTION_WIDGETS = frozenset(SYSTEM_OPTIONS)
@@ -119,6 +120,7 @@ def defaults_from_config(config: dict) -> dict:
         "presets": [],
         "ics": {"urls": []},
         "anniversaries": [],
+        "units": normalize_units(None),
         "location": {
             "name": str(config.get("location_name") or "北京"),
             "latitude": float(config.get("latitude", 39.9042)),
@@ -308,6 +310,15 @@ def validate(data: Any) -> list[dict]:
             details.append(_detail("location.timezone", "LOCATION_TZ_INVALID", "时区无法识别"))
 
     # 以下新键对旧配置缺失容错（缺失=默认，不降级）
+    units = data.get("units")
+    if units is not None:
+        if not isinstance(units, dict):
+            details.append(_detail("units", "UNITS_INVALID", "显示单位须为对象"))
+        else:
+            for key, choices in UNIT_CHOICES.items():
+                if key in units and units[key] not in choices:
+                    details.append(_detail(f"units.{key}", "UNITS_INVALID", "显示单位取值无效"))
+
     presets = data.get("presets") or []
     if not isinstance(presets, list):
         details.append(_detail("presets", "PRESET_INVALID", "版面方案须为列表"))
@@ -475,6 +486,7 @@ def normalize(data: dict) -> dict:
         "presets": presets_out,
         "ics": {"urls": ics_urls},
         "anniversaries": anniversaries_out,
+        "units": normalize_units(data.get("units")),
         "location": {
             "name": _clean_text(location.get("name")),
             "latitude": round(float(location["latitude"]), 6),

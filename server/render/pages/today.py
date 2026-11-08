@@ -8,11 +8,12 @@ from datetime import datetime
 from PIL import Image, ImageDraw
 
 from server.icons import draw_weather_icon
-from server.locale import aqi_en, is_en
+from server.locale import is_en
 from server.render import style
 from server.render.pages import common
 from server.render.regions import ClockMetrics, Rect, clock_metrics, today_regions
 from server.render.scene import render_scene
+from server.units import aqi_band, aqi_view, fmt_temp, fmt_wind
 
 GLYPHS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", ":"]
 
@@ -47,23 +48,26 @@ def render_weather(payload: dict, rect: Rect, font_path: str, options: dict | No
     f_desc = _font(sx, 36, font_path)
     f_info = _font(sx, 26, font_path)
 
-    draw.text((2, 4), f"{cur['temperature']:.0f}°", fill=style.INK, font=f_temp)
+    draw.text((2, 4), fmt_temp(cur["temperature"], payload), fill=style.INK, font=f_temp)
     draw.text((8, 152), cur["description"], fill=style.INK, font=f_desc)
+    low, high = fmt_temp(today["temp_min"], payload), fmt_temp(today["temp_max"], payload)
+    feels = fmt_temp(cur.get("apparent"), payload) if opts.get("show_feels", False) else ""
+    wind = fmt_wind(cur["wind_speed"], payload)
     if is_en(payload):
-        range_line = f"Today {today['temp_min']:.0f}° / {today['temp_max']:.0f}°"
+        range_line = f"Today {low} / {high}"
         stats = [
             f"Humidity {cur['humidity']}%" if opts.get("show_humidity", True) else None,
-            f"Wind {cur['wind_speed']:.0f} km/h" if opts.get("show_wind", True) else None,
+            f"Wind {wind}" if opts.get("show_wind", True) else None,
             f"Rain {payload['weather'].get('precip_prob', 0)}%" if opts.get("show_precip", True) else None,
-            f"Feels {cur.get('apparent'):.0f}°" if opts.get("show_feels", False) and cur.get("apparent") is not None else None,
+            f"Feels {feels}" if feels else None,
         ]
     else:
-        range_line = f"今日 {today['temp_min']:.0f}° / {today['temp_max']:.0f}°"
+        range_line = f"今日 {low} / {high}"
         stats = [
             f"湿度 {cur['humidity']}%" if opts.get("show_humidity", True) else None,
-            f"风 {cur['wind_speed']:.0f} km/h" if opts.get("show_wind", True) else None,
+            f"风 {wind}" if opts.get("show_wind", True) else None,
             f"降水 {payload['weather'].get('precip_prob', 0)}%" if opts.get("show_precip", True) else None,
-            f"体感 {cur.get('apparent'):.0f}°" if opts.get("show_feels", False) and cur.get("apparent") is not None else None,
+            f"体感 {feels}" if feels else None,
         ]
     stats = [s for s in stats if s]
     if opts.get("show_range", True):
@@ -159,20 +163,20 @@ def render_sun(payload: dict, rect: Rect, font_path: str, options: dict | None =
     # AQI 卡（原月相盘位置）：数值 + 等级 + 六段刻度条（PageSpec §1）
     if not opts.get("show_aqi", True):
         return img
-    aqi = payload.get("aqi")
+    view = aqi_view(payload)
     ax = int(rect.w * 0.68)
     f_aqi_label = _font(sx, 22, font_path)
     f_aqi_val = _font(sx, 40, font_path)
     draw.text((ax, int(rect.h * 0.10)), "AQI", fill=style.MID, font=f_aqi_label)
-    if aqi:
-        draw.text((ax + int(52 * sx), int(rect.h * 0.04)), str(aqi["us_aqi"]), fill=style.INK, font=f_aqi_val)
-        level_name = aqi_en(aqi["level_zh"]) if is_en(payload) else aqi["level_zh"]
+    if view:
+        value, level_name = view
+        draw.text((ax + int(52 * sx), int(rect.h * 0.04)), str(value), fill=style.INK, font=f_aqi_val)
         draw.text((ax, int(rect.h * 0.42)), level_name, fill=style.MID, font=f_aqi_label)
-        # 六段刻度条：当前段实心
+        # 六段刻度条：当前段实心（按数值分段，美标与国标分段点相同）
         seg_w = int(26 * sx)
         seg_h = max(5, int(6 * sx))
         bar_y = int(rect.h * 0.72)
-        cur_level = ["优", "良", "轻度敏感", "中度", "重度", "严重"].index(aqi["level_zh"])
+        cur_level = aqi_band(value)
         for i in range(6):
             bx = ax + i * seg_w
             if i == cur_level:

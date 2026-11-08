@@ -537,6 +537,25 @@
   }
   .block .block-remove:hover { color: var(--bad); background: #fdeceb; }
   .field-checks { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 8px 0; font-size: 13px; }
+  /* 外观选项行式布局（8277d50 引入、a1937d4 重写时丢失，此处恢复）：每个开关独占一行，
+     单选行名称独占首行、选项在下方换行排列 */
+  .opt-list { display: grid; gap: 8px; }
+  .opt-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: 13.5px; min-width: 0; }
+  label.opt-row { gap: 8px; cursor: pointer; }
+  label.opt-row input, .opt-pick input { margin: 0; flex: none; }
+  div.opt-row > .opt-name:first-child { flex-basis: 100%; color: var(--mid); font-size: 12.5px; }
+  .opt-pick { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+  .opt-text { display: grid; gap: 4px; }
+  .opt-text input[type="text"] { padding: 6px 9px; }
+  .opt-help, .opt-error { margin: 0; font-size: 12px; color: var(--mid); }
+  .opt-error { color: var(--bad); }
+  #units-box { margin: 4px 0 2px; }
+  /* 数据积木字段：按类分组，组名在上、组内自适应多列 */
+  .wm-fields.field-grouped { display: grid; gap: 10px; }
+  .field-group { display: grid; gap: 4px; }
+  .field-group-name { font-size: 12px; color: var(--mid); letter-spacing: 0.04em; }
+  .field-group-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 4px 12px; }
+  .field-group-items label { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
   .style-options { border: 0; padding: 0; margin: 14px 0; min-width: 0; }
   .style-options legend { font-size: 13px; color: var(--mid); margin-bottom: 8px; }
   .style-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
@@ -864,6 +883,23 @@
             <option value="America/Denver"><option value="America/Los_Angeles"><option value="America/Sao_Paulo">
             <option value="Australia/Sydney"><option value="Pacific/Auckland"><option value="UTC">
           </datalist>
+          <h3>{{ ui.units_h3 }}</h3>
+          <div class="opt-list" id="units-box">
+            <div class="opt-row"><span class="opt-name">{{ ui.unit_temp }}</span>
+              <label class="opt-pick"><input type="radio" name="unit-temp" value="c" data-unit="temp"><span>℃</span></label>
+              <label class="opt-pick"><input type="radio" name="unit-temp" value="f" data-unit="temp"><span>℉</span></label>
+            </div>
+            <div class="opt-row"><span class="opt-name">{{ ui.unit_wind }}</span>
+              <label class="opt-pick"><input type="radio" name="unit-wind" value="kmh" data-unit="wind"><span>km/h</span></label>
+              <label class="opt-pick"><input type="radio" name="unit-wind" value="ms" data-unit="wind"><span>m/s</span></label>
+              <label class="opt-pick"><input type="radio" name="unit-wind" value="bft" data-unit="wind"><span>{{ ui.unit_bft }}</span></label>
+            </div>
+            <div class="opt-row"><span class="opt-name">{{ ui.unit_aqi }}</span>
+              <label class="opt-pick"><input type="radio" name="unit-aqi" value="us" data-unit="aqi"><span>{{ ui.unit_aqi_us }}</span></label>
+              <label class="opt-pick"><input type="radio" name="unit-aqi" value="cn" data-unit="aqi"><span>{{ ui.unit_aqi_cn }}</span></label>
+            </div>
+          </div>
+          <p class="muted card-hint">{{ ui.units_hint }}</p>
         </section>
         <section class="card" id="card-quote" data-section="quote">
           <div class="radios" id="quote-modes"></div>
@@ -1378,6 +1414,7 @@
     el.textContent = T.showing.replace("{n}", String(index + 1)).replace("{text}", items[index].text.trim());
   }
 
+  const UNIT_DEFAULTS = {temp: "c", wind: "kmh", aqi: "us"};
   function fillLocation() {
     $("loc-name").value = state.location.name;
     $("loc-lat").value = state.location.latitude;
@@ -1386,7 +1423,18 @@
     $("suppress").value = state.rotation.suppress_s;
     $("fetch-interval").value = state.rotation.fetch_interval_s ?? "";
     $("rotate-enabled").checked = state.rotation.enabled;
+    if (!state.units) state.units = Object.assign({}, UNIT_DEFAULTS);
+    document.querySelectorAll("#units-box input[data-unit]").forEach((input) => {
+      input.checked = (state.units[input.dataset.unit] || UNIT_DEFAULTS[input.dataset.unit]) === input.value;
+    });
   }
+  document.querySelectorAll("#units-box input[data-unit]").forEach((input) => {
+    input.addEventListener("change", () => {
+      if (!state.units) state.units = Object.assign({}, UNIT_DEFAULTS);
+      state.units[input.dataset.unit] = input.value;
+      markDirty();
+    });
+  });
 
   function readLocation() {
     state.location.name = $("loc-name").value.trim();
@@ -2117,6 +2165,18 @@
     if (legend) legend.textContent = text;
   }
 
+  function templateProblem(value, opt) {
+    if (value.length > (opt.max_len || 32)) return T.template_too_long.replace("{n}", String(opt.max_len || 32));
+    const allowed = opt.placeholders || [];
+    const tokens = value.match(/\{[^{}]*\}/g) || [];
+    const bad = allowed.length ? tokens.find((token) => !allowed.includes(token)) : null;
+    if (bad) return T.template_bad.replace("{token}", bad);
+    // 与服务端一致：去掉合法占位后残留的花括号视为未闭合
+    const rest = value.replace(/\{[^{}]*\}/g, "");
+    const stray = rest.search(/[{}]/);
+    return stray >= 0 ? T.template_bad.replace("{token}", rest.slice(stray, stray + 3)) : "";
+  }
+
   function renderSystemOptions(block, schema) {
     const box = $("block-styles");
     box.className = "opt-list";
@@ -2124,13 +2184,23 @@
     const choiceLabels = {lg: T.size_lg, md: T.size_md, sm: T.size_sm, mon: T.week_mon, sun: T.week_sun};
     if (!block.options) block.options = {};
     $("appearance-current").textContent = T.system_options_hint;
+    const valueOf = (key) => {
+      if (block.options[key] !== undefined) return block.options[key];
+      const spec = schema.find((item) => item.key === key);
+      return spec ? spec.default : undefined;
+    };
     schema.forEach((opt) => {
-      const current = block.options[opt.key] !== undefined ? block.options[opt.key] : opt.default;
+      const current = valueOf(opt.key);
+      // 依赖项未满足时不渲染（如日期格式选「自定义」才出现模板框）；改选后面板整体重建
+      if (opt.visible_when && !Object.keys(opt.visible_when).every((key) => valueOf(key) === opt.visible_when[key])) return;
       const refresh = (focusId) => {
         markDirty();
         renderCanvas();
         const again = document.getElementById(focusId);
-        if (again) again.focus();
+        if (again) {
+          again.focus();
+          if (again.type === "text") again.setSelectionRange(again.value.length, again.value.length);
+        }
       };
       if (opt.kind === "bool") {
         const row = document.createElement("label");
@@ -2168,10 +2238,45 @@
             refresh(radio.id);
           });
           const lab = document.createElement("span");
-          lab.textContent = choiceLabels[value] || value;
+          lab.textContent = (opt.choice_labels && opt.choice_labels[value]) || choiceLabels[value] || value;
           pick.append(radio, lab);
           row.appendChild(pick);
         });
+        box.appendChild(row);
+      } else if (opt.kind === "text") {
+        const row = document.createElement("div");
+        row.className = "opt-row opt-text";
+        const name = document.createElement("label");
+        name.className = "opt-name";
+        name.htmlFor = "sys-opt-" + opt.key;
+        name.textContent = opt.label;
+        const input = document.createElement("input");
+        input.type = "text";
+        input.id = "sys-opt-" + opt.key;
+        input.placeholder = opt.example || "";
+        input.value = typeof current === "string" ? current : "";
+        const help = document.createElement("p");
+        help.className = "opt-help";
+        help.textContent = T.template_help + " " + (opt.placeholders || []).join(" ");
+        const error = document.createElement("p");
+        error.className = "opt-error";
+        error.setAttribute("role", "status");
+        error.hidden = true;
+        const check = () => {
+          const problem = templateProblem(input.value, opt);
+          error.textContent = problem;
+          error.hidden = !problem;
+          input.classList.toggle("bad", !!problem);
+          return problem;
+        };
+        // 输入时只做校验；提交（失焦/回车）才写入并重绘，避免逐字重建打断输入法
+        input.addEventListener("input", check);
+        input.addEventListener("change", () => {
+          if (check()) return;
+          block.options[opt.key] = input.value;
+          refresh(input.id);
+        });
+        row.append(name, input, help, error);
         box.appendChild(row);
       }
     });
@@ -2737,7 +2842,26 @@
   function refreshWidgetFields(scope, fields) {
     const box = scope.fields;
     box.replaceChildren();
+    box.classList.add("field-grouped");
+    const groupNames = {};
+    (catalog.field_groups || []).forEach((group) => { groupNames[group.key] = group.label; });
+    // 目录已按组连续排列：逐个字段遇到新组就开一个分组，DOM 顺序即目录顺序（首项语义不变）
+    let currentGroup = null;
+    let items = null;
     (catalog.fields || []).forEach((field) => {
+      const key = field.group || "other";
+      if (key !== currentGroup || !items) {
+        currentGroup = key;
+        const group = document.createElement("div");
+        group.className = "field-group";
+        const title = document.createElement("span");
+        title.className = "field-group-name";
+        title.textContent = groupNames[key] || key;
+        items = document.createElement("div");
+        items.className = "field-group-items";
+        group.append(title, items);
+        box.appendChild(group);
+      }
       const label = document.createElement("label");
       const input = document.createElement("input");
       input.type = "checkbox";
@@ -2745,7 +2869,7 @@
       input.checked = fields.includes(field.id);
       input.addEventListener("change", () => updateWidgetHint(scope));
       label.append(input, " " + field.label);
-      box.appendChild(label);
+      items.appendChild(label);
     });
   }
 
@@ -3614,7 +3738,7 @@
     pages: ["rotation", "pages", "presets"],
     blocks: ["widget_defs", "assets"],
     schedule: ["ics", "anniversaries"],
-    env: ["location"],
+    env: ["location", "units"],
     quote: ["quote"],
     device: []
   };

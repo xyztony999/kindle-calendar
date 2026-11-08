@@ -1,5 +1,33 @@
 ---
 pipeline:
+  - module: block-options-2
+    title: "积木自定义二期：勾选框排版回归修复、全局单位（℃/℉·风速·中国AQI）、页眉日期格式、逐时图表、指数卡自选、数据扩展与生活建议、一周与月历选项"
+    stages:
+      design:
+        status: complete
+        note: "2026-11-08 冷启动，会话编排轨。D0 三轮+Gate 1 一轮选择题全部拍板（13 项决策见 PRD §2）；勘察根因：opt-* 样式被 a1937d4 全量重写丢失（回归）、全站 :.0f 致 -0°、hourly/indices 无 options、逐时首标签左裁。Gate 1 PASS：分两轮/未配置保持现状/生活建议按草案。"
+      code:
+        status: complete
+        note: "2026-11-08 轮 1 已实现并验证：units.py/datefmt.py 新模块、全局 units（℃/℉·风速·国标 AQI）、页眉日期预设+模板、今日标记三样式、opt-* 样式恢复+字段分组；顺带修 aqi.py 未定义 log（既有）与指数卡长数值溢出（既有）。169 单测 + 两 E2E + 77 端点 HTTP 全过。Gate 2 PASS 待用户验收，未提交。"
+    gates:
+      gate1: { status: PASS, report: 05-reports/gate1-block-options-2.md }
+      gate2: { status: PASS, report: 05-reports/gate2-block-options-2.md }
+    artifacts:
+      prd:
+        - 02-detailed/prd/prd-block-options-2.md (v1.0)
+      api:
+        - 02-detailed/api/api-block-options-2.md (v1.0)
+      reports:
+        - 05-reports/gate1-block-options-2.md
+        - 05-reports/gate2-block-options-2.md
+  - module: block-options-2-round2
+    title: "积木自定义二期·轮 2：天气/空气数据扩展与生活建议、数据积木新字段、指数卡自选、逐时图表、一周积木"
+    stages:
+      design:
+        status: complete
+        note: "随 block-options-2 Gate 1 一并拍板（契约 §5–§8）。"
+      code:
+        status: todo
   - module: admin-redesign
     title: "管理端「台历工房」视觉重设计（分区块化+衬线分区头+分区导航，纯 CSS/导航层）"
     stages:

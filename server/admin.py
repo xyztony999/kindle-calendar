@@ -19,7 +19,7 @@ import requests
 from flask import Blueprint, Response, jsonify, render_template, request, session
 
 from server.catalog import fetch_center_items
-from server.layout import DESIGN, FIELD_DEFS, SYSTEM_WIDGETS, data_style_catalog, field_kind, field_label, system_label, system_options_catalog
+from server.layout import DESIGN, FIELD_DEFS, SYSTEM_WIDGETS, data_style_catalog, field_group, field_groups_catalog, field_kind, field_label, system_label, system_options_catalog
 from server.locale import LANG_COOKIE, LANG_MAX_AGE, THEME_COOKIE, admin_ui, explicit_lang, translate_message, web_lang, web_theme
 from server.settings import ACCEPTED_SCHEMAS, SETTINGS_MAX_BYTES, SettingsError, env_int, limits, settings_path
 from server.storage import AssetError
@@ -539,12 +539,16 @@ def create_admin_blueprint(service) -> Blueprint:
             copied = dict(item)
             copied["source"] = "center"
             center.append(copied)
-        fields = [{"id": field_id, "label": field_label(field_id, lang), "kind": field_kind(field_id)} for field_id, _zh, _en in FIELD_DEFS]
+        fields = [
+            {"id": field_id, "label": field_label(field_id, lang), "kind": field_kind(field_id), "group": field_group(field_id)}
+            for field_id, _zh, _en in FIELD_DEFS
+        ]
         return _api_ok({
             "system": system,
             "mine": mine,
             "center": center,
             "fields": fields,
+            "field_groups": field_groups_catalog(lang),
             "data_styles": data_style_catalog(lang),
             "storage": {"type": "oss", "configured": storage.configured()},
         })

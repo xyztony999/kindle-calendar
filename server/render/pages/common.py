@@ -6,9 +6,11 @@ from datetime import date as date_cls
 
 from PIL import Image, ImageDraw
 
-from server.locale import badge_en, is_en, page_label, short_date, weekday_en, zodiac_en
+from server.datefmt import header_date_text
+from server.locale import badge_en, is_en, page_label, weekday_en, zodiac_en
 from server.render import style
 from server.render.regions import PAGES, Rect
+from server.units import fmt_temp_delta
 
 PAGE_LABELS = {"today": "今日", "week": "一周", "month": "月历", "detail": "详情", "almanac": "黄历"}
 
@@ -39,11 +41,11 @@ def render_header(payload: dict, rect: Rect, font_path: str, page: str, options:
     # 左：大字日期（上）+ 星期/节日/班休（下）。78px 页眉要容纳两行，
     # 基线必须留出 descender：小字行底 ≤70（底线在 75），否则压线
     english = is_en(payload)
+    day = date_cls.fromisoformat(date["iso"])
+    big_date = header_date_text(str(opts.get("date_format") or "cn"), day, english, str(opts.get("date_template") or ""))
     if english:
-        big_date = short_date(date["iso"])
-        weekday_line = weekday_en(date_cls.fromisoformat(date["iso"]).weekday())
+        weekday_line = weekday_en(day.weekday())
     else:
-        big_date = date["month_day_cn"]
         weekday_line = f"星期{date['weekday']}"
     notes = list(date.get("festivals") or [])
     if holiday:
@@ -57,13 +59,12 @@ def render_header(payload: dict, rect: Rect, font_path: str, page: str, options:
             if not isinstance(alert, dict):
                 continue
             if alert.get("kind") == "cool" and alert.get("drop") is not None:
-                notes.append(f"较昨日降 {alert['drop']:.0f}°" if not english else f"Down {alert['drop']:.0f}°")
+                drop = fmt_temp_delta(alert["drop"], payload)
+                notes.append(f"较昨日降 {drop}" if not english else f"Down {drop}")
             elif alert.get("kind") == "rain" and alert.get("prob") is not None:
                 notes.append(f"降水 {alert['prob']:.0f}%" if not english else f"Rain {alert['prob']:.0f}%")
     if show_notes and notes:
         weekday_line += " · " + " · ".join(notes[:2])
-    draw.text((2, 4), big_date, fill=style.INK, font=f_big)
-    draw.text((4, 42), weekday_line, fill=style.INK, font=f_small)
 
     # 右：页指示（最上）+ 农历干支（其下）。顺序与已启用页一致，默认五页时与原先相同。
     order = payload.get("pages")
@@ -78,6 +79,21 @@ def render_header(payload: dict, rect: Rect, font_path: str, page: str, options:
     labels = {p: page_label(p, payload) for p in order}
     labels_w = sum(style.tracked_width(draw, labels[p], f_page, 2) + dot_gap for p in order) if show_tabs else 0
     x = rect.w - labels_w
+
+    # 日期过长（自定义模板/完整年月日）时在页签左侧可用宽度内逐级缩字，下限 20px；
+    # 下限仍放不下则截断加省略号，保证不压到页签
+    room = (x if show_tabs else rect.w) - 12
+    size = 30
+    while size > 20 and style.text_size(draw, big_date, f_big)[0] > room:
+        size -= 2
+        f_big = _font(sx, size, font_path)
+    if style.text_size(draw, big_date, f_big)[0] > room:
+        while len(big_date) > 1 and style.text_size(draw, big_date + "…", f_big)[0] > room:
+            big_date = big_date[:-1]
+        big_date += "…"
+    draw.text((2, 4), big_date, fill=style.INK, font=f_big)
+    draw.text((4, 42), weekday_line, fill=style.INK, font=f_small)
+
     if show_tabs:
         for p in order:
             cx = x + dot_r

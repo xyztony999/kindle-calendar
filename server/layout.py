@@ -6,8 +6,10 @@
 from __future__ import annotations
 
 import re
+from datetime import date
 from typing import Any
 
+from server.datefmt import DATE_FORMATS, PLACEHOLDERS, TEMPLATE_MAX, header_date_text, template_error
 from server.render.regions import BASE_H, BASE_W
 
 STATUS_Y = 44
@@ -118,6 +120,8 @@ FIELD_DEFS: tuple[tuple[str, str, str], ...] = (
     ("date.solar_term", "节气", "Solar term"),
     ("date.festivals", "节日", "Festivals"),
     ("date.holiday", "假期", "Holiday"),
+    ("almanac.yi", "宜", "Good for"),
+    ("almanac.ji", "忌", "Avoid"),
     ("sun.sunrise", "日出", "Sunrise"),
     ("sun.sunset", "日落", "Sunset"),
     ("sun.moon", "月相名", "Moon"),
@@ -126,15 +130,36 @@ FIELD_DEFS: tuple[tuple[str, str, str], ...] = (
     ("aqi.level", "AQI 等级", "AQI level"),
     ("quote.text", "一言正文", "Quote"),
     ("quote.from", "一言出处", "Source"),
-    ("almanac.yi", "宜", "Good for"),
-    ("almanac.ji", "忌", "Avoid"),
-    ("location.name", "地点名", "Place"),
     ("events.today_count", "今日日程数", "Events today"),
     ("events.next_title", "下一场日程", "Next event"),
     ("events.next_time", "下一场时间", "Next event time"),
+    ("location.name", "地点名", "Place"),
 )
 FIELD_IDS = {item[0] for item in FIELD_DEFS}
 _FIELD_LABEL = {item[0]: (item[1], item[2]) for item in FIELD_DEFS}
+# 字段分组（管理端按组展示勾选）：FIELD_DEFS 按组连续排列，分组展示顺序即目录顺序，
+# 勾选结果按 DOM 顺序保存时「首项」语义不变
+FIELD_GROUP_LABELS = (
+    ("weather", "天气", "Weather"),
+    ("date", "日期", "Date"),
+    ("lunar", "农历与黄历", "Lunar and almanac"),
+    ("sun_moon", "日出与月相", "Sun and moon"),
+    ("air", "空气", "Air"),
+    ("quote", "一言", "Quote"),
+    ("events", "日程", "Events"),
+    ("other", "其它", "Other"),
+)
+_FIELD_PREFIX_GROUP = {"weather": "weather", "date": "lunar", "almanac": "lunar", "sun": "sun_moon", "aqi": "air", "quote": "quote", "events": "events"}
+
+
+def field_group(field_id: str) -> str:
+    if field_id in ("date.month_day", "date.weekday"):
+        return "date"
+    return _FIELD_PREFIX_GROUP.get(field_id.split(".", 1)[0], "other")
+
+
+def field_groups_catalog(lang: str) -> list[dict]:
+    return [{"key": key, "label": en if lang == "en" else zh} for key, zh, en in FIELD_GROUP_LABELS]
 
 _NUMERIC_FIELDS = {"weather.temperature", "weather.humidity", "weather.wind_speed", "weather.precip_prob", "weather.temp_min", "weather.temp_max", "weather.apparent", "sun.illumination", "aqi.value", "events.today_count"}
 _TIME_FIELDS = {"sun.sunrise", "sun.sunset", "events.next_time"}
@@ -195,6 +220,8 @@ SYSTEM_LABELS = {
 # type "bool" 为开关；"choice" 为单选档位。未配置 = 默认值 = 现有版式不变。
 SYSTEM_OPTIONS: dict[str, dict[str, tuple[str, str, str, object, tuple | None]]] = {
     "header": {
+        "date_format": ("日期格式", "Date format", "choice", "cn", DATE_FORMATS),
+        "date_template": ("自定义模板", "Custom template", "text", "", None),
         "show_tabs": ("页面指示点", "Page indicator dots", "bool", True, None),
         "show_lunar": ("农历与干支行", "Lunar and ganzhi line", "bool", True, None),
         "show_notes": ("节日与假期备注", "Festival and holiday notes", "bool", True, None),
@@ -223,6 +250,7 @@ SYSTEM_OPTIONS: dict[str, dict[str, tuple[str, str, str, object, tuple | None]]]
         "show_lunar": ("农历节气角标", "Lunar and term captions", "bool", True, None),
         "week_start": ("周起始日", "Week starts on", "choice", "mon", ("mon", "sun")),
         "show_event_dots": ("日程标记", "Event dots", "bool", False, None),
+        "today_mark": ("今日标记", "Today marker", "choice", "circle", ("circle", "fill", "box")),
     },
     "main": {
         "show_yiji": ("宜忌双栏", "Yi/Ji columns", "bool", True, None),
@@ -244,6 +272,52 @@ for _widget in SYSTEM_WIDGETS:
 
 CLOCK_SIZE_FACTOR = {"lg": 1.0, "md": 0.75, "sm": 0.55}
 
+# 单选项取值的显示文案（服务端统一下发，前端不再各自映射）
+_SIZE_LABELS = {"lg": ("大", "Large"), "md": ("中", "Medium"), "sm": ("小", "Small")}
+CHOICE_LABELS: dict[tuple[str, str], dict[str, tuple[str, str]]] = {
+    ("clock", "size"): _SIZE_LABELS,
+    ("quote", "size"): _SIZE_LABELS,
+    ("grid", "week_start"): {"mon": ("周一", "Monday"), "sun": ("周日", "Sunday")},
+    ("grid", "today_mark"): {"circle": ("圆圈", "Circle"), "fill": ("实心", "Filled"), "box": ("方框", "Box")},
+    ("wallpaper", "mode"): {"daily": ("每日轮换", "Daily"), "fixed": ("固定一张", "Fixed")},
+}
+# 文本选项元数据：长度上限、允许的占位符、仅在某单选取特定值时显示
+OPTION_META: dict[tuple[str, str], dict] = {
+    ("header", "date_template"): {
+        "max_len": TEMPLATE_MAX,
+        "placeholders": PLACEHOLDERS,
+        "visible_when": {"date_format": "custom"},
+        "example": ("{M}月{D}日 周{W}", "{W} {M}/{D}"),
+    },
+}
+
+
+def _choice_labels(widget: str, key: str, lang: str) -> dict[str, str]:
+    english = lang == "en"
+    if (widget, key) == ("header", "date_format"):
+        # 预设项文案直接用今天的日期示范效果
+        today = date.today()
+        labels = {fmt: header_date_text(fmt, today, english) for fmt in DATE_FORMATS if fmt != "custom"}
+        labels["custom"] = "Custom" if english else "自定义"
+        return labels
+    return {value: en if english else zh for value, (zh, en) in CHOICE_LABELS.get((widget, key), {}).items()}
+
+
+def text_option_error(widget: str, key: str, value: object) -> str | None:
+    """文本选项校验：返回错误说明，合法返回 None。"""
+    meta = OPTION_META.get((widget, key), {})
+    if not isinstance(value, str):
+        return "文本选项须为字符串"
+    if len(value) > meta.get("max_len", 32):
+        return f"最多 {meta.get('max_len', 32)} 字"
+    if "\n" in value or "\r" in value:
+        return "不能包含换行"
+    if meta.get("placeholders"):
+        bad = template_error(value, meta["placeholders"])
+        if bad:
+            return f"模板含未知占位符 {bad}"
+    return None
+
 
 def system_options_catalog(widget: str, lang: str) -> list[dict]:
     """把某系统积木的选项 schema 输出为前端可用的列表。"""
@@ -252,6 +326,13 @@ def system_options_catalog(widget: str, lang: str) -> list[dict]:
         item: dict = {"key": key, "label": en if lang == "en" else zh, "kind": kind, "default": default}
         if choices is not None:
             item["choices"] = list(choices)
+            item["choice_labels"] = _choice_labels(widget, key, lang)
+        meta = OPTION_META.get((widget, key))
+        if meta:
+            item["max_len"] = meta["max_len"]
+            item["placeholders"] = ["{" + name + "}" for name in meta.get("placeholders", ())]
+            item["visible_when"] = meta.get("visible_when")
+            item["example"] = meta["example"][1 if lang == "en" else 0]
         out.append(item)
     return out
 
@@ -268,6 +349,8 @@ def block_options(widget: str, raw: object) -> dict:
             options[key] = default if not isinstance(value, bool) else value
         elif kind == "choice":
             options[key] = default if value not in (choices or ()) else value
+        elif kind == "text":
+            options[key] = value if text_option_error(widget, key, value) is None else default
     return options
 
 
@@ -428,6 +511,10 @@ def _validate_block(
                     details.append(_detail(f"{prefix}.options.{key}", "LAYOUT_INVALID", "开关选项须为布尔值"))
                 elif schema[key][2] == "choice" and value not in (schema[key][4] or ()):
                     details.append(_detail(f"{prefix}.options.{key}", "LAYOUT_INVALID", "选项取值无效"))
+                elif schema[key][2] == "text":
+                    problem = text_option_error(str(widget), key, value)
+                    if problem:
+                        details.append(_detail(f"{prefix}.options.{key}", "LAYOUT_INVALID", problem))
     if widget not in SYSTEM_WIDGETS and widget not in ("image", "text", "custom"):
         details.append(_detail(f"{prefix}.widget", "LAYOUT_INVALID", "积木类型无效"))
         return None

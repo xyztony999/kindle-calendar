@@ -7,6 +7,7 @@ from datetime import datetime
 from server import almanac, astro, holidays, quotes
 from server.aqi import AirQuality
 from server.settings import PAGE_IDS, enabled_pages, settings_version
+from server.units import normalize_units
 from server.weather import WeatherData
 
 
@@ -87,6 +88,7 @@ def build_payload(
         "pages": pages,
         "page_names": page_names,
         "settings_version": version,
+        "units": normalize_units(settings.get("units") if settings else None),
         "clock": {
             "now": now.strftime("%H:%M"),
             "minutes": now.hour * 60 + now.minute,
@@ -117,7 +119,15 @@ def build_payload(
             "precip_prob": precip_prob,
         },
         "sun": astro.day_summary(now, lat, lon),
-        "aqi": None if aqi is None else {"us_aqi": aqi.us_aqi, "level_zh": aqi.level, "fetched_at": now.isoformat(timespec="seconds")},
+        "aqi": None if aqi is None else {
+            "us_aqi": aqi.us_aqi,
+            "level_zh": aqi.level,
+            "cn_aqi": aqi.cn_aqi,
+            "cn_level": aqi.cn_level,
+            "pm2_5": aqi.pm2_5,
+            "pm10": aqi.pm10,
+            "fetched_at": now.isoformat(timespec="seconds"),
+        },
         "weather_alerts": _weather_alerts(weather, precip_prob),
         "events": events or [],
         "countdowns": countdowns or [],

@@ -60,6 +60,9 @@ class OptionsSchemaTest(unittest.TestCase):
                 if kind == "bool":
                     self.assertIsInstance(default, bool)
                     self.assertIsNone(choices)
+                elif kind == "text":
+                    self.assertIsInstance(default, str)
+                    self.assertIsNone(choices)
                 else:
                     self.assertEqual(kind, "choice")
                     self.assertIn(default, choices or ())
@@ -68,26 +71,27 @@ class OptionsSchemaTest(unittest.TestCase):
         items = system_options_catalog("clock", "zh")
         self.assertEqual(items[0]["key"], "size")
         self.assertEqual(items[0]["choices"], ["lg", "md", "sm"])
+        self.assertEqual(items[0]["choice_labels"], {"lg": "大", "md": "中", "sm": "小"})
         quote = system_options_catalog("quote", "zh")
         self.assertEqual([item["key"] for item in quote], ["size", "border"])
         grid = {item["key"]: item for item in system_options_catalog("grid", "zh")}
         self.assertEqual(grid["week_start"]["choices"], ["mon", "sun"])
+        # 每个单选项都必须有完整的服务端文案，前端不再出现原始取值（如 "daily"）
+        for widget in SYSTEM_OPTIONS:
+            for item in system_options_catalog(widget, "en"):
+                if item["kind"] == "choice":
+                    self.assertEqual(set(item["choice_labels"]), set(item["choices"]), (widget, item["key"]))
 
     def test_block_options_normalization(self):
-        self.assertEqual(
-            block_options("header", {"show_tabs": False}),
-            {"show_tabs": False, "show_lunar": True, "show_notes": True, "border": False},
-        )
-        self.assertEqual(
-            block_options("header", {"bogus": 1}),
-            {"show_tabs": True, "show_lunar": True, "show_notes": True, "border": False},
-        )
+        header_defaults = {"date_format": "cn", "date_template": "", "show_tabs": True, "show_lunar": True, "show_notes": True, "border": False}
+        self.assertEqual(block_options("header", {"show_tabs": False}), {**header_defaults, "show_tabs": False})
+        self.assertEqual(block_options("header", {"bogus": 1}), header_defaults)
         self.assertEqual(block_options("clock", {"size": "xx"}), {"size": "lg", "hour12": False})
         self.assertEqual(block_options("clock", {"hour12": True}), {"size": "lg", "hour12": True})
         self.assertEqual(block_options("schedule", {}), {"show_tomorrow": False, "border": False})
         self.assertEqual(block_options("quote", {"size": "lg"}), {"size": "lg", "border": False})
         self.assertEqual(block_options("grid", {"week_start": "sun"}), {
-            "show_badges": True, "show_lunar": True, "week_start": "sun", "show_event_dots": False, "border": False,
+            "show_badges": True, "show_lunar": True, "week_start": "sun", "show_event_dots": False, "today_mark": "circle", "border": False,
         })
 
     def test_border_schema_excludes_clock(self):

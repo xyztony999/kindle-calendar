@@ -10,6 +10,7 @@ from server.icons import draw_weather_icon
 from server.locale import is_en, weekday_en
 from server.render import style
 from server.render.regions import Rect
+from server.units import fmt_temp
 
 WEEKDAYS_CN = ["一", "二", "三", "四", "五", "六", "日"]
 
@@ -56,7 +57,7 @@ def render_list(payload: dict, rect: Rect, font_path: str) -> Image.Image:
         draw.text((int(200 * sx), y0 + row_h // 2 - 14), d["description"], fill=style.INK, font=f_desc)
 
         # 右：高低温
-        temp_line = f"{d['temp_max']:.0f}° / {d['temp_min']:.0f}°"
+        temp_line = f"{fmt_temp(d['temp_max'], payload)} / {fmt_temp(d['temp_min'], payload)}"
         style.draw_text_right(draw, rect.w - 12, y0 + row_h // 2 - 16, temp_line, f_temp, style.INK)
 
         if i < len(daily) - 1:
@@ -105,8 +106,8 @@ def render_chart(payload: dict, rect: Rect, font_path: str) -> Image.Image:
         draw.ellipse((px(i) - r, py(lows[i]) - r, px(i) + r, py(lows[i]) + r), fill=style.MID if is_today else style.PAPER, outline=style.MID, width=2)
         # 温度标注（首尾与今日）
         if i == 0 or i == len(daily) - 1 or is_today:
-            h_txt = f"{d['temp_max']:.0f}°"
-            l_txt = f"{d['temp_min']:.0f}°"
+            h_txt = fmt_temp(d["temp_max"], payload)
+            l_txt = fmt_temp(d["temp_min"], payload)
             style.draw_text_center(draw, px(i), py(highs[i]) - 34 * sx, h_txt, f_label, style.INK)
             style.draw_text_center(draw, px(i), py(lows[i]) + 12 * sx, l_txt, f_label, style.MID)
         # 日期刻度

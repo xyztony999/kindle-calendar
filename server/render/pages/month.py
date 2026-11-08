@@ -111,20 +111,29 @@ def render_grid(payload: dict, rect: Rect, font_path: str, offset: int = 0, opti
 
             # 公历数字：按真实宽度水平居中；有徽标时略下移避开左上角
             day_text = str(day)
-            dw, dh = style.text_size(draw, day_text, f_day)
+            dw = style.text_size(draw, day_text, f_day)[0]
             dy = y0 + (34 if has_badge else 22)
             day_fill = style.MID if (is_weekend and not is_today) else style.INK
             tx = cx - dw // 2
-            draw.text((tx, dy), day_text, fill=day_fill, font=f_day)
 
-            # 今日圈注：圆心取绘制位置的实际墨水包围盒（text_size 只给尺寸，
-            # 数字墨水顶部比绘制起点低数像素，按 dy+dh//2 推圆心会整体偏高）
+            # 今日标记：以绘制位置的实际墨水包围盒定位（text_size 只给尺寸，
+            # 数字墨水顶部比绘制起点低数像素，按 dy+dh//2 推圆心会整体偏高）。
+            # 标记先画、数字后画：实心反白时数字以纸色压在墨色圆上
             if is_today:
                 bb = draw.textbbox((tx, dy), day_text, font=f_day)
                 ncx = (bb[0] + bb[2]) // 2
                 ncy = (bb[1] + bb[3]) // 2
                 r = max(bb[2] - bb[0], bb[3] - bb[1]) // 2 + int(9 * sx)
-                draw.ellipse((ncx - r, ncy - r, ncx + r, ncy + r), outline=style.INK, width=3)
+                mark_box = (ncx - r, ncy - r, ncx + r, ncy + r)
+                mark = str(opts.get("today_mark") or "circle")
+                if mark == "fill":
+                    draw.ellipse(mark_box, fill=style.INK)
+                    day_fill = style.PAPER
+                elif mark == "box":
+                    draw.rounded_rectangle(mark_box, radius=max(3, int(5 * sx)), outline=style.INK, width=3)
+                else:
+                    draw.ellipse(mark_box, outline=style.INK, width=3)
+            draw.text((tx, dy), day_text, fill=day_fill, font=f_day)
 
             # 日程标记：该日在 payload.events 命中（ICS 或纪念日）→ 右上角小实心点
             if opts.get("show_event_dots", False):

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from server.locale import badge_en, is_en, short_date, weekday_en, zodiac_en
+from server.units import aqi_view, fmt_temp, fmt_wind
 
 _WEEKDAY = "一二三四五六日"
 DASH = "—"
@@ -15,12 +16,6 @@ def _join(values) -> str:
     return text
 
 
-def _temp(value) -> str:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return ""
-    return f"{value:.0f}°"
-
-
 def field_text(payload: dict, field_id: str) -> str:
     english = is_en(payload)
     weather = payload.get("weather") or {}
@@ -28,30 +23,28 @@ def field_text(payload: dict, field_id: str) -> str:
     daily = (weather.get("daily") or [{}])[0] or {}
     date = payload.get("date") or {}
     sun = payload.get("sun") or {}
-    aqi = payload.get("aqi") or {}
     quote = payload.get("quote") or {}
     holiday = payload.get("holiday") or {}
     events = payload.get("events") or []
 
     if field_id == "weather.temperature":
-        text = _temp(current.get("temperature"))
+        text = fmt_temp(current.get("temperature"), payload)
     elif field_id == "weather.description":
         text = str(current.get("description") or "")
     elif field_id == "weather.humidity":
         humidity = current.get("humidity")
         text = f"{humidity}%" if isinstance(humidity, (int, float)) and not isinstance(humidity, bool) else ""
     elif field_id == "weather.wind_speed":
-        wind = current.get("wind_speed")
-        text = f"{wind:.0f} km/h" if isinstance(wind, (int, float)) and not isinstance(wind, bool) else ""
+        text = fmt_wind(current.get("wind_speed"), payload)
     elif field_id == "weather.precip_prob":
         precip = weather.get("precip_prob")
         text = f"{precip}%" if isinstance(precip, (int, float)) and not isinstance(precip, bool) else ""
     elif field_id == "weather.apparent":
-        text = _temp(current.get("apparent"))
+        text = fmt_temp(current.get("apparent"), payload)
     elif field_id == "weather.temp_min":
-        text = _temp(daily.get("temp_min"))
+        text = fmt_temp(daily.get("temp_min"), payload)
     elif field_id == "weather.temp_max":
-        text = _temp(daily.get("temp_max"))
+        text = fmt_temp(daily.get("temp_max"), payload)
     elif field_id == "date.month_day":
         iso = str(date.get("iso") or "")
         text = short_date(iso) if english and iso else str(date.get("month_day_cn") or "")
@@ -92,10 +85,11 @@ def field_text(payload: dict, field_id: str) -> str:
         illum = sun.get("illumination")
         text = f"{illum}%" if isinstance(illum, (int, float)) and not isinstance(illum, bool) else ""
     elif field_id == "aqi.value":
-        value = aqi.get("us_aqi") if isinstance(aqi, dict) else None
-        text = str(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else ""
+        view = aqi_view(payload)
+        text = str(view[0]) if view else ""
     elif field_id == "aqi.level":
-        text = str(aqi.get("level_zh") or "") if isinstance(aqi, dict) else ""
+        view = aqi_view(payload)
+        text = view[1] if view else ""
     elif field_id == "quote.text":
         text = str(quote.get("text") or "")
     elif field_id == "quote.from":

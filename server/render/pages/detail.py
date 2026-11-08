@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from PIL import Image, ImageDraw
 
-from server.locale import aqi_en, is_en
+from server.locale import is_en
 from server.render import style
 from server.render.regions import Rect
+from server.units import aqi_view, fmt_temp, fmt_wind
 
 
 def _font(sx: float, base: int, font_path: str):
@@ -57,7 +58,7 @@ def render_hourly(payload: dict, rect: Rect, font_path: str) -> Image.Image:
     for idx in (0, n - 1):
         cx = int(step * (idx + 0.5))
         ty = rect.h - pad_b - 2 - int((temps[idx] - t_min) / span * (plot_h - 20)) - 12 - 28
-        style.draw_text_center(draw, cx, max(4, ty), f"{temps[idx]:.0f}°", f_label, style.INK)
+        style.draw_text_center(draw, cx, max(4, ty), fmt_temp(temps[idx], payload), f_label, style.INK)
     return img
 
 
@@ -68,22 +69,23 @@ def render_indices(payload: dict, rect: Rect, font_path: str) -> Image.Image:
 
     cur = payload["weather"]["current"]
     sun = payload["sun"]
-    aqi = payload.get("aqi")
+    view = aqi_view(payload)
+    wind = fmt_wind(cur["wind_speed"], payload)
     if is_en(payload):
-        aqi_val = f"{aqi['us_aqi']} {aqi_en(aqi['level_zh'])}" if aqi else "No data"
+        aqi_val = f"{view[0]} {view[1]}" if view else "No data"
         cards = [
             ("Humidity", f"{cur['humidity']}%"),
-            ("Wind", f"{cur['wind_speed']:.0f} km/h"),
+            ("Wind", wind),
             ("Rain", f"{payload['weather'].get('precip_prob', 0)}%"),
             ("Sunrise", sun["sunrise"]),
             ("Sunset", sun["sunset"]),
             ("AQI", aqi_val),
         ]
     else:
-        aqi_val = f"{aqi['us_aqi']} {aqi['level_zh']}" if aqi else "暂无数据"
+        aqi_val = f"{view[0]} {view[1]}" if view else "暂无数据"
         cards = [
             ("湿度", f"{cur['humidity']}%"),
-            ("风速", f"{cur['wind_speed']:.0f} km/h"),
+            ("风速", wind),
             ("降水概率", f"{payload['weather'].get('precip_prob', 0)}%"),
             ("日出", sun["sunrise"]),
             ("日落", sun["sunset"]),
@@ -105,5 +107,10 @@ def render_indices(payload: dict, rect: Rect, font_path: str) -> Image.Image:
         y0 = r * (card_h + gap)
         draw.rectangle((x0, y0, x0 + card_w, y0 + card_h), outline=style.RULE, width=1)
         draw.text((x0 + int(20 * sx), y0 + int(16 * sx)), key, fill=style.MID, font=f_key)
-        style.draw_text_right(draw, x0 + card_w - int(20 * sx), y0 + card_h - int(56 * sx), val, f_val, style.INK)
+        # 长数值（如英文 AQI 等级）超出卡片内宽时逐级缩字，避免向左冲出卡片
+        f_fit, size = f_val, 40
+        while size > 24 and style.text_size(draw, val, f_fit)[0] > card_w - int(40 * sx):
+            size -= 2
+            f_fit = _font(sx, size, font_path)
+        style.draw_text_right(draw, x0 + card_w - int(20 * sx), y0 + card_h - int(56 * sx), val, f_fit, style.INK)
     return img

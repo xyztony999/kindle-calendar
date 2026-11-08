@@ -114,13 +114,16 @@ def render_grid(payload: dict, rect: Rect, font_path: str, offset: int = 0, opti
             dw, dh = style.text_size(draw, day_text, f_day)
             dy = y0 + (34 if has_badge else 22)
             day_fill = style.MID if (is_weekend and not is_today) else style.INK
-            draw.text((cx - dw // 2, dy), day_text, fill=day_fill, font=f_day)
+            tx = cx - dw // 2
+            draw.text((tx, dy), day_text, fill=day_fill, font=f_day)
 
-            # 今日圈注：以数字实际包围盒为中心（而非行中心），保证套住数字
+            # 今日圈注：圆心取绘制位置的实际墨水包围盒（text_size 只给尺寸，
+            # 数字墨水顶部比绘制起点低数像素，按 dy+dh//2 推圆心会整体偏高）
             if is_today:
-                ncx = cx
-                ncy = dy + dh // 2
-                r = max(dw, dh) // 2 + int(9 * sx)
+                bb = draw.textbbox((tx, dy), day_text, font=f_day)
+                ncx = (bb[0] + bb[2]) // 2
+                ncy = (bb[1] + bb[3]) // 2
+                r = max(bb[2] - bb[0], bb[3] - bb[1]) // 2 + int(9 * sx)
                 draw.ellipse((ncx - r, ncy - r, ncx + r, ncy + r), outline=style.INK, width=3)
 
             # 日程标记：该日在 payload.events 命中（ICS 或纪念日）→ 右上角小实心点

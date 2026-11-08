@@ -97,6 +97,10 @@ class CurrentWeather:
     code: int
     description: str
     apparent: float | None = None  # 体感温度，API 缺字段时为 None
+    uv: float | None = None  # 紫外线指数
+    pressure: float | None = None  # 海平面气压 hPa
+    visibility: float | None = None  # 能见度（米）
+    wind_dir: float | None = None  # 风向（度，0=北，顺时针）
 
 
 @dataclass
@@ -106,6 +110,8 @@ class DailyForecast:
     temp_min: float
     code: int
     description: str
+    precip_prob: int | None = None  # 当日最大降水概率 %
+    uv_max: float | None = None  # 当日最大紫外线指数
 
 
 @dataclass
@@ -124,12 +130,20 @@ class WeatherData:
     yesterday: DailyForecast | None = None  # past_days=1 的昨天，仅用于突变提醒；daily 始终 [0]=今天
 
 
+def _optional_number(value) -> float | None:
+    """可选数值字段：缺失/非数值/布尔一律 None（模型不提供某变量时 Open-Meteo 返回 null）。"""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
+
+
 def fetch_weather(latitude: float, longitude: float, timezone: str, timeout: float = 15) -> WeatherData:
     params = {
         "latitude": latitude,
         "longitude": longitude,
-        "current": "temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,apparent_temperature",
-        "daily": "weather_code,temperature_2m_max,temperature_2m_min",
+        "current": "temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,apparent_temperature,"
+        "uv_index,pressure_msl,visibility,wind_direction_10m",
+        "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,uv_index_max",
         "hourly": "temperature_2m,precipitation_probability,weather_code",
         "timezone": timezone,
         "past_days": 1,
@@ -152,11 +166,19 @@ def fetch_weather(latitude: float, longitude: float, timezone: str, timeout: flo
         code=current["weather_code"],
         description=describe_weather(current["weather_code"]),
         apparent=current.get("apparent_temperature"),
+        uv=_optional_number(current.get("uv_index")),
+        pressure=_optional_number(current.get("pressure_msl")),
+        visibility=_optional_number(current.get("visibility")),
+        wind_dir=_optional_number(current.get("wind_direction_10m")),
     )
 
+    days = len(daily["time"])
+    precip_max = daily.get("precipitation_probability_max") or [None] * days
+    uv_max = daily.get("uv_index_max") or [None] * days
     forecasts: list[DailyForecast] = []
-    for i in range(len(daily["time"])):
+    for i in range(days):
         code = daily["weather_code"][i]
+        precip = _optional_number(precip_max[i] if i < len(precip_max) else None)
         forecasts.append(
             DailyForecast(
                 date=daily["time"][i],
@@ -164,6 +186,8 @@ def fetch_weather(latitude: float, longitude: float, timezone: str, timeout: flo
                 temp_min=daily["temperature_2m_min"][i],
                 code=code,
                 description=describe_weather(code),
+                precip_prob=None if precip is None else int(round(precip)),
+                uv_max=_optional_number(uv_max[i] if i < len(uv_max) else None),
             )
         )
 

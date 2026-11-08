@@ -104,6 +104,10 @@ def build_payload(
                 "code": weather.current.code,
                 "description": weather.current.description,
                 "apparent": weather.current.apparent,
+                "uv": weather.current.uv,
+                "pressure": weather.current.pressure,
+                "visibility_km": None if weather.current.visibility is None else weather.current.visibility / 1000,
+                "wind_dir": weather.current.wind_dir,
             },
             "daily": [
                 {
@@ -112,6 +116,8 @@ def build_payload(
                     "temp_min": d.temp_min,
                     "code": d.code,
                     "description": d.description,
+                    "precip_prob": d.precip_prob,
+                    "uv_max": d.uv_max,
                 }
                 for d in weather.daily
             ],

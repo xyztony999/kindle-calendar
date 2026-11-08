@@ -63,6 +63,8 @@ class OptionsSchemaTest(unittest.TestCase):
                 elif kind == "text":
                     self.assertIsInstance(default, str)
                     self.assertIsNone(choices)
+                elif kind == "list":
+                    self.assertTrue(default and set(default) <= set(choices or ()), (widget, key))
                 else:
                     self.assertEqual(kind, "choice")
                     self.assertIn(default, choices or ())

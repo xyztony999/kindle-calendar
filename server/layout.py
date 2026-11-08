@@ -10,6 +10,7 @@ from datetime import date
 from typing import Any
 
 from server.datefmt import DATE_FORMATS, PLACEHOLDERS, TEMPLATE_MAX, header_date_text, template_error
+from server.indices import DEFAULT_INDEX_ITEMS, INDEX_ITEMS, INDEX_KEYS, INDEX_MAX
 from server.render.regions import BASE_H, BASE_W
 
 STATUS_Y = 44
@@ -113,6 +114,10 @@ FIELD_DEFS: tuple[tuple[str, str, str], ...] = (
     ("weather.temp_min", "今日最低温", "Today's low"),
     ("weather.temp_max", "今日最高温", "Today's high"),
     ("weather.apparent", "体感温度", "Feels like"),
+    ("weather.uv", "紫外线", "UV index"),
+    ("weather.pressure", "气压", "Pressure"),
+    ("weather.visibility", "能见度", "Visibility"),
+    ("weather.wind_dir", "风向", "Wind direction"),
     ("date.month_day", "公历月日", "Date"),
     ("date.weekday", "星期", "Weekday"),
     ("date.lunar", "农历", "Lunar date"),
@@ -128,6 +133,14 @@ FIELD_DEFS: tuple[tuple[str, str, str], ...] = (
     ("sun.illumination", "月面照亮比例", "Illumination"),
     ("aqi.value", "AQI 数值", "AQI"),
     ("aqi.level", "AQI 等级", "AQI level"),
+    ("air.pm25", "PM2.5", "PM2.5"),
+    ("air.pm10", "PM10", "PM10"),
+    ("life.dress", "穿衣", "What to wear"),
+    ("life.laundry", "晾晒", "Laundry"),
+    ("life.exercise", "运动", "Exercise"),
+    ("life.carwash", "洗车", "Car wash"),
+    ("life.cold", "感冒", "Cold risk"),
+    ("life.sunscreen", "防晒", "Sun protection"),
     ("quote.text", "一言正文", "Quote"),
     ("quote.from", "一言出处", "Source"),
     ("events.today_count", "今日日程数", "Events today"),
@@ -145,11 +158,12 @@ FIELD_GROUP_LABELS = (
     ("lunar", "农历与黄历", "Lunar and almanac"),
     ("sun_moon", "日出与月相", "Sun and moon"),
     ("air", "空气", "Air"),
+    ("life", "生活建议", "Daily tips"),
     ("quote", "一言", "Quote"),
     ("events", "日程", "Events"),
     ("other", "其它", "Other"),
 )
-_FIELD_PREFIX_GROUP = {"weather": "weather", "date": "lunar", "almanac": "lunar", "sun": "sun_moon", "aqi": "air", "quote": "quote", "events": "events"}
+_FIELD_PREFIX_GROUP = {"weather": "weather", "date": "lunar", "almanac": "lunar", "sun": "sun_moon", "aqi": "air", "air": "air", "life": "life", "quote": "quote", "events": "events"}
 
 
 def field_group(field_id: str) -> str:
@@ -161,9 +175,16 @@ def field_group(field_id: str) -> str:
 def field_groups_catalog(lang: str) -> list[dict]:
     return [{"key": key, "label": en if lang == "en" else zh} for key, zh, en in FIELD_GROUP_LABELS]
 
-_NUMERIC_FIELDS = {"weather.temperature", "weather.humidity", "weather.wind_speed", "weather.precip_prob", "weather.temp_min", "weather.temp_max", "weather.apparent", "sun.illumination", "aqi.value", "events.today_count"}
+_NUMERIC_FIELDS = {
+    "weather.temperature", "weather.humidity", "weather.wind_speed", "weather.precip_prob", "weather.temp_min",
+    "weather.temp_max", "weather.apparent", "weather.uv", "weather.pressure", "weather.visibility",
+    "sun.illumination", "aqi.value", "air.pm25", "air.pm10", "events.today_count",
+}
 _TIME_FIELDS = {"sun.sunrise", "sun.sunset", "events.next_time"}
-_SHORT_FIELDS = {"weather.description", "date.weekday", "date.solar_term", "sun.moon", "aqi.level", "events.next_title"}
+_SHORT_FIELDS = {
+    "weather.description", "weather.wind_dir", "date.weekday", "date.solar_term", "sun.moon", "aqi.level", "events.next_title",
+    "life.dress", "life.laundry", "life.exercise", "life.carwash", "life.cold", "life.sunscreen",
+}
 FIELD_KINDS = {field: ("number" if field in _NUMERIC_FIELDS else "time" if field in _TIME_FIELDS else "date" if field == "date.month_day" else "short_text" if field in _SHORT_FIELDS else "text") for field in FIELD_IDS}
 
 
@@ -259,6 +280,24 @@ SYSTEM_OPTIONS: dict[str, dict[str, tuple[str, str, str, object, tuple | None]]]
     "schedule": {
         "show_tomorrow": ("显示明日", "Show tomorrow", "bool", False, None),
     },
+    "list": {
+        "days": ("显示天数", "Days", "choice", "7", ("7", "5")),
+        "show_precip": ("降水概率", "Rain chance", "bool", False, None),
+        "show_icon": ("天气图标", "Weather icon", "bool", True, None),
+    },
+    "chart": {
+        "days": ("显示天数", "Days", "choice", "7", ("7", "5")),
+    },
+    "hourly": {
+        "chart": ("图形", "Chart", "choice", "bar", ("bar", "line", "area")),
+        "span": ("时间跨度", "Time span", "choice", "24", ("24", "12")),
+        "precip": ("降水显示", "Rain display", "choice", "dots", ("dots", "bars", "off")),
+        "labels": ("温度标注", "Temperature labels", "choice", "ends", ("ends", "extremes", "every3")),
+        "ticks": ("刻度间隔", "Tick interval", "choice", "6", ("6", "3")),
+    },
+    "indices": {
+        "items": ("显示项目", "Cards", "list", DEFAULT_INDEX_ITEMS, INDEX_KEYS),
+    },
     "countdown": {},
     "wallpaper": {
         "mode": ("模式", "Mode", "choice", "daily", ("daily", "fixed")),
@@ -280,8 +319,16 @@ CHOICE_LABELS: dict[tuple[str, str], dict[str, tuple[str, str]]] = {
     ("grid", "week_start"): {"mon": ("周一", "Monday"), "sun": ("周日", "Sunday")},
     ("grid", "today_mark"): {"circle": ("圆圈", "Circle"), "fill": ("实心", "Filled"), "box": ("方框", "Box")},
     ("wallpaper", "mode"): {"daily": ("每日轮换", "Daily"), "fixed": ("固定一张", "Fixed")},
+    ("list", "days"): {"7": ("7 天", "7 days"), "5": ("5 天", "5 days")},
+    ("chart", "days"): {"7": ("7 天", "7 days"), "5": ("5 天", "5 days")},
+    ("hourly", "chart"): {"bar": ("柱形", "Bars"), "line": ("折线", "Line"), "area": ("面积", "Area")},
+    ("hourly", "span"): {"24": ("24 小时", "24 hours"), "12": ("12 小时", "12 hours")},
+    ("hourly", "precip"): {"dots": ("圆点标注", "Dots"), "bars": ("底部细条", "Bottom bars"), "off": ("关闭", "Off")},
+    ("hourly", "labels"): {"ends": ("首尾", "Ends"), "extremes": ("最高最低", "High and low"), "every3": ("每 3 小时", "Every 3 hours")},
+    ("hourly", "ticks"): {"6": ("每 6 小时", "Every 6 hours"), "3": ("每 3 小时", "Every 3 hours")},
+    ("indices", "items"): {key: (zh, en) for key, zh, en in INDEX_ITEMS},
 }
-# 文本选项元数据：长度上限、允许的占位符、仅在某单选取特定值时显示
+# 文本选项元数据：长度上限、允许的占位符、仅在某单选取特定值时显示；列表选项元数据：条数上下限
 OPTION_META: dict[tuple[str, str], dict] = {
     ("header", "date_template"): {
         "max_len": TEMPLATE_MAX,
@@ -289,6 +336,7 @@ OPTION_META: dict[tuple[str, str], dict] = {
         "visible_when": {"date_format": "custom"},
         "example": ("{M}月{D}日 周{W}", "{W} {M}/{D}"),
     },
+    ("indices", "items"): {"min_items": 1, "max_items": INDEX_MAX},
 }
 
 
@@ -319,20 +367,39 @@ def text_option_error(widget: str, key: str, value: object) -> str | None:
     return None
 
 
+def list_option_error(widget: str, key: str, value: object) -> str | None:
+    """列表选项校验（有序、唯一、属于目录、条数在上下限内）：返回错误说明，合法返回 None。"""
+    choices = SYSTEM_OPTIONS.get(widget, {}).get(key, (None, None, None, None, ()))[4] or ()
+    meta = OPTION_META.get((widget, key), {})
+    low, high = meta.get("min_items", 1), meta.get("max_items", len(choices))
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        return "列表选项须为字符串数组"
+    if not low <= len(value) <= high:
+        return f"须选择 {low}–{high} 项"
+    if len(set(value)) != len(value):
+        return "项目不能重复"
+    if any(item not in choices for item in value):
+        return "含未知项目"
+    return None
+
+
 def system_options_catalog(widget: str, lang: str) -> list[dict]:
     """把某系统积木的选项 schema 输出为前端可用的列表。"""
     out: list[dict] = []
     for key, (zh, en, kind, default, choices) in SYSTEM_OPTIONS.get(widget, {}).items():
-        item: dict = {"key": key, "label": en if lang == "en" else zh, "kind": kind, "default": default}
+        item: dict = {"key": key, "label": en if lang == "en" else zh, "kind": kind, "default": list(default) if kind == "list" else default}
         if choices is not None:
             item["choices"] = list(choices)
             item["choice_labels"] = _choice_labels(widget, key, lang)
         meta = OPTION_META.get((widget, key))
-        if meta:
+        if meta and kind == "text":
             item["max_len"] = meta["max_len"]
             item["placeholders"] = ["{" + name + "}" for name in meta.get("placeholders", ())]
             item["visible_when"] = meta.get("visible_when")
             item["example"] = meta["example"][1 if lang == "en" else 0]
+        elif meta and kind == "list":
+            item["min_items"] = meta["min_items"]
+            item["max_items"] = meta["max_items"]
         out.append(item)
     return out
 
@@ -351,6 +418,8 @@ def block_options(widget: str, raw: object) -> dict:
             options[key] = default if value not in (choices or ()) else value
         elif kind == "text":
             options[key] = value if text_option_error(widget, key, value) is None else default
+        elif kind == "list":
+            options[key] = list(value) if list_option_error(widget, key, value) is None else list(default)
     return options
 
 
@@ -513,6 +582,10 @@ def _validate_block(
                     details.append(_detail(f"{prefix}.options.{key}", "LAYOUT_INVALID", "选项取值无效"))
                 elif schema[key][2] == "text":
                     problem = text_option_error(str(widget), key, value)
+                    if problem:
+                        details.append(_detail(f"{prefix}.options.{key}", "LAYOUT_INVALID", problem))
+                elif schema[key][2] == "list":
+                    problem = list_option_error(str(widget), key, value)
                     if problem:
                         details.append(_detail(f"{prefix}.options.{key}", "LAYOUT_INVALID", problem))
     if widget not in SYSTEM_WIDGETS and widget not in ("image", "text", "custom"):

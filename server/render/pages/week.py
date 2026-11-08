@@ -19,13 +19,24 @@ def _font(sx: float, base: int, font_path: str):
     return style.get_font(max(15, round(base * sx)), font_path)
 
 
-def render_list(payload: dict, rect: Rect, font_path: str) -> Image.Image:
+def _drop(draw: ImageDraw.ImageDraw, x: int, cy: int, size: int, fill: int) -> None:
+    """小水滴（降水概率前缀）：圆底 + 尖顶，纯几何绘制，不依赖字体里的符号。"""
+    r = size // 2
+    bottom = cy + r
+    draw.ellipse((x, bottom - size, x + size, bottom), fill=fill)
+    draw.polygon([(x + r, bottom - int(size * 1.6)), (x + 1, bottom - r - 1), (x + size - 1, bottom - r - 1)], fill=fill)
+
+
+def render_list(payload: dict, rect: Rect, font_path: str, options: dict | None = None) -> Image.Image:
+    opts = options or {}
     img = Image.new("L", (rect.w, rect.h), style.PAPER)
     draw = ImageDraw.Draw(img)
     sx = rect.w / 646
 
-    daily = payload["weather"]["daily"][:7]
+    daily = payload["weather"]["daily"][: 5 if str(opts.get("days")) == "5" else 7]
     row_h = rect.h // max(len(daily), 1)
+    show_icon = opts.get("show_icon", True)
+    show_precip = opts.get("show_precip", False)
     f_day = _font(sx, 30, font_path)
     f_temp = _font(sx, 28, font_path)
     f_desc = _font(sx, 24, font_path)
@@ -51,26 +62,38 @@ def render_list(payload: dict, rect: Rect, font_path: str) -> Image.Image:
         draw.text((10, y0 + row_h // 2 - 32), label, fill=style.INK, font=f_day)
         draw.text((10, y0 + row_h // 2 + 4), f"{mday}/{dday}", fill=style.MID, font=f_date)
 
-        # 中：天气图标 + 描述
-        icon_size = row_h - 26
-        draw_weather_icon(draw, d["code"], int(150 * sx + icon_size // 2), y0 + row_h // 2, icon_size)
-        draw.text((int(200 * sx), y0 + row_h // 2 - 14), d["description"], fill=style.INK, font=f_desc)
+        # 中：天气图标 + 描述（图标尺寸以 7 天行高为上限：5 天行更高时图标不放大、不压描述）
+        if show_icon:
+            icon_size = min(row_h, rect.h // 7) - 26
+            draw_weather_icon(draw, d["code"], int(150 * sx + icon_size // 2), y0 + row_h // 2, icon_size)
+            desc_x = int(200 * sx)
+        else:
+            desc_x = int(150 * sx)
+        draw.text((desc_x, y0 + row_h // 2 - 14), d["description"], fill=style.INK, font=f_desc)
 
-        # 右：高低温
+        # 右：高低温；降水概率与之同行、在其左侧（7 天行高仅 70px，放不下第二行）
         temp_line = f"{fmt_temp(d['temp_max'], payload)} / {fmt_temp(d['temp_min'], payload)}"
         style.draw_text_right(draw, rect.w - 12, y0 + row_h // 2 - 16, temp_line, f_temp, style.INK)
+        prob = d.get("precip_prob")
+        if show_precip and isinstance(prob, (int, float)) and not isinstance(prob, bool):
+            text = f"{int(prob)}%"
+            right = rect.w - 12 - style.text_size(draw, temp_line, f_temp)[0] - int(22 * sx)
+            text_w = style.text_size(draw, text, f_desc)[0]
+            style.draw_text_right(draw, right, y0 + row_h // 2 - 14, text, f_desc, style.MID)
+            size = max(8, int(12 * sx))
+            _drop(draw, right - text_w - size - int(5 * sx), y0 + row_h // 2 - 1, size, style.MID)
 
         if i < len(daily) - 1:
             style.hairline(draw, 12, y0 + row_h, rect.w - 12, style.RULE)
     return img
 
 
-def render_chart(payload: dict, rect: Rect, font_path: str) -> Image.Image:
+def render_chart(payload: dict, rect: Rect, font_path: str, options: dict | None = None) -> Image.Image:
     img = Image.new("L", (rect.w, rect.h), style.PAPER)
     draw = ImageDraw.Draw(img)
     sx = rect.w / 646
 
-    daily = payload["weather"]["daily"][:7]
+    daily = payload["weather"]["daily"][: 5 if str((options or {}).get("days")) == "5" else 7]
     if not daily:
         return img
 
@@ -99,6 +122,8 @@ def render_chart(payload: dict, rect: Rect, font_path: str) -> Image.Image:
     draw.line([(px(i), py(lows[i])) for i in range(len(daily))], fill=style.MID, width=3)
 
     today_iso = payload["date"]["iso"]
+    # 日期刻度行的墨水顶：低温标注若会压到它（该点恰是一周最低时必然发生），改放到点的上方
+    date_top = draw.textbbox((0, int(rect.h - pad_b + 10 * sx)), "0", font=f_label)[1]
     for i, d in enumerate(daily):
         is_today = d["date"] == today_iso
         r = 6 if is_today else 4
@@ -109,7 +134,10 @@ def render_chart(payload: dict, rect: Rect, font_path: str) -> Image.Image:
             h_txt = fmt_temp(d["temp_max"], payload)
             l_txt = fmt_temp(d["temp_min"], payload)
             style.draw_text_center(draw, px(i), py(highs[i]) - 34 * sx, h_txt, f_label, style.INK)
-            style.draw_text_center(draw, px(i), py(lows[i]) + 12 * sx, l_txt, f_label, style.MID)
+            low_y = py(lows[i]) + 12 * sx
+            if draw.textbbox((0, int(low_y)), l_txt, font=f_label)[3] > date_top - 2:
+                low_y = py(lows[i]) - r - 4 - draw.textbbox((0, 0), l_txt, font=f_label)[3]
+            style.draw_text_center(draw, px(i), low_y, l_txt, f_label, style.MID)
         # 日期刻度
         label = d["date"][8:10].lstrip("0")
         style.draw_text_center(draw, px(i), rect.h - pad_b + 10 * sx, label, f_label, style.MID)

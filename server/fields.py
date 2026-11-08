@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from server.advice import advice_text, uv_today
 from server.locale import badge_en, is_en, short_date, weekday_en, zodiac_en
-from server.units import aqi_view, fmt_temp, fmt_wind
+from server.units import aqi_view, fmt_int, fmt_pressure, fmt_temp, fmt_visibility, fmt_wind, fmt_wind_dir
 
 _WEEKDAY = "一二三四五六日"
 DASH = "—"
@@ -45,6 +46,19 @@ def field_text(payload: dict, field_id: str) -> str:
         text = fmt_temp(daily.get("temp_min"), payload)
     elif field_id == "weather.temp_max":
         text = fmt_temp(daily.get("temp_max"), payload)
+    elif field_id == "weather.uv":
+        text = fmt_int(uv_today(payload))
+    elif field_id == "weather.pressure":
+        text = fmt_pressure(current.get("pressure"))
+    elif field_id == "weather.visibility":
+        text = fmt_visibility(current.get("visibility_km"))
+    elif field_id == "weather.wind_dir":
+        text = fmt_wind_dir(current.get("wind_dir"), payload)
+    elif field_id in ("air.pm25", "air.pm10"):
+        air = payload.get("aqi") if isinstance(payload.get("aqi"), dict) else {}
+        text = fmt_int(air.get("pm2_5" if field_id == "air.pm25" else "pm10"))
+    elif field_id.startswith("life."):
+        text = advice_text(payload, field_id.split(".", 1)[1])
     elif field_id == "date.month_day":
         iso = str(date.get("iso") or "")
         text = short_date(iso) if english and iso else str(date.get("month_day_cn") or "")

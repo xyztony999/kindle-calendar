@@ -549,6 +549,15 @@
   .opt-text input[type="text"] { padding: 6px 9px; }
   .opt-help, .opt-error { margin: 0; font-size: 12px; color: var(--mid); }
   .opt-error { color: var(--bad); }
+  /* 有序多选（指数卡项目）：已选按显示顺序、行尾 ↑↓；候选为紧凑网格 */
+  div.opt-row.opt-list-pick { display: grid; gap: 6px; }
+  .opt-chosen { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+  .opt-chosen li { display: flex; align-items: center; gap: 6px; padding: 3px 4px 3px 8px; border: 1px solid var(--hair); border-radius: 6px; background: var(--card); }
+  .opt-chosen li .opt-pick { flex: 1; min-width: 0; }
+  .opt-move { width: 26px; height: 26px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--card); line-height: 1; flex: none; }
+  .opt-move:disabled { opacity: 0.35; cursor: default; }
+  .opt-pool { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 4px 12px; }
+  .opt-pool .opt-pick:has(input:disabled) { color: var(--faint); cursor: default; }
   #units-box { margin: 4px 0 2px; }
   /* 数据积木字段：按类分组，组名在上、组内自适应多列 */
   .wm-fields.field-grouped { display: grid; gap: 10px; }
@@ -2278,6 +2287,75 @@
         });
         row.append(name, input, help, error);
         box.appendChild(row);
+      } else if (opt.kind === "list") {
+        // 有序多选：已选项按显示顺序排列、可 ↑↓ 调序；其余候选按目录顺序，勾选即追加到末尾
+        const chosen = Array.isArray(current) ? current.slice() : [];
+        const maxItems = opt.max_items || chosen.length || 1;
+        const minItems = opt.min_items || 1;
+        const labelOf = (key) => (opt.choice_labels && opt.choice_labels[key]) || key;
+        const commit = (next, focusId) => {
+          block.options[opt.key] = next;
+          refresh(focusId);
+        };
+        const holder = document.createElement("div");
+        holder.className = "opt-row opt-list-pick";
+        const name = document.createElement("span");
+        name.className = "opt-name";
+        name.textContent = opt.label + " · " + chosen.length + "/" + maxItems;
+        const order = document.createElement("ol");
+        order.className = "opt-chosen";
+        chosen.forEach((key, index) => {
+          const item = document.createElement("li");
+          const pick = document.createElement("label");
+          pick.className = "opt-pick";
+          const input = document.createElement("input");
+          input.type = "checkbox";
+          input.id = "sys-opt-" + opt.key + "-" + key;
+          input.checked = true;
+          input.disabled = chosen.length <= minItems;
+          input.addEventListener("change", () => commit(chosen.filter((other) => other !== key), input.id));
+          const text = document.createElement("span");
+          text.textContent = labelOf(key);
+          pick.append(input, text);
+          const move = (delta, symbol, word) => {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "opt-move";
+            btn.id = "sys-opt-" + opt.key + "-" + key + (delta < 0 ? "-up" : "-down");
+            btn.textContent = symbol;
+            btn.setAttribute("aria-label", word + " " + labelOf(key));
+            btn.disabled = index + delta < 0 || index + delta >= chosen.length;
+            btn.addEventListener("click", () => {
+              const next = chosen.slice();
+              next.splice(index, 1);
+              next.splice(index + delta, 0, key);
+              commit(next, btn.id);
+            });
+            return btn;
+          };
+          item.append(pick, move(-1, "↑", T.move_up), move(1, "↓", T.move_down));
+          order.appendChild(item);
+        });
+        const pool = document.createElement("div");
+        pool.className = "opt-pool";
+        (opt.choices || []).filter((key) => !chosen.includes(key)).forEach((key) => {
+          const pick = document.createElement("label");
+          pick.className = "opt-pick";
+          const input = document.createElement("input");
+          input.type = "checkbox";
+          input.id = "sys-opt-" + opt.key + "-" + key;
+          input.disabled = chosen.length >= maxItems;
+          input.addEventListener("change", () => commit(chosen.concat([key]), input.id));
+          const text = document.createElement("span");
+          text.textContent = labelOf(key);
+          pick.append(input, text);
+          pool.appendChild(pick);
+        });
+        const hint = document.createElement("p");
+        hint.className = "opt-help";
+        hint.textContent = chosen.length >= maxItems ? T.list_full.replace("{n}", String(maxItems)) : T.list_hint;
+        holder.append(name, order, pool, hint);
+        box.appendChild(holder);
       }
     });
   }

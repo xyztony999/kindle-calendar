@@ -101,3 +101,33 @@ def aqi_view(payload: dict | None) -> tuple[int, str] | None:
 def aqi_band(value: int) -> int:
     """AQI 数值所在的段（0–5），供六段刻度条定位当前段。"""
     return sum(1 for bound in _AQI_BANDS if value > bound)
+
+
+# 风向为「风的来向」（气象惯例，0=北风），8 方位
+_DIRS_CN = ("北", "东北", "东", "东南", "南", "西南", "西", "西北")
+_DIRS_EN = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+
+
+def fmt_wind_dir(degrees, payload: dict | None) -> str:
+    value = _number(degrees)
+    if value is None:
+        return ""
+    index = int(((value % 360) + 22.5) // 45) % 8
+    return _DIRS_EN[index] if is_en(payload) else _DIRS_CN[index] + "风"
+
+
+def fmt_visibility(km) -> str:
+    value = _number(km)
+    if value is None:
+        return ""
+    return f"{half_up(value)} km" if value >= 10 else f"{value:.1f} km"
+
+
+def fmt_pressure(hpa) -> str:
+    value = _number(hpa)
+    return "" if value is None else f"{half_up(value)} hPa"
+
+
+def fmt_int(value) -> str:
+    number = _number(value)
+    return "" if number is None else str(half_up(number))

@@ -8,7 +8,7 @@ pipeline:
         note: "2026-11-08 冷启动，会话编排轨。D0 三轮+Gate 1 一轮选择题全部拍板（13 项决策见 PRD §2）；勘察根因：opt-* 样式被 a1937d4 全量重写丢失（回归）、全站 :.0f 致 -0°、hourly/indices 无 options、逐时首标签左裁。Gate 1 PASS：分两轮/未配置保持现状/生活建议按草案。"
       code:
         status: complete
-        note: "2026-11-08 轮 1 已实现并验证：units.py/datefmt.py 新模块、全局 units（℃/℉·风速·国标 AQI）、页眉日期预设+模板、今日标记三样式、opt-* 样式恢复+字段分组；顺带修 aqi.py 未定义 log（既有）与指数卡长数值溢出（既有）。169 单测 + 两 E2E + 77 端点 HTTP 全过。Gate 2 PASS 待用户验收，未提交。"
+        note: "2026-11-08 轮 1 已实现并验证：units.py/datefmt.py 新模块、全局 units（℃/℉·风速·国标 AQI）、页眉日期预设+模板、今日标记三样式、opt-* 样式恢复+字段分组；顺带修 aqi.py 未定义 log（既有）与指数卡长数值溢出（既有）。169 单测 + 两 E2E + 77 端点 HTTP 全过。Gate 2 PASS；本地提交 4a581ba，2026-11-09 与轮 2 一同推送上线。"
     gates:
       gate1: { status: PASS, report: 05-reports/gate1-block-options-2.md }
       gate2: { status: PASS, report: 05-reports/gate2-block-options-2.md }
@@ -27,7 +27,13 @@ pipeline:
         status: complete
         note: "随 block-options-2 Gate 1 一并拍板（契约 §5–§8）。"
       code:
-        status: todo
+        status: complete
+        note: "2026-11-09 已实现并验证（轮 1 已本地提交 4a581ba 未推送）：天气数据扩展+六项生活建议+数据积木 12 新字段、指数卡 list 选项（勾选+上下移 ≤6）、逐时三图形+四附加+边缘钳制+同小时叠放、一周天数与内容；顺带修一周曲线低温标注压日期（既有）。195 单测 + 两 E2E + 80 端点 HTTP 全过。Gate 2 PASS；2026-11-09 用户确认 commit & push（与轮 1 一同推送上线）。"
+    gates:
+      gate2: { status: PASS, report: 05-reports/gate2-block-options-2-round2.md }
+    artifacts:
+      reports:
+        - 05-reports/gate2-block-options-2-round2.md
   - module: admin-redesign
     title: "管理端「台历工房」视觉重设计（分区块化+衬线分区头+分区导航，纯 CSS/导航层）"
     stages:

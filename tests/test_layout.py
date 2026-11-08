@@ -149,7 +149,8 @@ class LayoutUnitTests(unittest.TestCase):
         self.assertEqual(migrated["pages"][0]["layout"][0]["size"], "md")
 
     def test_field_capabilities_and_style_boundaries(self):
-        self.assertEqual(len(FIELD_IDS), 29)
+        # 29 个基础字段 + 积木自定义二期轮 2 新增 12 个（气象扩展 4、空气细分 2、生活建议 6）
+        self.assertEqual(len(FIELD_IDS), 41)
         self.assertEqual({field_kind(field) for field in FIELD_IDS}, {"number", "time", "date", "short_text", "text"})
         self.assertEqual(field_kind("unknown"), "text")
         compact = ["weather.temperature", "sun.sunrise", "date.month_day", "weather.humidity", "aqi.value", "sun.sunset"]

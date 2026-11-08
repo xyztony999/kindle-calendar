@@ -303,6 +303,28 @@ fs.mkdirSync(output, {recursive:true});
   await page.screenshot({path: path.join(output, 'sysopt-text.png')});
   await page.locator('#cancel-editor').click();
 
+  // block-options-2 轮 2：指数卡有序多选（勾选 + ↑↓）与逐时图形
+  await edit(3);
+  await page.locator('#stage .block').filter({hasText: /指数|Indices/}).first().click();
+  await page.locator('#sys-opt-items-humidity').waitFor();
+  assert.equal(await page.locator('#block-styles .opt-chosen li').count(), 6);
+  assert.equal(await page.locator('#sys-opt-items-uv').isDisabled(), true, 'candidates locked while 6 cards are chosen');
+  await page.locator('#sys-opt-items-humidity').uncheck();
+  await page.locator('#sys-opt-items-uv').check();
+  await page.locator('#sys-opt-items-uv-up').click();
+  const chosenOrder = await page.locator('#block-styles .opt-chosen li span').allInnerTexts();
+  assert.deepEqual(chosenOrder.slice(-2), ['紫外线', 'AQI']);
+  assert.equal(await page.locator('#sys-opt-items-uv-up').evaluate((el) => el === document.activeElement), true, 'focus follows the moved card');
+  await page.screenshot({path: path.join(output, 'sysopt-indices.png')});
+  await page.locator('#stage .block').filter({hasText: /逐时|Hourly/}).first().click();
+  await page.locator('#block-styles .opt-pick').filter({hasText: '折线'}).click();
+  assert.equal(await page.locator('#sys-opt-chart-line').isChecked(), true);
+  await page.locator('#close-editor').click();
+  payload = await save();
+  const detailLayout = payload.pages.find((p) => p.page_id === 'detail').layout;
+  assert.deepEqual(detailLayout.find((b) => b.widget === 'indices').options.items, ['wind', 'precip', 'sunrise', 'sunset', 'uv', 'aqi']);
+  assert.equal(detailLayout.find((b) => b.widget === 'hourly').options.chart, 'line');
+
   for (const lang of ['zh','en']) {
     await page.goto(base + '/admin?lang=' + lang);
     await page.locator('#view-settings').waitFor({state:'visible'});

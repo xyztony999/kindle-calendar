@@ -25,17 +25,17 @@ def _system_image(widget: str, payload: dict, rect: Rect, font_path: str, page: 
     if widget == "quote":
         return common.render_quote(payload, rect, font_path, options=options)
     if widget == "list":
-        return week_page.render_list(payload, rect, font_path)
+        return week_page.render_list(payload, rect, font_path, options=options)
     if widget == "chart":
-        return week_page.render_chart(payload, rect, font_path)
+        return week_page.render_chart(payload, rect, font_path, options=options)
     if widget == "title":
         return month_page.render_title(payload, rect, font_path, offset=offset)
     if widget == "grid":
         return month_page.render_grid(payload, rect, font_path, offset=offset, options=options)
     if widget == "hourly":
-        return detail_page.render_hourly(payload, rect, font_path)
+        return detail_page.render_hourly(payload, rect, font_path, options=options)
     if widget == "indices":
-        return detail_page.render_indices(payload, rect, font_path)
+        return detail_page.render_indices(payload, rect, font_path, options=options)
     if widget == "main":
         return almanac_page.render_main(payload, rect, font_path, options=options)
     if widget == "schedule":

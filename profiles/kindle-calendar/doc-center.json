@@ -1,0 +1,258 @@
+{
+  "_generated": {
+    "note": "本文件由 engine-gui 文档中心根据项目架构自动生成，可手工编辑（编辑后原样生效）；删除本文件后下次访问将按最新架构重新生成。",
+    "generatedAt": "2026-11-11T09:00:00.000Z",
+    "generator": "engine-gui doc-center 生成器（/dc/api/domains · /api/projects/:id/funcview）；2026-11-11 手工同步至业务架构 v2.0（5 L2 / 24 L3）"
+  },
+  "names-map": {},
+  "module-docs": {
+    "domains": {
+      "本架构概览": {
+        "name": "本架构概览",
+        "layer": "业务域",
+        "related": "",
+        "fishbone": {
+          "spine": [
+            {
+              "code": "S1",
+              "name": "本架构概览",
+              "desc": ""
+            }
+          ],
+          "upperRibs": [],
+          "lowerRibs": []
+        }
+      },
+      "台历配置": {
+        "name": "台历配置",
+        "layer": "业务域",
+        "related": "",
+        "fishbone": {
+          "spine": [
+            {
+              "code": "S2",
+              "name": "台历配置",
+              "desc": "维护者决定取哪些内容、摆成什么版面、以什么节奏轮播，并掌握配置效果、备份与运行状态。"
+            }
+          ],
+          "upperRibs": [
+            {
+              "code": "U2-1",
+              "name": "内容源配置",
+              "desc": "",
+              "col": 0
+            },
+            {
+              "code": "U2-2",
+              "name": "版面编排",
+              "desc": "",
+              "col": 0
+            },
+            {
+              "code": "U2-3",
+              "name": "配置治理",
+              "desc": "",
+              "col": 0
+            }
+          ],
+          "lowerRibs": []
+        }
+      },
+      "内容供给": {
+        "name": "内容供给",
+        "layer": "业务域",
+        "related": "",
+        "fishbone": {
+          "spine": [
+            {
+              "code": "S3",
+              "name": "内容供给",
+              "desc": "云端聚合天气、空气、历法、节假日与个人日程数据，推算生活建议，按积木版面渲染分区图，以指纹协商缓存。"
+            }
+          ],
+          "upperRibs": [
+            {
+              "code": "U3-1",
+              "name": "数据聚合",
+              "desc": "",
+              "col": 0
+            },
+            {
+              "code": "U3-2",
+              "name": "历法数据",
+              "desc": "",
+              "col": 0
+            },
+            {
+              "code": "U3-3",
+              "name": "节假日数据",
+              "desc": "",
+              "col": 0
+            },
+            {
+              "code": "U3-4",
+              "name": "页面渲染",
+              "desc": "",
+              "col": 0
+            },
+            {
+              "code": "U3-5",
+              "name": "缓存协商",
+              "desc": "",
+              "col": 0
+            }
+          ],
+          "lowerRibs": []
+        }
+      },
+      "信息呈现": {
+        "name": "信息呈现",
+        "layer": "业务域",
+        "related": "",
+        "fishbone": {
+          "spine": [
+            {
+              "code": "S4",
+              "name": "信息呈现",
+              "desc": "面向家庭用户的设备画面展示：预设五页与自建页、页面导航、设备双语。"
+            }
+          ],
+          "upperRibs": [
+            {
+              "code": "U4-1",
+              "name": "今日信息展示",
+              "desc": "",
+              "col": 0
+            },
+            {
+              "code": "U4-2",
+              "name": "周期预报展示",
+              "desc": "",
+              "col": 0
+            },
+            {
+              "code": "U4-3",
+              "name": "月历展示",
+              "desc": "",
+              "col": 0
+            },
+            {
+              "code": "U4-4",
+              "name": "黄历展示",
+              "desc": "",
+              "col": 0
+            },
+            {
+              "code": "U4-5",
+              "name": "天气详情展示",
+              "desc": "",
+              "col": 0
+            },
+            {
+              "code": "U4-6",
+              "name": "日程与倒计时展示",
+              "desc": "",
+              "col": 0
+            },
+            {
+              "code": "U4-7",
+              "name": "页面导航",
+              "desc": "",
+              "col": 0
+            },
+            {
+              "code": "U4-8",
+              "name": "设备双语",
+              "desc": "",
+              "col": 0
+            }
+          ],
+          "lowerRibs": []
+        }
+      },
+      "网站服务": {
+        "name": "网站服务",
+        "layer": "业务域",
+        "related": "",
+        "fishbone": {
+          "spine": [
+            {
+              "code": "S5",
+              "name": "网站服务",
+              "desc": "面向浏览器访客的第二呈现通道；机器客户端访问同一地址仍得原始数据与 PNG。"
+            }
+          ],
+          "upperRibs": [
+            {
+              "code": "U5-1",
+              "name": "首页门户",
+              "desc": "",
+              "col": 0
+            },
+            {
+              "code": "U5-2",
+              "name": "接口阅读页",
+              "desc": "",
+              "col": 0
+            },
+            {
+              "code": "U5-3",
+              "name": "图片承载页",
+              "desc": "",
+              "col": 0
+            },
+            {
+              "code": "U5-4",
+              "name": "网页语言与明暗",
+              "desc": "",
+              "col": 0
+            }
+          ],
+          "lowerRibs": []
+        }
+      },
+      "设备运维": {
+        "name": "设备运维",
+        "layer": "业务域",
+        "related": "",
+        "fishbone": {
+          "spine": [
+            {
+              "code": "S6",
+              "name": "设备运维",
+              "desc": "显示治理、电源网络、拉取调度与脚本自更新保障长期无人值守运行。"
+            }
+          ],
+          "upperRibs": [
+            {
+              "code": "U6-1",
+              "name": "显示治理",
+              "desc": "",
+              "col": 0
+            },
+            {
+              "code": "U6-2",
+              "name": "电源与网络管理",
+              "desc": "",
+              "col": 0
+            },
+            {
+              "code": "U6-3",
+              "name": "拉取调度",
+              "desc": "",
+              "col": 0
+            },
+            {
+              "code": "U6-4",
+              "name": "脚本自更新",
+              "desc": "",
+              "col": 0
+            }
+          ],
+          "lowerRibs": []
+        }
+      }
+    },
+    "domainDetails": {}
+  }
+}

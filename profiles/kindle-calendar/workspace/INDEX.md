@@ -1,5 +1,21 @@
 ---
 pipeline:
+  - module: arch-v2-repartition
+    title: "领域架构重划 v2.0：三文档（BA/AA/FL）按画布积木时代的现状重划分区"
+    stages:
+      design:
+        status: complete
+        note: "2026-11-11 /design 变更管理（入口 BA）。D0 勘察 v1.7 三文档与 14 轮迭代的领域断层；四项拍板（全部推荐）：版面编排=台历配置下 L3 / 网站服务=新 L2 / 运行观测留配置治理 / 派生内容归数据聚合。BA v2.0：5 L2（台历配置/内容供给/信息呈现/网站服务/设备运维）24 L3 76 L4；AA v2.0：C-08 版面编排入核心域、S-05~08 网站服务、D-06 内容源配置、D-05 改名配置治理(+备份/健康)、P-05 脚本自更新，废弃 D-03/D-04/S-04-04~07（编号不复用），用户类型+浏览访客；FL v2.0：三用户类型章 + 附录A 六分区对照 + 附录B 自动化子模块豁免。Step 3/4 机械校验全过（树↔正文、BA→AA→FL 全链路覆盖、105 编码闭合）。"
+      code:
+        status: complete
+        note: "纯文档交付，无代码改动。"
+    gates:
+      gate1: { status: PASS, report: "00-architecture（本模块产物即三文档；S1 三文档检查/S7 跨阶段一致性/S8 无枚举冲突由脚本校验覆盖）" }
+    artifacts:
+      architecture:
+        - 00-architecture/business-arch.md (v2.0)
+        - 00-architecture/application-arch.md (v2.0)
+        - 00-architecture/function-list.md (v2.0)
   - module: block-options-2
     title: "积木自定义二期：勾选框排版回归修复、全局单位（℃/℉·风速·中国AQI）、页眉日期格式、逐时图表、指数卡自选、数据扩展与生活建议、一周与月历选项"
     stages:

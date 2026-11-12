@@ -1,5 +1,17 @@
 ---
 pipeline:
+  - module: landing-mono-font
+    title: "首页 API 清单与阅读页原文视图统一品牌等宽字体栈"
+    stages:
+      design:
+        status: complete
+        note: "2026-11-12 /pipeline 增量，会话编排轨。用户报首页 API URI 字体异常；勘察根因：.endpoints code 与阅读页 pre 未声明字体族，落浏览器默认 fixed（用户环境命中 Courier New 打字机衬线）。两题全推荐拍板：会话编排；两处统一等宽栈（否决仅修首页/改无衬线）。"
+      code:
+        status: complete
+        note: "2026-11-12 已实现并验证：index.html/.endpoints code 与 reading.html pre 各加 ui-monospace→Cascadia/SF Mono→Consolas/Menlo→Courier New 栈；computed font-family 断言两处命中，亮暗/移动端截图目检协调；195 单测 + 80 端点 HTTP 全过。Gate 2 PASS 待 commit。勘察坑：阅读页 pre 在 details 折叠块内且仅 dashboard.env 视图内嵌 source；Playwright goto 默认 Accept:*/* 走机器原文需 ?format=html；本机 8766 落入 Windows 保留端口段改用 8899。"
+    artifacts:
+      prd:
+        - 02-detailed/prd/prd-landing-mono-font.md (v1.0)
   - module: arch-v2-repartition
     title: "领域架构重划 v2.0：三文档（BA/AA/FL）按画布积木时代的现状重划分区"
     stages:

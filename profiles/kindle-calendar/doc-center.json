@@ -1,8 +1,8 @@
 {
   "_generated": {
-    "version": 2,
+    "version": 3,
     "note": "本文件由 engine-gui 文档中心根据项目架构自动生成，可手工编辑（编辑后原样生效）；删除本文件后下次访问将按最新架构重新生成。",
-    "generatedAt": "2026-11-11T10:11:46.975Z",
+    "generatedAt": "2026-11-11T11:56:41.897Z",
     "generator": "engine-gui doc-center 生成器（/dc/api/domains · /api/projects/:id/funcview）"
   },
   "names-map": {},
@@ -10,7 +10,7 @@
     "domains": {
       "台历配置": {
         "name": "台历配置",
-        "layer": "业务域",
+        "layer": "核心域",
         "related": "",
         "fishbone": {
           "spine": [
@@ -45,7 +45,7 @@
       },
       "内容供给": {
         "name": "内容供给",
-        "layer": "业务域",
+        "layer": "核心域",
         "related": "",
         "fishbone": {
           "spine": [
@@ -92,7 +92,7 @@
       },
       "信息呈现": {
         "name": "信息呈现",
-        "layer": "业务域",
+        "layer": "核心域",
         "related": "",
         "fishbone": {
           "spine": [
@@ -157,7 +157,7 @@
       },
       "网站服务": {
         "name": "网站服务",
-        "layer": "业务域",
+        "layer": "支撑域",
         "related": "",
         "fishbone": {
           "spine": [
@@ -198,7 +198,7 @@
       },
       "设备运维": {
         "name": "设备运维",
-        "layer": "业务域",
+        "layer": "支撑域",
         "related": "",
         "fishbone": {
           "spine": [

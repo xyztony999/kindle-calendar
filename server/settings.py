@@ -31,7 +31,7 @@ from server.units import UNIT_CHOICES, normalize_units
 
 PAGE_IDS = PRESET_IDS
 SYSTEM_OPTION_WIDGETS = frozenset(SYSTEM_OPTIONS)
-QUOTE_MODES = ("online", "library", "offline", "custom")  # offline 仅兼容旧数据，normalize 迁移为 library
+QUOTE_MODES = ("online", "library", "offline", "custom", "personal")  # offline 仅兼容旧数据，normalize 迁移为 library
 QUOTE_CATEGORIES = tuple("abcdefghijkl")
 SCHEMA_VERSION = 3
 ACCEPTED_SCHEMAS = (1, 2, 3)

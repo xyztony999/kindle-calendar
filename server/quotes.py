@@ -7,7 +7,7 @@ import logging
 import os
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -101,6 +101,120 @@ _library_sentences: list[dict] | None = None
 _library_lock = threading.Lock()
 _library_refreshing = threading.Event()
 _library_meta: dict = {"updated": "", "count": 0, "fetched_at": None, "last_error": "", "refreshed_at": None}
+# 个人语录库（quote.mode=personal）：整份上传替换，与官方库互不覆盖；懒加载 + 热替换同 library 手法
+_personal_sentences: list[dict] | None = None
+_personal_lock = threading.Lock()
+_personal_meta: dict = {"count": 0, "updated": None}
+
+
+def personal_path() -> Path:
+    """个人库与 settings.json 同目录（data 挂卷持久化，随 SETTINGS_PATH 测试隔离）。"""
+    from server.settings import settings_path
+
+    return settings_path().parent / "quotes_personal.json"
+
+
+def validate_personal(data: object) -> list[dict]:
+    """个人库整份校验 V1–V6（docs/quote-library.md 规范）：全部错误一次性返回，不部分导入。
+
+    details 形态沿用 settings validate 的 _detail 惯例，另带条目 index（顶层错误 index=None）。
+    """
+    from server.settings import CUSTOM_MAX, FROM_MAX, TEXT_MAX
+
+    code = "QUOTES_PERSONAL_INVALID"
+
+    def detail(index, field: str, message: str) -> dict:
+        return {"index": index, "field": field, "code": code, "message": message}
+
+    if not isinstance(data, dict):  # V1
+        return [detail(None, "", "个人语录库须为 JSON 对象")]
+    details: list[dict] = []
+    schema = data.get("schema_version")  # V2
+    if isinstance(schema, bool) or not isinstance(schema, int) or schema != 1:
+        details.append(detail(None, "schema_version", "schema_version 须为整数 1"))
+    quotes = data.get("quotes")  # V3
+    if not isinstance(quotes, list) or not 1 <= len(quotes) <= CUSTOM_MAX:
+        details.append(detail(None, "quotes", f"语录须为 1–{CUSTOM_MAX} 条的数组"))
+    if isinstance(quotes, list):
+        for index, item in enumerate(quotes):
+            if not isinstance(item, dict):  # V4
+                details.append(detail(index, "", "语录项格式不正确"))
+                continue
+            text = str(item.get("text") or "").strip()
+            if not text or len(text) > TEXT_MAX or "\n" in text or "\r" in text:  # V4/V6
+                details.append(detail(index, "text", f"文案须为 1–{TEXT_MAX} 字且不含换行"))
+            source = str(item.get("from") or "").strip()
+            if len(source) > FROM_MAX or "\n" in source or "\r" in source:  # V5/V6
+                details.append(detail(index, "from", f"出处最多 {FROM_MAX} 字且不含换行"))
+    return details
+
+
+def _read_personal_file(path: Path) -> list[dict]:
+    try:
+        with open(path, encoding="utf-8") as fh:
+            raw = json.load(fh)
+    except (OSError, ValueError):
+        return []
+    if not isinstance(raw, dict):
+        return []
+    out: list[dict] = []
+    for item in raw.get("quotes") or []:
+        if isinstance(item, dict) and str(item.get("text") or "").strip():
+            out.append({"text": str(item["text"]).strip(), "from": str(item.get("from") or "").strip()})
+    return out
+
+
+def _load_personal() -> list[dict]:
+    """个人库懒加载：缺失/损坏 → 空池（取句回退离线兜底）；之后常驻内存直到上传/恢复热替换。"""
+    global _personal_sentences
+    with _personal_lock:
+        if _personal_sentences is None:
+            path = personal_path()
+            if not path.exists():
+                log.warning("个人语录库未上传: %s", path)
+            _personal_sentences = _read_personal_file(path)
+            if not _personal_sentences and path.exists():
+                log.warning("个人语录库为空或损坏: %s", path)
+            try:
+                mtime = path.stat().st_mtime
+                updated = datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat(timespec="seconds")
+            except OSError:
+                updated = None
+            _personal_meta.update(count=len(_personal_sentences), updated=updated)
+    return _personal_sentences
+
+
+def save_personal(quotes_list: list[dict], uploaded_at: str) -> None:
+    """原子写 data/quotes_personal.json + 热替换（上传/恢复共用）；单锁串行化，与取句读共享同一锁。
+
+    写失败抛异常由调用方保旧；不修改 settings、不自动切换 mode。
+    """
+    global _personal_sentences
+    path = personal_path()
+    payload = {"schema_version": 1, "quotes": quotes_list}
+    with _personal_lock:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(path.name + ".tmp")
+        try:
+            tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+            os.replace(tmp, path)
+        except Exception:
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise
+        _personal_sentences = quotes_list
+        _personal_meta.update(count=len(quotes_list), updated=uploaded_at)
+
+
+def personal_quote(now: datetime) -> dict:
+    """个人库按日确定性轮换（中英共用）；池空回退离线古诗词兜底。"""
+    pool = _load_personal()
+    if not pool:
+        return dict(OFFLINE_QUOTES[now.timetuple().tm_yday % len(OFFLINE_QUOTES)])
+    pick = pool[now.timetuple().tm_yday % len(pool)]
+    return {"text": str(pick["text"]).strip(), "from": str(pick.get("from") or "").strip()[:16]}
 
 
 def _days_old(now: datetime, day: str) -> int:
@@ -312,6 +426,9 @@ def health() -> dict:
     state["library_updated"] = meta.get("updated") or None
     state["library_count"] = int(meta.get("count") or 0)
     state["refreshing"] = _library_refreshing.is_set()
+    _load_personal()  # 懒加载一次，条数/上传时间供管理端个人库面板
+    state["personal_count"] = int(_personal_meta.get("count") or 0)
+    state["personal_updated"] = _personal_meta.get("updated") or None
     return state
 
 
@@ -353,6 +470,12 @@ def english_quote(
     """英文页脚。library/offline 模式直接用本地短句（与中文"不联网"语义一致）。"""
     if mode in ("library", "offline"):
         return local_en_quote(now)
+    if mode == "personal":
+        pool = _load_personal()
+        if pool:
+            pick = pool[now.timetuple().tm_yday % len(pool)]
+            return {"text": str(pick["text"]).strip(), "from": str(pick.get("from") or "").strip()[:16]}
+        return local_en_quote(now)
     if mode == "custom":
         items = [item for item in (custom or []) if (item.get("text") or "").strip()]
         if items:
@@ -387,6 +510,8 @@ def get_quote(now: datetime, mode: str = "online", custom: list | None = None, t
     _status["enabled"] = mode == "online"
     if mode in ("library", "offline"):
         return library_quote(now, types)
+    if mode == "personal":
+        return personal_quote(now)
     if mode == "custom":
         items = [item for item in (custom or []) if (item.get("text") or "").strip()]
         if items:

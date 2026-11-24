@@ -69,6 +69,18 @@ fs.mkdirSync(output, {recursive:true});
   await tab('quote');
   assert.equal(await page.locator('#card-quote').isVisible(), true);
   assert.equal(await page.locator('#card-location').isVisible(), false);
+  // admin-content-pack：来源四态 radio（语料库/在线/自定义/个人库）+ 个人库面板条件显隐
+  assert.equal(await page.locator('#quote-modes input[name="quote-mode"]').count(), 4);
+  assert.match(await page.locator('#quote-modes label').last().innerText(), /个人库|Personal/);
+  assert.equal(await page.locator('#personal-box').isVisible(), false);
+  await page.locator('#quote-modes input[value="personal"]').check();
+  assert.equal(await page.locator('#personal-box').isVisible(), true);
+  assert.equal(await page.locator('#quote-types').isVisible(), false);
+  assert.equal(await page.locator('#custom-box').isVisible(), false);
+  assert.match(await page.locator('#personal-info').innerText(), /尚未上传|No personal quote library/);
+  assert.equal(await page.locator('#personal-upload').isDisabled(), true);
+  await page.locator('#quote-modes input[value="library"]').check();
+  assert.equal(await page.locator('#personal-box').isVisible(), false);
   // 数据积木字段按类分组展示（组名 + 组内多列）
   await tab('blocks');
   await page.locator('#widget-add').click();
@@ -228,6 +240,75 @@ fs.mkdirSync(output, {recursive:true});
   payload = await save();
   assert.deepEqual(payload.units, {temp:'f', wind:'bft', aqi:'cn'});
 
+  // admin-content-pack：个人库上传（路由 mock，不写服务端）——成功 toast/库信息刷新/不自动保存；失败 inline 逐条 details
+  await tab('quote');
+  await page.locator('#quote-modes input[value="personal"]').check();
+  await page.route('**/admin/api/quotes-personal', route => route.fulfill({json:{ok:true,data:{count:3,uploaded_at:'2026-11-24T04:00:00+00:00'}}}));
+  await page.route('**/admin/api/sources', async route => {
+    const response = await route.fetch();
+    const body = await response.json();
+    const quote = (body.data.sources || []).find(s => s.id === 'quote');
+    if (quote) { quote.personal_count = 3; quote.personal_updated = '2026-11-24T04:00:00+00:00'; }
+    await route.fulfill({json:body});
+  });
+  const statusBeforeUpload = await page.locator('#toolbar-status').innerText();
+  await page.locator('#personal-file').setInputFiles({name:'personal.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({schema_version:1,quotes:[{text:'此心安处是吾乡。',from:'苏轼《定风波》'}]}))});
+  assert.equal(await page.locator('#personal-upload').isEnabled(), true);
+  const uploadOk = page.waitForResponse(r => r.url().endsWith('/admin/api/quotes-personal') && r.status() === 200);
+  await page.locator('#personal-upload').click();
+  await uploadOk;
+  await page.locator('#personal-info').filter({hasText:/3\s*条|3 entries/}).waitFor();
+  assert.match(await page.locator('#toast').innerText(), /已上传 3 条|3 entries uploaded/);
+  assert.equal(await page.locator('#toolbar-status').innerText(), statusBeforeUpload); // 上传不标脏、不自动保存
+  await page.unroute('**/admin/api/quotes-personal');
+  await page.route('**/admin/api/quotes-personal', route => route.fulfill({status:400,json:{ok:false,error:{code:'QUOTES_PERSONAL_INVALID',message:'个人语录库校验失败',details:[
+    {index:1,field:'text',code:'QUOTES_PERSONAL_INVALID',message:'文案须为 1–32 字且不含换行'},
+    {index:2,field:'from',code:'QUOTES_PERSONAL_INVALID',message:'出处最多 16 字且不含换行'},
+    {index:null,field:'quotes',code:'QUOTES_PERSONAL_INVALID',message:'语录须为 1–100 条的数组'}]}}}));
+  await page.locator('#personal-file').setInputFiles({name:'bad.json',mimeType:'application/json',buffer:Buffer.from('{"schema_version":1,"quotes":[]}')});
+  const uploadBad = page.waitForResponse(r => r.url().endsWith('/admin/api/quotes-personal') && r.status() === 400);
+  await page.locator('#personal-upload').click();
+  await uploadBad;
+  assert.equal(await page.locator('#personal-error').isVisible(), true);
+  assert.match(await page.locator('#personal-error').innerText(), /共 3 处问题|3 problems in total/);
+  assert.equal(await page.locator('#personal-error details li').count(), 3);
+  assert.match(await page.locator('#personal-error details li').first().textContent(), /#1/); // details 折叠态 innerText 为空，用 textContent
+  assert.match(await page.locator('#personal-info').innerText(), /3\s*条|3 entries/); // 失败原库信息不变
+  await page.locator('#quote-modes input[value="library"]').check();
+  await page.unroute('**/admin/api/quotes-personal');
+  await page.unroute('**/admin/api/sources');
+
+  // admin-content-pack：健康数值折线——注入固定快照（含无值拍），断言 path 段数=有值连续段数 + units 标签 + 空态
+  const at = (h) => new Date(Date.now() - h * 3600 * 1000).toISOString();
+  const historyPayload = {ok:true,data:{sources:{
+    aqi:[{at:at(6),ok:true,error:'',value:40},{at:at(5),ok:true,error:'',value:50},{at:at(4),ok:false,error:'x'},{at:at(3),ok:true,error:'',value:60},{at:at(2),ok:true,error:'',value:70}],
+    weather:[{at:at(6),ok:true,error:'',value:20},{at:at(5),ok:false,error:'x'},{at:at(4),ok:true,error:'',value:24}],
+    quote:[{at:at(6),ok:true,error:''}],ics:[]},units:{temp:'c',aqi:'us'}}};
+  await page.route('**/admin/api/sources/history', route => route.fulfill({json:historyPayload}));
+  await page.reload();
+  await page.locator('#view-settings').waitFor({state:'visible'});
+  await tab('device');
+  await page.locator('.sources-lines .sl-row').first().waitFor();
+  assert.equal(await page.locator('.sources-lines .sl-row').count(), 2);
+  const segments = await page.evaluate(() => [...document.querySelectorAll('.sources-lines path')].map(p => (p.getAttribute('d').match(/M/g) || []).length));
+  assert.deepEqual(segments, [2, 2]); // 无值拍断线：aqi [40,50]|[60,70]，weather [20]|[24]
+  assert.match(await page.locator('.sources-lines .sl-row').first().innerText(), /美标|US/);
+  assert.match(await page.locator('.sources-lines .sl-row').nth(1).innerText(), /℃/);
+  assert.equal(await page.locator('.sources-history .sh-row').count(), 4); // 点阵回归不变
+  assert.equal(await page.locator('.sources-lines svg').first().getAttribute('role'), 'img');
+  historyPayload.data.units = {temp:'f',aqi:'cn'};
+  historyPayload.data.sources.aqi = [{at:at(6),ok:true,error:''}];
+  historyPayload.data.sources.weather = [];
+  await page.reload();
+  await page.locator('#view-settings').waitFor({state:'visible'});
+  await tab('device');
+  await page.locator('.sources-lines .sl-row').first().waitFor();
+  assert.match(await page.locator('.sources-lines .sl-row').first().innerText(), /国标|CN/);
+  assert.match(await page.locator('.sources-lines .sl-row').nth(1).innerText(), /℉/);
+  assert.match(await page.locator('.sources-lines').innerText(), /近七日无数值记录|No values in the last 7 days/);
+  assert.equal(await page.locator('.sources-lines path').count(), 0);
+  await page.unroute('**/admin/api/sources/history');
+
   // sysopt-layout-fix：系统/文字选项行式布局——单选钮不重叠、点档位文字激活该档、控件在标签盒内
   await tab('pages');
   await edit();
@@ -373,6 +454,13 @@ fs.mkdirSync(output, {recursive:true});
   assert.ok(styleBox.x >= 0 && styleBox.x + styleBox.width <= 390);
   await page.screenshot({path:path.join(output,'editor-mobile.png')});
   await page.locator('#cancel-editor').click();
+  // admin-content-pack：移动端个人库面板不溢出（file input + 按钮竖排）
+  await tab('quote');
+  await page.locator('#quote-modes input[value="personal"]').check();
+  const personalBox = await page.locator('#personal-box').boundingBox();
+  assert.ok(personalBox.x >= 0 && personalBox.x + personalBox.width <= 390, 'personal panel must fit 390px');
+  await page.screenshot({path:path.join(output,'personal-mobile.png')});
+  await page.locator('#quote-modes input[value="library"]').check();
   assert.deepEqual(errors, []);
   console.log('PASS: cancel/new page/prior draft/card create+place/arrow nudge/card deletion/oss gating/late upload/search race/IME/keyboard/zh-en/themes/mobile/sticky actions');
   await browser.close();

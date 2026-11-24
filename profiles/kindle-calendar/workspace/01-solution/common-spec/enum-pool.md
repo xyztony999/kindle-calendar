@@ -7,7 +7,7 @@
 | 枚举名 | 取值 | 说明 | 引用方 |
 |--------|------|------|--------|
 | `page_id` | today / week / month / detail / almanac | 台历页面标识（与 `server/render/regions.py` PAGES 一致） | api-web-admin.md 4.1 / api-v2-pages.md 3.4（同义） |
-| `quote_mode` | online / offline / custom | 页脚一言来源模式 | api-web-admin.md 4.1 |
+| `quote_mode` | library / online / custom / personal | 页脚一言来源模式（offline 为兼容别名，normalize 迁移为 library；personal 为 v2.1 新增个人语录库） | api-web-admin.md 4.1 / api-admin-content-pack.md §2 |
 | `delivery_state` | pending / delivered / unknown | 配置下发状态（版本比对派生） | api-web-admin.md 4.2 / A-10 |
 | `online_state` | online / offline / unknown | 设备在线判定（心跳时效派生） | api-web-admin.md A-10 |
 
@@ -40,6 +40,7 @@ field_kind code+label：number=数字，time=时间，date=日期，short_text=�
 
 | 版本 | 日期 | 更新说明 |
 |------|------|---------|
+| v1.3 | 2026-11-24 | `quote_mode` 更正为四态 library/online/custom/personal（补录 quote-library 轮漏记的 library，新增 personal；offline 降为兼容别名） |
 | v1.2 | 2026-10-15 | 新增 §4 `ui_theme`（light / dark）。跟随系统是缺省，不入库、不入枚举值 |
 | v1.1 | 2026-10-10 | 新增 §3 `ui_lang`（zh / en），供设备画面与网页共用 |
 | v1.0 | 2026-10-10 | 初始填充：web-admin 四枚举；回填 v2-pages 两枚举（page_id 与 web-admin 共用） |

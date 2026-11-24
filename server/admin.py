@@ -403,11 +403,11 @@ def create_admin_blueprint(service) -> Blueprint:
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.writestr("settings.json", json.dumps(current, ensure_ascii=False, indent=2) + "\n")
-            for name in ("quotes_library.json", "quotes_meta.json"):
+            for name in ("quotes_library.json", "quotes_meta.json", "quotes_personal.json"):
                 try:
                     zf.writestr(name, (settings_path().parent / name).read_bytes())
                 except OSError:
-                    pass  # 可选成员缺失时跳过（语料可用刷新重建）
+                    pass  # 可选成员缺失时跳过（语料可用刷新重建，个人库可重传）
         resp = Response(buf.getvalue(), mimetype="application/zip")
         resp.headers["Content-Disposition"] = f'attachment; filename="kindle-calendar-backup-{day}.zip"'
         resp.headers["Cache-Control"] = "no-store"
@@ -429,7 +429,7 @@ def create_admin_blueprint(service) -> Blueprint:
             names = set(zf.namelist())
         except Exception:
             return _api_error("BACKUP_INVALID", "备份文件不是有效的 zip", 400)
-        allowed = {"settings.json", "quotes_library.json", "quotes_meta.json"}
+        allowed = {"settings.json", "quotes_library.json", "quotes_meta.json", "quotes_personal.json"}
         if not names <= allowed or "settings.json" not in names:
             return _api_error("BACKUP_INVALID", "备份成员不符（需含 settings.json，仅支持白名单成员）", 400)
         try:
@@ -438,6 +438,22 @@ def create_admin_blueprint(service) -> Blueprint:
             return _api_error("BACKUP_INVALID", "settings.json 不是有效的 JSON", 400)
         if not isinstance(payload, dict) or payload.get("schema_version") not in ACCEPTED_SCHEMAS:
             return _api_error("BACKUP_INVALID", "备份的 schema_version 不受支持", 400)
+        from server import quotes as quotes_mod
+
+        personal_cleaned = None
+        if "quotes_personal.json" in names:
+            # 与上传同一校验（V1–V6）；先验后写，非法成员不破坏任何现有文件
+            try:
+                personal_raw = json.loads(zf.read("quotes_personal.json").decode("utf-8"))
+            except Exception:
+                return _api_error("BACKUP_INVALID", "quotes_personal.json 不是有效的 JSON", 400)
+            personal_details = quotes_mod.validate_personal(personal_raw)
+            if personal_details:
+                return _api_error("BACKUP_INVALID", "备份中的个人语录库不合规范", 400, personal_details)
+            personal_cleaned = [
+                {"text": str(item.get("text") or "").strip(), "from": str(item.get("from") or "").strip()}
+                for item in personal_raw["quotes"]
+            ]
         if "quotes_library.json" in names:
             try:
                 library = json.loads(zf.read("quotes_library.json").decode("utf-8"))
@@ -451,9 +467,12 @@ def create_admin_blueprint(service) -> Blueprint:
             tmp = data_dir / "quotes_library.json.tmp"
             tmp.write_bytes(zf.read("quotes_library.json"))
             os.replace(tmp, data_dir / "quotes_library.json")
-            from server import quotes as quotes_mod
-
             quotes_mod._library_sentences = None  # 下次选句重读 data/ 库
+        if personal_cleaned is not None:
+            try:
+                quotes_mod.save_personal(personal_cleaned, datetime.now(timezone.utc).isoformat(timespec="seconds"))
+            except OSError:
+                return _api_error("BACKUP_INVALID", "个人语录库写入失败，未改动", 500)
         # 素材本体在 OSS（settings 仅存 id/key/content_type，key 原样恢复）；
         # gc_assets=False 防止恢复瞬间 presets 引用外的素材被 GC 连带删除 OSS 对象
         response = save_body(payload, gc_assets=False)
@@ -462,6 +481,7 @@ def create_admin_blueprint(service) -> Blueprint:
         body = response.get_json()
         if body and isinstance(body.get("data"), dict):
             body["data"]["restored_quotes"] = "quotes_library.json" in names
+            body["data"]["restored_personal"] = personal_cleaned is not None
         return jsonify(body)
 
     @bp.post("/admin/api/quotes-refresh")
@@ -487,6 +507,40 @@ def create_admin_blueprint(service) -> Blueprint:
 
         Thread(target=run, daemon=True, name="quotes-library-refresh").start()
         return _api_ok({"started": True, "running": True})
+
+    @bp.post("/admin/api/quotes-personal")
+    def quotes_personal_upload():
+        """个人语录库整份上传替换：V1–V6 整份校验逐条报错 → 原子写 + 热替换；不改 settings、不切 mode。"""
+        blocked = require_write()
+        if blocked:
+            return blocked
+        upload = request.files.get("file")
+        if upload is None or not upload.filename:
+            return _api_error("QUOTES_PERSONAL_INVALID", "未收到语录库文件", 400)
+        from server import quotes as quotes_mod
+
+        try:
+            payload = json.loads(upload.read().decode("utf-8"))
+        except Exception:
+            return _api_error(
+                "QUOTES_PERSONAL_INVALID",
+                "个人语录库校验失败",
+                400,
+                [{"index": None, "field": "", "code": "QUOTES_PERSONAL_INVALID", "message": "文件不是有效的 JSON"}],
+            )
+        details = quotes_mod.validate_personal(payload)
+        if details:
+            return _api_error("QUOTES_PERSONAL_INVALID", "个人语录库校验失败", 400, details)
+        cleaned = [
+            {"text": str(item.get("text") or "").strip(), "from": str(item.get("from") or "").strip()}
+            for item in payload["quotes"]
+        ]
+        uploaded_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        try:
+            quotes_mod.save_personal(cleaned, uploaded_at)
+        except OSError:
+            return _api_error("QUOTES_PERSONAL_IO_FAILED", "个人语录库写入失败，未改动", 500)
+        return _api_ok({"count": len(cleaned), "uploaded_at": uploaded_at})
 
     @bp.get("/admin/api/widget-catalog")
     def widget_catalog():

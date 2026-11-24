@@ -196,9 +196,13 @@ class DashboardService:
                 datetime.fromtimestamp(self._weather_at, tz=ZoneInfo("UTC")).isoformat(timespec="seconds") if self._weather_at else None
             )
             weather_error = self._last_error or ""
+            weather_value = self._weather.current.temperature if self._weather is not None else None
+        weather_entry = {"id": "weather", "ok": weather_ok, "at": weather_at, "error": weather_error}
+        if isinstance(weather_value, (int, float)) and not isinstance(weather_value, bool):
+            weather_entry["value"] = weather_value  # ℃ 原值；出图/历史接口按当前 units 换算
         return {
             "sources": [
-                {"id": "weather", "ok": weather_ok, "at": weather_at, "error": weather_error},
+                weather_entry,
                 {"id": "aqi", **aqi_mod.health()},
                 {"id": "quote", **quotes_mod.health()},
                 {"id": "ics", **ics.health()},
@@ -206,7 +210,30 @@ class DashboardService:
         }
 
     def sources_history(self) -> dict:
-        return health_history.series()
+        """健康历史序列：快照存原值，这里按当前 settings.units 逐拍换算后输出（与渲染口径一致）。"""
+        from server import units as units_mod
+        from server.units import normalize_units
+
+        with self._lock:
+            units = normalize_units(self._settings.get("units"))
+        data = health_history.series()
+        for point in data["sources"].get("aqi") or []:
+            # 迷你 payload 走 units.aqi_view 唯一换算入口：国标缺失自动回退美标
+            view = units_mod.aqi_view({"aqi": {"us_aqi": point.get("value"), "cn_aqi": point.get("cn_value")}, "units": units})
+            if view is not None:
+                point["value"] = view[0]
+            else:
+                point.pop("value", None)
+            point.pop("cn_value", None)  # 原值不再外露
+        for point in data["sources"].get("weather") or []:
+            if "value" in point:
+                converted = units_mod.temp_number(point["value"], {"units": units})
+                if converted is None:
+                    point.pop("value", None)
+                else:
+                    point["value"] = converted
+        data["units"] = {"temp": units["temp"], "aqi": units["aqi"]}
+        return data
 
     def device_status(self) -> dict:
         with self._lock:

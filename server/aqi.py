@@ -116,8 +116,8 @@ class AirQuality:
     cn_level: str | None = None
 
 
-# 数据源健康状态（内存态，供管理端展示）
-_status: dict = {"ok": False, "at": None, "error": "", "enabled": True, "value": None}
+# 数据源健康状态（内存态，供管理端展示）；value=美标、cn_value=国标，失败拍清值（健康折线断点）
+_status: dict = {"ok": False, "at": None, "error": "", "enabled": True, "value": None, "cn_value": None}
 
 
 def health() -> dict:
@@ -147,7 +147,7 @@ def fetch_aqi(latitude: float, longitude: float, timeout: float = 10) -> AirQual
         current = resp.json()["current"]
         value = current["us_aqi"]
         if not isinstance(value, (int, float)) or not 0 <= value <= 500:
-            _status.update(ok=False, at=datetime.now(timezone.utc).isoformat(timespec="seconds"), error="AQI 数值缺失或越界")
+            _status.update(ok=False, at=datetime.now(timezone.utc).isoformat(timespec="seconds"), error="AQI 数值缺失或越界", value=None, cn_value=None)
             return None
         us_aqi = int(round(value))
         pollutants = {
@@ -159,7 +159,7 @@ def fetch_aqi(latitude: float, longitude: float, timeout: float = 10) -> AirQual
             "co": _pollutant(current, "carbon_monoxide"),
         }
         cn_value = cn_aqi_from(**pollutants)
-        _status.update(ok=True, at=datetime.now(timezone.utc).isoformat(timespec="seconds"), error="", value=us_aqi)
+        _status.update(ok=True, at=datetime.now(timezone.utc).isoformat(timespec="seconds"), error="", value=us_aqi, cn_value=cn_value)
         return AirQuality(
             us_aqi=us_aqi,
             level=level_zh(us_aqi),
@@ -169,5 +169,5 @@ def fetch_aqi(latitude: float, longitude: float, timeout: float = 10) -> AirQual
         )
     except Exception as exc:
         log.warning("AQI 拉取失败: %s", exc)
-        _status.update(ok=False, at=datetime.now(timezone.utc).isoformat(timespec="seconds"), error=str(exc))
+        _status.update(ok=False, at=datetime.now(timezone.utc).isoformat(timespec="seconds"), error=str(exc), value=None, cn_value=None)
         return None

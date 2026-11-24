@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import threading
 import time
@@ -49,7 +50,13 @@ def record(sources: dict) -> None:
     for item in sources.get("sources") or []:
         if not isinstance(item, dict) or "id" not in item:
             continue
-        snapshot[str(item["id"])] = {"ok": bool(item.get("ok")), "error": str(item.get("error") or "")}
+        entry = {"ok": bool(item.get("ok")), "error": str(item.get("error") or "")}
+        # 可选数值（aqi: value/cn_value，weather: value）：仅有限 int/float 且非 bool 才存；旧文件无值载入兼容
+        for key in ("value", "cn_value"):
+            value = item.get(key)
+            if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
+                entry[key] = value
+        snapshot[str(item["id"])] = entry
     with _lock:
         _points = [p for p in _points if p["at"] >= (now - timedelta(days=RETAIN_DAYS)).isoformat(timespec="seconds")]
         _points.append({"at": at, "sources": snapshot})

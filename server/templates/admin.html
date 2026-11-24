@@ -289,6 +289,19 @@
   .sources-history { margin-top: 10px; display: grid; gap: 6px; }
   .sources-history .sh-row { display: grid; grid-template-columns: 52px 1fr; align-items: center; gap: 8px; }
   .sources-history svg { width: 100%; height: 14px; display: block; }
+  /* 健康数值折线（AQI/温度七日）：布局同点阵行，图高 48px；墨水屏审美——单色描边无填充 */
+  .sources-lines { margin-top: 10px; display: grid; gap: 8px; }
+  .sources-lines .sl-row { display: grid; grid-template-columns: 52px 1fr; align-items: center; gap: 8px; }
+  .sources-lines .sl-label { display: flex; flex-direction: column; font-size: 12px; line-height: 1.3; }
+  .sources-lines .sl-unit { font-size: 10px; color: var(--faint); }
+  .sources-lines svg { width: 100%; height: 48px; display: block; }
+  /* 个人语录库面板（quote.mode=personal 条件显隐，同 library_types/custom 手法） */
+  #personal-box { margin-top: 10px; border: 1px solid var(--hair); border-radius: var(--radius); padding: 10px 12px; display: grid; gap: 8px; }
+  #personal-box .personal-upload { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  #personal-box input[type="file"] { font-size: 13px; max-width: 100%; }
+  #personal-error { color: var(--bad); font-size: 12px; display: grid; gap: 4px; }
+  #personal-error ul { margin: 4px 0 0; padding-left: 18px; }
+  #personal-error summary { cursor: pointer; }
   #widget-form { border: 1px solid var(--hair); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 12px; }
   .snap-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; white-space: nowrap; cursor: pointer; }
   .snap-guide { position: absolute; z-index: 3; pointer-events: none; background: #b3261e; }
@@ -634,6 +647,8 @@
     }
     .side-ops .btn { padding: 9px 10px; font-size: 13px; }
     .main-bar { position: sticky; top: 47px; }
+    .sources-lines .sl-row { grid-template-columns: 40px 1fr; }
+    #personal-box .personal-upload { flex-direction: column; align-items: stretch; }
   }
   @media (max-width: 640px) {
     .widget-row { flex-wrap: wrap; padding: 8px 10px; }
@@ -919,6 +934,15 @@
             <button class="btn" id="add-quote" type="button">{{ ui.add_quote }}</button>
             <p id="quote-preview" class="muted"></p>
           </div>
+          <div id="personal-box" hidden>
+            <p id="personal-info" class="muted"></p>
+            <div class="personal-upload">
+              <input id="personal-file" type="file" accept=".json,application/json">
+              <button class="btn" id="personal-upload" type="button" disabled>{{ ui.quote_personal_upload }}</button>
+            </div>
+            <div id="personal-error" aria-live="polite" hidden></div>
+            <p class="muted">{{ ui.quote_personal_replace_note }}</p>
+          </div>
         </section>
         <section class="card" id="card-device" data-section="device">
           <h2>{{ ui.device_h2 }}</h2>
@@ -927,6 +951,7 @@
         <section class="card" id="card-sources" data-section="device">
           <h2>{{ ui.sources_h2 }}</h2>
           <div id="sources-body" class="muted">—</div>
+          <div id="sources-lines" class="sources-lines"></div>
           <div id="sources-history" class="sources-history"></div>
         </section>
         <section class="card" id="card-preview" data-section="device">
@@ -1045,6 +1070,7 @@
   let snapEnabled = true;
   let editingWidgetId = null;
   let sessionAssetIds = [];
+  let personalHealth = null;
 
   const $ = (id) => document.getElementById(id);
 
@@ -1328,6 +1354,7 @@
         state.quote.mode = mode;
         renderCustom();
         renderQuoteTypes();
+        renderPersonal();
         markDirty();
       });
       label.append(input, " " + QUOTE_LABEL[mode]);
@@ -1422,6 +1449,107 @@
     const index = yday % items.length;
     el.textContent = T.showing.replace("{n}", String(index + 1)).replace("{text}", items[index].text.trim());
   }
+
+  // ── 个人语录库面板（条件显隐；上传与 mode 保存解耦，不 markDirty、不自动保存）──
+  function renderPersonal() {
+    const box = $("personal-box");
+    box.hidden = state.quote.mode !== "personal";
+    if (!box.hidden) renderPersonalInfo();
+  }
+
+  function fmtUploadTime(iso) {
+    const d = new Date(iso);
+    if (!iso || Number.isNaN(d.getTime())) return iso || "—";
+    const pad = (n) => String(n).padStart(2, "0");
+    return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  }
+
+  function renderPersonalInfo() {
+    const el = $("personal-info");
+    el.replaceChildren();
+    const count = personalHealth ? Number(personalHealth.personal_count || 0) : 0;
+    if (count > 0) {
+      el.textContent = T.quote_personal_info.replace("{n}", count.toLocaleString()).replace("{t}", fmtUploadTime(personalHealth.personal_updated));
+    } else {
+      el.append(T.quote_personal_empty + " ");
+      const link = document.createElement("a");
+      link.href = "/docs/quote-library.md";
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.textContent = T.quote_format;
+      el.appendChild(link);
+    }
+  }
+
+  function showPersonalError(error) {
+    const box = $("personal-error");
+    box.replaceChildren();
+    box.hidden = false;
+    const details = (error && error.details) || [];
+    const first = details[0];
+    const head = document.createElement("div");
+    head.textContent = (first && first.message) || (error && error.message) || T.save_failed;
+    box.appendChild(head);
+    if (details.length) {
+      const count = document.createElement("div");
+      count.textContent = T.quote_personal_errcount.replace("{m}", String(details.length));
+      box.appendChild(count);
+    }
+    if (details.length > 1) {
+      const det = document.createElement("details");
+      const sum = document.createElement("summary");
+      sum.textContent = T.quote_personal_errcount.replace("{m}", String(details.length));
+      det.appendChild(sum);
+      const ul = document.createElement("ul");
+      details.forEach((d) => {
+        const li = document.createElement("li");
+        const idx = d.index === null || d.index === undefined ? "" : "#" + d.index + " ";
+        li.textContent = idx + (d.field ? d.field + "：" : "") + (d.message || d.code || "");
+        ul.appendChild(li);
+      });
+      det.appendChild(ul);
+      box.appendChild(det);
+    }
+  }
+
+  async function refreshPersonalInfo() {
+    try {
+      const data = await api("GET", "/admin/api/sources");
+      const quote = ((data.data || {}).sources || []).find((s) => s.id === "quote");
+      if (quote) personalHealth = quote;
+    } catch (err) { /* 轮询兜底 */ }
+    if (!$("personal-box").hidden) renderPersonalInfo();
+  }
+
+  $("personal-file").addEventListener("change", () => {
+    $("personal-upload").disabled = !($("personal-file").files && $("personal-file").files[0]);
+  });
+  $("personal-upload").addEventListener("click", async () => {
+    const file = $("personal-file").files && $("personal-file").files[0];
+    if (!file) return;
+    const btn = $("personal-upload");
+    btn.disabled = true;
+    btn.textContent = T.quote_personal_uploading;
+    const form = new FormData();
+    form.append("file", file);
+    try {
+      const data = await api("POST", "/admin/api/quotes-personal", form, {form: true});
+      const n = String((data.data || {}).count || 0);
+      toast(state.quote.mode === "personal" ? T.quote_personal_done_saved.replace("{n}", n) : T.quote_personal_done.replace("{n}", n));
+      $("personal-file").value = "";
+      $("personal-error").hidden = true;
+      $("personal-error").replaceChildren();
+      await refreshPersonalInfo();
+    } catch (err) {
+      if (!err.handled) {
+        showPersonalError(err.data && err.data.error);
+        $("personal-file").value = "";
+      }
+    } finally {
+      btn.disabled = !($("personal-file").files && $("personal-file").files[0]);
+      btn.textContent = T.quote_personal_upload;
+    }
+  });
 
   const UNIT_DEFAULTS = {temp: "c", wind: "kmh", aqi: "us"};
   function fillLocation() {
@@ -1592,6 +1720,7 @@
     renderScheduleCard();
     renderQuoteModes();
     renderCustom();
+    renderPersonal();
     renderPreviews();
     loadCatalog();
     markDirty();
@@ -1612,9 +1741,11 @@
         badgeClass = "warn";
         badgeText = T.library_refreshing;
       } else if (item.enabled === false) {
-        // library 模式：本地语料库在位即"正常"（enabled 仅对在线源有意义）
-        badgeClass = item.library_count ? "ok" : "";
-        badgeText = item.library_count ? T.source_ok : T.source_off;
+        // library/personal 模式：对应库在位即"正常"（enabled 仅对在线源有意义）
+        const personalMode = saved && saved.quote && saved.quote.mode === "personal";
+        const count = personalMode ? Number(item.personal_count || 0) : Number(item.library_count || 0);
+        badgeClass = count ? "ok" : "";
+        badgeText = count ? T.source_ok : T.source_off;
       } else if (item.ok) {
         badgeClass = "ok";
         badgeText = T.source_ok;
@@ -1626,11 +1757,18 @@
       const when = document.createElement("span");
       when.className = "muted";
       const parts = [];
-      if (item.library_count) parts.push(Number(item.library_count).toLocaleString() + " " + T.library_count_unit);
-      if (item.library_updated) parts.push(relTime(item.library_updated));
+      if (item.id === "quote" && saved && saved.quote && saved.quote.mode === "personal") {
+        if (item.personal_count) parts.push(Number(item.personal_count).toLocaleString() + " " + T.library_count_unit);
+        if (item.personal_updated) parts.push(relTime(item.personal_updated));
+      } else {
+        if (item.library_count) parts.push(Number(item.library_count).toLocaleString() + " " + T.library_count_unit);
+        if (item.library_updated) parts.push(relTime(item.library_updated));
+      }
       when.textContent = parts.length ? parts.join(" · ") : (item.at ? relTime(item.at) : T.source_never);
       row.append(name, badgeEl, when);
       if (item.id === "quote") {
+        personalHealth = item;
+        if (!$("personal-box").hidden) renderPersonalInfo();
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "btn";
@@ -1699,6 +1837,94 @@
     });
   }
 
+  // 健康数值折线：AQI/温度两条原生 SVG（7 天窗口、y 自适应留 10% 边距、无值拍断线不插值）。
+  // 数据已按当前 units 换算（服务端唯一换算入口）；失败拍不画红点——点阵已表达成败。
+  function renderLines(payload) {
+    const box = $("sources-lines");
+    box.replaceChildren();
+    const NS = "http://www.w3.org/2000/svg";
+    const sources = (payload && payload.sources) || {};
+    const units = (payload && payload.units) || {temp: "c", aqi: "us"};
+    const WINDOW_MS = 7 * 86400 * 1000;
+    const W = 600, H = 48;
+    const now = Date.now();
+    const t0 = now - WINDOW_MS;
+    const rows = [
+      {id: "aqi", label: T.health_line_aqi, unit: units.aqi === "cn" ? T.health_unit_cn : T.health_unit_us},
+      {id: "weather", label: T.health_line_temp, unit: units.temp === "f" ? "℉" : "℃"},
+    ];
+    rows.forEach((row) => {
+      const points = (sources[row.id] || []).filter((p) => {
+        const t = Date.parse(p.at);
+        return !Number.isNaN(t) && t >= t0 && t <= now;
+      });
+      const valued = points.filter((p) => typeof p.value === "number");
+      const wrap = document.createElement("div");
+      wrap.className = "sl-row";
+      const label = document.createElement("span");
+      label.className = "sl-label muted";
+      const name = document.createElement("span");
+      name.textContent = row.label;
+      const unit = document.createElement("span");
+      unit.className = "sl-unit";
+      unit.textContent = row.unit;
+      label.append(name, unit);
+      const svg = document.createElementNS(NS, "svg");
+      svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+      svg.setAttribute("preserveAspectRatio", "none");
+      svg.setAttribute("role", "img");
+      if (!valued.length) {
+        svg.setAttribute("aria-label", row.label + " · " + T.health_line_empty);
+        const text = document.createElementNS(NS, "text");
+        text.setAttribute("x", String(W / 2));
+        text.setAttribute("y", "28");
+        text.setAttribute("text-anchor", "middle");
+        text.setAttribute("fill", "var(--mid)");
+        text.setAttribute("font-size", "12");
+        text.textContent = T.health_line_empty;
+        svg.appendChild(text);
+      } else {
+        const values = valued.map((p) => p.value);
+        const min = Math.min.apply(null, values);
+        const max = Math.max.apply(null, values);
+        const span = (max - min) || 1;
+        const lo = min - span * 0.1, hi = max + span * 0.1;
+        const xOf = (p) => ((Date.parse(p.at) - t0) / WINDOW_MS) * W;
+        const yOf = (v) => 38 - ((v - lo) / (hi - lo)) * 34;
+        let d = "";
+        let prev = false;
+        points.forEach((p) => {
+          if (typeof p.value !== "number") { prev = false; return; }  // 无值拍断线
+          d += (prev ? " L" : " M") + xOf(p).toFixed(1) + " " + yOf(p.value).toFixed(1);
+          prev = true;
+        });
+        const path = document.createElementNS(NS, "path");
+        path.setAttribute("d", d.trim());
+        path.setAttribute("fill", "none");
+        path.setAttribute("stroke", "var(--ink)");
+        path.setAttribute("stroke-width", "1.5");
+        path.setAttribute("vector-effect", "non-scaling-stroke");
+        svg.appendChild(path);
+        const pad = (n) => String(n).padStart(2, "0");
+        const tick = (date, x, anchor) => {
+          const el = document.createElementNS(NS, "text");
+          el.setAttribute("x", String(x));
+          el.setAttribute("y", "47");
+          el.setAttribute("text-anchor", anchor);
+          el.setAttribute("fill", "var(--mid)");
+          el.setAttribute("font-size", "8");
+          el.textContent = pad(date.getMonth() + 1) + "-" + pad(date.getDate());
+          svg.appendChild(el);
+        };
+        tick(new Date(t0), 0, "start");
+        tick(new Date(now), W, "end");
+        svg.setAttribute("aria-label", T.health_line_aria.replace("{label}", row.label).replace("{max}", String(max)).replace("{min}", String(min)));
+      }
+      wrap.append(label, svg);
+      box.appendChild(wrap);
+    });
+  }
+
   async function refreshSources() {
     try {
       const data = await api("GET", "/admin/api/sources");
@@ -1709,8 +1935,12 @@
     try {
       const data = await api("GET", "/admin/api/sources/history");
       renderHistory((data.data || {}).sources);
+      renderLines(data.data);
     } catch (err) {
-      if (!err.handled) $("sources-history").replaceChildren();
+      if (!err.handled) {
+        $("sources-history").replaceChildren();
+        $("sources-lines").replaceChildren();
+      }
     }
   }
 
@@ -1824,6 +2054,7 @@
     renderScheduleCard();
     renderQuoteModes();
     renderCustom();
+    renderPersonal();
     renderPreviews();
     clearErrors();
     markDirty();
@@ -3644,7 +3875,9 @@
     try {
       const data = await api("POST", "/admin/api/backup/restore", form, {form: true});
       const quotes = (data.data || {}).restored_quotes ? T.restore_quotes_on : T.restore_quotes_off;
-      toast(T.restore_ok.replace("{quotes}", quotes));
+      let message = T.restore_ok.replace("{quotes}", quotes);
+      if ((data.data || {}).restored_personal) message += " " + T.backup_personal_restored;
+      toast(message);
       await loadSettings(false);
     } catch (err) {
       if (!err.handled) toast((err.data && err.data.error && err.data.error.message) || T.restore_fail, true);

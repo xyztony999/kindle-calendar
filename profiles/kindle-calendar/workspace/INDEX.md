@@ -1,5 +1,31 @@
 ---
 pipeline:
+  - module: admin-content-pack
+    title: "管理端内容包轮 1：个人语录库上传（quote.mode 第四态 personal，预留规范落地）+ 健康数值折线（AQI/温度七日，随 units 换算）"
+    stages:
+      design:
+        status: complete
+        note: "2026-11-24 /design 全流程（D0→D4+Gate 1）。讨论拍板：分两轮（轮 2=多城市切换，管理端切换设备零改动）/新增个人库模式（不覆盖官方库）/在线自定义接口地址不纳入。BA/AA/FL v2.1：新增 L4 个人语录库上传（D-06-07）、备份纳入个人库、健康加数值折线、一言获取扩四源；11 项机械校验全过。关键勘察：aqi._status.value 已存 us_aqi（补 cn_value 即可）、record() 只存 ok/error 需扩值、series() **state 透传、端点实为 /admin/api/sources/history。enum-pool quote_mode 更正四态（v1.3）。"
+      code:
+        status: complete
+        note: "2026-11-24 断点续跑会话编排轨已实现并验证：QUOTE_MODES+personal（normalize 链路单测覆盖）；quotes_personal.json 懒加载+单锁原子写+热替换，V1–V6 整份校验逐条 index 报错，上传不偷跑 mode；get_quote/english_quote personal 按日轮换+空库兜底，health+personal_count/updated；备份白名单+恢复同校验先验后写+restored_personal；aqi._status+cn_value（失败清值断点）、weather+value、record 存值过滤、sources/history 按当前 units 换算（aqi_view/temp_number）+units 标签；admin.html 四态 radio+个人库面板+双 SVG 折线（断线/刻度/空态/aria）+zh/en 词条；docs/quote-library.md 注记已实现。220 单测+两 E2E+150 端点 HTTP 全过（24℃→75℉、42 美标→57 国标数值断言+path 段数断点）。Gate 2 PASS，2026-11-24 用户确认验收；未提交，用户自行 commit & push。报告 05-reports/gate2-admin-content-pack.md"
+    gates:
+      gate1: { status: PASS, report: 05-reports/gate1-admin-content-pack.md }
+      gate2: { status: PASS, report: 05-reports/gate2-admin-content-pack.md }
+    artifacts:
+      architecture:
+        - 00-architecture/business-arch.md (v2.1)
+        - 00-architecture/application-arch.md (v2.1)
+        - 00-architecture/function-list.md (v2.1)
+      prd:
+        - 02-detailed/prd/prd-admin-content-pack.md (v1.0)
+      api:
+        - 02-detailed/api/api-admin-content-pack.md (v1.0)
+      interaction:
+        - 02-detailed/interaction/interaction-admin-content-pack.md (v1.0)
+      reports:
+        - 05-reports/gate1-admin-content-pack.md
+        - 05-reports/gate2-admin-content-pack.md
   - module: landing-mono-font
     title: "首页 API 清单与阅读页原文视图统一品牌等宽字体栈"
     stages:
